@@ -75,8 +75,12 @@ export default function App() {
   const isMobile = useMediaQuery("(max-width: 820px)");
   const isNarrow = useMediaQuery("(max-width: 1024px)");
 
-  const logoLoginSize = isMobile ? 72 : 180;
-  const logoTopbarSize = isMobile ? 28 : 80;
+  // ロゴサイズ（ここだけ触ればOK）
+  const logoLoginSize = isMobile ? 72 : 200;
+  const logoTopbarSize = isMobile ? 28 : 120;
+
+  // 病院アイコンサイズ（ここだけ触ればOK）
+  const hospitalIconTopbarSize = isMobile ? 22 : 50;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -98,8 +102,14 @@ export default function App() {
     return hospitals.find((h) => h.id === myHospitalId)?.name ?? "";
   }, [myHospitalId, hospitals]);
 
+  // 病院ID -> 表示名
   const nameOf = (hid) => hospitals.find((h) => h.id === hid)?.name ?? hid;
 
+  // 病院ID -> アイコンURL（なければデフォルト）
+  const iconOf = (hid) =>
+    hospitals.find((h) => h.id === hid)?.icon_url || "/default-hospital.svg";
+
+  // 未読件数（期限切れ・アーカイブは除外）
   const unreadCount = useMemo(() => {
     return inboxDocs.filter(
       (d) =>
@@ -109,8 +119,10 @@ export default function App() {
     ).length;
   }, [inboxDocs]);
 
+  // 受信：フィルタ＆検索
   const filteredInboxDocs = useMemo(() => {
     let list = inboxDocs;
+
     if (!showExpired) list = list.filter((d) => !isExpired(d.expires_at));
     list = list.filter((d) => d.status !== "ARCHIVED");
     if (showUnreadOnly) list = list.filter((d) => d.status === "UPLOADED");
@@ -127,6 +139,7 @@ export default function App() {
     return list;
   }, [inboxDocs, showExpired, showUnreadOnly, qInbox, hospitals]);
 
+  // 送信履歴：検索
   const filteredSentDocs = useMemo(() => {
     const q = (qSent || "").trim().toLowerCase();
     if (!q) return sentDocs;
@@ -155,9 +168,10 @@ export default function App() {
     }
     setProfile(prof);
 
+    // ★ icon_url を取得に含める（ここ重要）
     const { data: hs, error: hsErr } = await supabase
       .from("hospitals")
-      .select("id, name, code")
+      .select("id, name, code, icon_url")
       .order("name", { ascending: true });
     if (hsErr) return alert(`hospitals取得に失敗: ${hsErr.message}`);
     setHospitals(hs);
@@ -210,10 +224,11 @@ export default function App() {
     setQSent("");
   };
 
+  // ---- R2 presign helpers ----
   const getPresignedUpload = async () => {
     const res = await fetch(`${API_BASE}/presign-upload`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    return res.json(); // { upload_url, file_key }
   };
 
   const putPdf = async (uploadUrl, file) => {
@@ -233,7 +248,7 @@ export default function App() {
       `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}`,
     );
     if (!res.ok) throw new Error(await res.text());
-    return res.json();
+    return res.json(); // { download_url }
   };
 
   const createDocument = async () => {
@@ -418,6 +433,7 @@ export default function App() {
 
   if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
 
+  // ------- LOGIN -------
   if (!session) {
     return (
       <Root>
@@ -477,11 +493,13 @@ export default function App() {
     );
   }
 
+  // ------- APP -------
   const headerTitle = { fontSize: 18, fontWeight: 800, color: THEME.text };
   const headerDesc = { fontSize: 12, opacity: 0.7, color: THEME.text };
 
   return (
     <Root>
+      {/* Top bar */}
       <div
         style={{
           position: "sticky",
@@ -504,7 +522,8 @@ export default function App() {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {/* ロゴ + タイトル + 自院アイコン（自然に横並び） */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <img
               src={DocPortLogo}
               alt="DocPort"
@@ -515,14 +534,48 @@ export default function App() {
                 flexShrink: 0,
               }}
             />
+
             <div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: THEME.text }}>
+              <div style={{ fontSize: 26, fontWeight: 800, color: THEME.text }}>
                 DocPort
               </div>
-              <div style={{ fontSize: 12, opacity: 0.7, color: THEME.text }}>
-                {myHospitalName
-                  ? `所属：${myHospitalName}${unreadCount ? ` / 未読: ${unreadCount}` : ""}`
-                  : "所属：（profiles未設定）"}
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  fontSize: 16,
+                  opacity: 0.7,
+                  color: THEME.text,
+                }}
+              >
+                <span>
+                  {myHospitalName
+                    ? `所属：${myHospitalName}${unreadCount ? ` / 未読: ${unreadCount}` : ""}`
+                    : "所属：（profiles未設定）"}
+                </span>
+
+                {/* ★ 自院アイコン（テキストと別レイアウトで崩れにくい） */}
+                {myHospitalId && (
+                  <img
+                    src={iconOf(myHospitalId)}
+                    alt="hospital icon"
+                    style={{
+                      width: hospitalIconTopbarSize,
+                      height: hospitalIconTopbarSize,
+                      borderRadius: 6,
+                      objectFit: "cover",
+                      opacity: 0.95,
+                      border: `1px solid ${THEME.border}`,
+                    }}
+                    onError={(e) => {
+                      // 画像URL壊れてても表示を保つ
+                      e.currentTarget.src = "/default-hospital.svg";
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -543,6 +596,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Shell */}
       <div
         style={{
           maxWidth: 1100,
@@ -557,6 +611,7 @@ export default function App() {
           gap: 14,
         }}
       >
+        {/* Sidebar */}
         <div>
           <Card>
             <div style={{ fontSize: 13, opacity: 0.7, fontWeight: 800 }}>
@@ -598,6 +653,7 @@ export default function App() {
           </Card>
         </div>
 
+        {/* Main */}
         <div>
           {tab === "send" && (
             <SendTab
@@ -614,6 +670,9 @@ export default function App() {
               setPdfFile={setPdfFile}
               sending={sending}
               createDocument={createDocument}
+              // 将来：一覧や候補表示で使えるように渡しておく
+              iconOf={iconOf}
+              nameOf={nameOf}
             />
           )}
 
@@ -630,13 +689,14 @@ export default function App() {
               setQInbox={setQInbox}
               filteredInboxDocs={filteredInboxDocs}
               nameOf={nameOf}
+              iconOf={iconOf}
               fmt={fmt}
               isExpired={isExpired}
               downloadDocument={downloadDocument}
               archiveDocument={archiveDocument}
               statusLabel={statusLabel}
               isLegacyKey={isLegacyKey}
-              statusTone={statusTone} // ★追加
+              statusTone={statusTone}
             />
           )}
 
@@ -649,11 +709,12 @@ export default function App() {
               setQSent={setQSent}
               filteredSentDocs={filteredSentDocs}
               nameOf={nameOf}
+              iconOf={iconOf}
               fmt={fmt}
               isExpired={isExpired}
               cancelDocument={cancelDocument}
               statusLabel={statusLabel}
-              statusTone={statusTone} // ★追加
+              statusTone={statusTone}
             />
           )}
         </div>
