@@ -98,12 +98,12 @@ export default function InboxTab({
                     <div style={{ fontWeight: 800, fontSize: 16 }}>
                       {nameOf(doc.from_hospital_id)}
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                    <div style={{ fontSize: 14, opacity: 0.7, marginTop: 4 }}>
                       {fmt(doc.created_at)}{" "}
                       {doc.expires_at ? ` / 期限: ${fmt(doc.expires_at)}` : ""}
                     </div>
                     {doc.comment ? (
-                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
+                      <div style={{ fontSize: 14, opacity: 0.8, marginTop: 6 }}>
                         {doc.comment}
                       </div>
                     ) : null}

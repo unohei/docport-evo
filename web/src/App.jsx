@@ -75,8 +75,8 @@ export default function App() {
   const isMobile = useMediaQuery("(max-width: 820px)");
   const isNarrow = useMediaQuery("(max-width: 1024px)");
 
-  const logoLoginSize = isMobile ? 72 : 200;
-  const logoTopbarSize = isMobile ? 28 : 70;
+  const logoLoginSize = isMobile ? 72 : 180;
+  const logoTopbarSize = isMobile ? 28 : 80;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
