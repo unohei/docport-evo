@@ -207,7 +207,7 @@ export default function App() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: window.location.origin, // 本番なら pages.dev / ローカルなら localhost
       },
     });
     if (error) alert(error.message);
