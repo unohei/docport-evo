@@ -49,6 +49,7 @@ function isLegacyKey(fileKey) {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+console.log("API_BASE =", API_BASE);
 
 export default function App() {
   const [session, setSession] = useState(null);
