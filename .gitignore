@@ -30,6 +30,8 @@ dist-ssr
 coverage/
 
 # Python virtual environment
-.venv/
 venv/
+.venv/
+api/venv/
 api/.venv/
+EOF
