@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 
 export default function ScanCapture({
@@ -20,6 +20,7 @@ export default function ScanCapture({
   const [useRear, setUseRear] = useState(!!preferRearCamera);
 
   const streamRef = useRef(null);
+  const startingRef = useRef(false);
 
   const canUseMedia =
     typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
@@ -39,10 +40,12 @@ export default function ScanCapture({
   }, []);
 
   // ---- start/stop camera ----
-  const stopCamera = async () => {
+  const stopCamera = useCallback(() => {
     try {
       const s = streamRef.current;
-      if (s) s.getTracks().forEach((tr) => tr.stop());
+      if (s) {
+        s.getTracks().forEach((tr) => tr.stop());
+      }
       streamRef.current = null;
 
       const v = videoRef.current;
@@ -52,70 +55,89 @@ export default function ScanCapture({
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  // ★ 強化：exact→ideal フォールバック + 明示 play
-  const startCamera = async (rear = useRear) => {
-    setErr("");
-    if (!canUseMedia) {
-      setErr("このブラウザではカメラが使えません。");
-      return;
-    }
-
-    try {
-      // 切替時に前streamを止める
-      await stopCamera();
-
-      const constraintsExact = {
-        audio: false,
-        video: {
-          facingMode: { exact: rear ? "environment" : "user" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      };
-
-      const constraintsIdeal = {
-        audio: false,
-        video: {
-          facingMode: rear ? "environment" : "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      };
-
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraintsExact);
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia(constraintsIdeal);
+  /**
+   * startCamera
+   * - getUserMedia は多重起動させない（許可ダイアログ後に競合すると落ちがち）
+   * - exact→ideal の facingMode フォールバック
+   * - iOS/Safari 対策で play() を明示
+   */
+  const startCamera = useCallback(
+    async (rear = useRear) => {
+      setErr("");
+      if (!canUseMedia) {
+        setErr("このブラウザではカメラが使えません。");
+        return;
       }
+      if (startingRef.current) return;
+      startingRef.current = true;
 
-      streamRef.current = stream;
+      try {
+        // 切替時/再起動時に前streamを止める
+        stopCamera();
 
-      const v = videoRef.current;
-      if (v) {
+        const constraintsExact = {
+          audio: false,
+          video: {
+            facingMode: { exact: rear ? "environment" : "user" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        };
+
+        const constraintsIdeal = {
+          audio: false,
+          video: {
+            facingMode: rear ? "environment" : "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        };
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraintsExact);
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia(constraintsIdeal);
+        }
+
+        streamRef.current = stream;
+
+        const v = videoRef.current;
+        if (!v) throw new Error("video 要素が見つかりません");
+
         v.srcObject = stream;
 
-        // ★ 重要：Androidでも iOSでも効く
-        await v.play();
-        // デバッグしたい時はこれを見る
-        // console.log("Camera started:", stream.getVideoTracks()[0]?.getSettings());
-      }
+        // iOS/Safari/一部Androidで、ここが無いと黒画面や即停止になりやすい
+        try {
+          await v.play();
+        } catch {
+          // play() が落ちる環境もあるので、ここでは致命扱いにしない
+        }
 
-      setCamOn(true);
-    } catch (e) {
-      setErr(e?.message ?? String(e));
-      setCamOn(false);
-    }
-  };
+        setCamOn(true);
+      } catch (e) {
+        console.error("camera error:", e);
+        setErr(
+          e?.name
+            ? `${e.name}${e?.message ? `: ${e.message}` : ""}`
+            : (e?.message ?? String(e)),
+        );
+        stopCamera();
+        setCamOn(false);
+      } finally {
+        startingRef.current = false;
+      }
+    },
+    [canUseMedia, stopCamera, useRear],
+  );
 
   useEffect(() => {
     return () => {
       stopCamera();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stopCamera]);
 
   // ---- helpers (OpenCV) ----
   const cv = useMemo(
@@ -338,7 +360,7 @@ export default function ScanCapture({
       const outName = `${filenameBase}_${stamp}.pdf`;
       const file = await canvasToPdfFile(outCanvas, outName);
 
-      await stopCamera();
+      stopCamera();
       onDone?.(file);
     } catch (e) {
       setErr(e?.message ?? String(e));
