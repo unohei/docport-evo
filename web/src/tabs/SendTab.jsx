@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import FileDrop from "../components/FileDrop";
+import ScanCapture from "../components/ScanCapture";
 import {
   Card,
   Pill,
@@ -30,6 +33,9 @@ export default function SendTab({
 
   const canPlace = !!toHospitalId && !!pdfFile && !sending;
 
+  // ★スキャン：背面/前面の切り替え
+  const [preferRearCamera, setPreferRearCamera] = useState(true);
+
   return (
     <Card>
       <div style={headerTitle}>置く</div>
@@ -45,7 +51,7 @@ export default function SendTab({
         <Pill>※ まずはPDFを「置く」。それだけでOK。</Pill>
       </div>
 
-      {/* ★PDF未選択なら FileDrop を最初に出す */}
+      {/* ★PDF未選択なら FileDrop + Scan を最初に出す */}
       {!pdfFile ? (
         <div style={{ marginTop: 14 }}>
           <FileDrop
@@ -54,6 +60,101 @@ export default function SendTab({
             title="PDFをここに置く"
             hint="ドラッグ&ドロップ / クリックで選択"
           />
+
+          {/* 区切り */}
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              opacity: 0.7,
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            <div
+              style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.12)" }}
+            />
+            <div>または</div>
+            <div
+              style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.12)" }}
+            />
+          </div>
+
+          {/* スキャン（紙→PDF→置く） */}
+          {!sending ? (
+            <div style={{ marginTop: 12 }}>
+              {/* ★カメラ切り替え（背面/前面） */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
+                  カメラ
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPreferRearCamera(true)}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: `1px solid ${
+                      preferRearCamera
+                        ? "rgba(15,23,42,0.35)"
+                        : "rgba(15,23,42,0.14)"
+                    }`,
+                    background: preferRearCamera
+                      ? "rgba(15,23,42,0.06)"
+                      : "white",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  背面（おすすめ）
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPreferRearCamera(false)}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: `1px solid ${
+                      !preferRearCamera
+                        ? "rgba(15,23,42,0.35)"
+                        : "rgba(15,23,42,0.14)"
+                    }`,
+                    background: !preferRearCamera
+                      ? "rgba(15,23,42,0.06)"
+                      : "white",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  前面
+                </button>
+
+                <div style={{ fontSize: 12, opacity: 0.6 }}>
+                  黒い場合は切り替えてみてください
+                </div>
+              </div>
+
+              <ScanCapture
+                key={preferRearCamera ? "rear" : "front"} // ★追加：切り替えで再マウント
+                filenameBase="紹介状"
+                preferRearCamera={preferRearCamera}
+                onDone={(file) => setPdfFile(file)}
+                onCancel={() => {}}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         <>
