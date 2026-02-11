@@ -1,15 +1,14 @@
-import { useState } from "react";
-
+// SendTab.jsx
+import { useMemo, useState } from "react";
 import FileDrop from "../components/FileDrop";
 import ScanCapture from "../components/ScanCapture";
 import {
+  THEME,
   Card,
-  Pill,
   PrimaryButton,
-  StepChip,
-  TextArea,
   Select,
   SecondaryButton,
+  TextArea,
 } from "../components/ui/primitives";
 
 export default function SendTab({
@@ -27,138 +26,117 @@ export default function SendTab({
   sending,
   createDocument,
 }) {
-  const hospitalOptions = hospitals
-    .filter((h) => h.id !== myHospitalId)
-    .map((h) => ({ value: h.id, label: h.name }));
+  // ★入力方法（pdf未選択時のみ切替）
+  const [inputMode, setInputMode] = useState("drop"); // "drop" | "scan"
 
-  const canPlace = !!toHospitalId && !!pdfFile && !sending;
+  const hospitalOptions = useMemo(() => {
+    const list = hospitals ?? [];
+    return list
+      .filter((h) => String(h.id) !== String(myHospitalId))
+      .map((h) => ({
+        value: h.id,
+        label: h.name ?? h.code ?? String(h.id),
+      }));
+  }, [hospitals, myHospitalId]);
 
-  // ★スキャン：背面/前面の切り替え
-  const [preferRearCamera, setPreferRearCamera] = useState(true);
+  const canPlace =
+    !!pdfFile &&
+    !!toHospitalId &&
+    String(toHospitalId) !== String(myHospitalId);
+
+  const SegButton = ({ active, children, onClick }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        appearance: "none",
+        border: "1px solid rgba(15,23,42,0.12)",
+        background: active ? "white" : "transparent",
+        color: THEME.text,
+        fontWeight: 800,
+        fontSize: 13,
+        padding: "10px 12px",
+        borderRadius: 12,
+        cursor: "pointer",
+        boxShadow: active ? "0 1px 8px rgba(15,23,42,0.10)" : "none",
+        flex: 1,
+        minWidth: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <Card>
       <div style={headerTitle}>置く</div>
-      <div style={{ ...headerDesc, marginTop: 6 }}>PDFを置くだけで共有。</div>
+      <div style={headerDesc}>ドラッグ＆ドロップ / スキャンでPDFを置きます</div>
 
-      <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <StepChip n={1} label="PDFを置く" />
-        <StepChip n={2} label="宛先を選ぶ" />
-        <StepChip n={3} label="必要なら一言" />
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <Pill>※ まずはPDFを「置く」。それだけでOK。</Pill>
-      </div>
-
-      {/* ★PDF未選択なら FileDrop + Scan を最初に出す */}
       {!pdfFile ? (
-        <div style={{ marginTop: 14 }}>
-          <FileDrop
-            onFile={(file) => setPdfFile(file)}
-            disabled={sending}
-            title="PDFをここに置く"
-            hint="ドラッグ&ドロップ / クリックで選択"
-          />
-
-          {/* 区切り */}
+        <>
+          {/* ★入力方法の切替（スイッチ） */}
           <div
             style={{
-              marginTop: 12,
+              marginTop: 14,
               display: "flex",
-              alignItems: "center",
-              gap: 10,
-              opacity: 0.7,
-              fontSize: 12,
-              fontWeight: 800,
+              justifyContent: "center",
             }}
           >
             <div
-              style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.12)" }}
-            />
-            <div>または</div>
-            <div
-              style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.12)" }}
-            />
+              style={{
+                width: "100%",
+                maxWidth: 520,
+                display: "flex",
+                gap: 10,
+                padding: 8,
+                borderRadius: 16,
+                border: "1px solid rgba(15,23,42,0.10)",
+                background: "rgba(255,255,255,0.65)",
+              }}
+            >
+              <SegButton
+                active={inputMode === "drop"}
+                onClick={() => setInputMode("drop")}
+              >
+                📎 ドラッグで置く
+              </SegButton>
+              <SegButton
+                active={inputMode === "scan"}
+                onClick={() => setInputMode("scan")}
+              >
+                📷 スキャンで置く
+              </SegButton>
+            </div>
           </div>
 
-          {/* スキャン（紙→PDF→置く） */}
-          {!sending ? (
-            <div style={{ marginTop: 12 }}>
-              {/* ★カメラ切り替え（背面/前面） */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  marginBottom: 10,
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-                  カメラ
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setPreferRearCamera(true)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: `1px solid ${
-                      preferRearCamera
-                        ? "rgba(15,23,42,0.35)"
-                        : "rgba(15,23,42,0.14)"
-                    }`,
-                    background: preferRearCamera
-                      ? "rgba(15,23,42,0.06)"
-                      : "white",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  背面（おすすめ）
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPreferRearCamera(false)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: `1px solid ${
-                      !preferRearCamera
-                        ? "rgba(15,23,42,0.35)"
-                        : "rgba(15,23,42,0.14)"
-                    }`,
-                    background: !preferRearCamera
-                      ? "rgba(15,23,42,0.06)"
-                      : "white",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  前面
-                </button>
-
-                <div style={{ fontSize: 12, opacity: 0.6 }}>
-                  黒い場合は切り替えてみてください
-                </div>
-              </div>
-
-              <ScanCapture
-                key={preferRearCamera ? "rear" : "front"} // ★追加：切り替えで再マウント
-                filenameBase="紹介状"
-                preferRearCamera={preferRearCamera}
-                onDone={(file) => setPdfFile(file)}
-                onCancel={() => {}}
+          {/* ★選択中モードの表示 */}
+          <div style={{ marginTop: 14 }}>
+            {inputMode === "drop" ? (
+              <FileDrop
+                accept="application/pdf"
+                onFile={(file) => setPdfFile(file)}
               />
-            </div>
-          ) : null}
-        </div>
+            ) : (
+              <ScanCapture
+                filenameBase="紹介状"
+                preferRearCamera={true} // タブレットは背面推奨
+                onDone={(file) => setPdfFile(file)} // 既存の送信フローに乗せる
+                onCancel={() => {
+                  // ここでは閉じない（必要なら drop に戻すなど）
+                  // setInputMode("drop");
+                }}
+              />
+            )}
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+            ※ PDFが選択されると、宛先とコメント入力フォームが表示されます
+          </div>
+        </>
       ) : (
         <>
-          {/* 選択後の状態 */}
+          {/* 選択中PDF */}
           <div
             style={{
               marginTop: 14,
@@ -198,6 +176,7 @@ export default function SendTab({
             </SecondaryButton>
           </div>
 
+          {/* 宛先 / コメント */}
           <div
             style={{
               marginTop: 14,
@@ -236,7 +215,12 @@ export default function SendTab({
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="例：紹介状 / 検査結果 / 予約確認 など"
                   rows={3}
-                  style={{ width: "100%" }}
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    maxWidth: "100%",
+                    boxSizing: "border-box",
+                  }}
                 />
               </div>
             </div>
