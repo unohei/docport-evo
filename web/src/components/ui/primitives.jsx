@@ -5,17 +5,11 @@ export const THEME = {
   bg: "#F5F8FC",
   topbar: "rgba(245,248,252,0.9)",
   text: "#0F172A",
-  primary: "#0F172A", // 深いブルー（基準色）
-  border: "rgba(15,23,42,0.15)",
-};
 
-/* === DocPort Accent Blue（UI統一用） === */
-const ACCENT = {
-  bg: "rgba(15, 23, 42, 0.08)",
-  activeBg: "rgba(15, 23, 42, 0.12)",
-  activeBorder: "rgba(15, 23, 42, 0.25)",
-  activeText: "#0F172A",
-  activeRing: "rgba(15, 23, 42, 0.18)",
+  // ★ SendTabと統一（Sky系）
+  primary: "#0ea5e9", // sky-500
+  primaryText: "#0369a1",
+  border: "rgba(15,23,42,0.15)",
 };
 
 const baseField = {
@@ -30,7 +24,6 @@ const baseField = {
   minWidth: 0,
 };
 
-/* ===== Card ===== */
 export function Card({ children, style }) {
   return (
     <div
@@ -74,20 +67,20 @@ export function Pill({ children, tone, style }) {
   );
 }
 
-/* ===== Buttons ===== */
-
+/* ===== PrimaryButton ===== */
 export function PrimaryButton({ children, style, ...props }) {
   return (
     <button
       {...props}
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: `1px solid ${THEME.primary}`,
+        padding: "10px 16px",
+        borderRadius: 12,
+        border: `1px solid rgba(14,165,233,0.6)`,
         background: THEME.primary,
         color: "#fff",
         cursor: "pointer",
-        fontWeight: 800,
+        fontWeight: 900,
+        boxShadow: "0 8px 20px rgba(14,165,233,0.25)",
         transition: "all 160ms ease",
         ...style,
       }}
@@ -97,13 +90,14 @@ export function PrimaryButton({ children, style, ...props }) {
   );
 }
 
+/* ===== SecondaryButton ===== */
 export function SecondaryButton({ children, style, ...props }) {
   return (
     <button
       {...props}
       style={{
         padding: "10px 14px",
-        borderRadius: 10,
+        borderRadius: 12,
         border: `1px solid ${THEME.border}`,
         background: "#fff",
         color: THEME.text,
@@ -118,13 +112,11 @@ export function SecondaryButton({ children, style, ...props }) {
   );
 }
 
-/* ===== SidebarButton（アップグレード版） ===== */
-
+/* ===== SidebarButton（SendTabと完全統一） ===== */
 export function SidebarButton({ children, active, badge, style, ...props }) {
-  const ACTIVE_BG = "rgba(37, 99, 235, 0.12)"; // 青の薄背景
-  const ACTIVE_BORDER = "rgba(37, 99, 235, 0.4)";
-  const ACTIVE_TEXT = "#2563EB"; // メインブルー
-  const ACTIVE_RING = "rgba(37, 99, 235, 0.18)";
+  const accentBg = "rgba(14,165,233,0.14)";
+  const accentBorder = "rgba(14,165,233,0.45)";
+  const accentText = "#0369a1";
 
   return (
     <button
@@ -132,29 +124,28 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
       style={{
         width: "100%",
         textAlign: "left",
-        padding: "10px 12px",
+        padding: "12px 14px",
         borderRadius: 14,
-        border: `1px solid ${active ? ACTIVE_BORDER : THEME.border}`,
-        background: active ? ACTIVE_BG : "#fff",
-        color: active ? ACTIVE_TEXT : THEME.text,
+        border: `1px solid ${active ? accentBorder : THEME.border}`,
+        background: active ? accentBg : "#fff",
+        color: active ? accentText : THEME.text,
         cursor: "pointer",
-        fontWeight: 800,
+        fontWeight: 900,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         gap: 8,
         minWidth: 0,
-        boxShadow: active ? `0 0 0 3px ${ACTIVE_RING}` : "none",
-        transition: "all 180ms ease",
+        boxShadow: active
+          ? "0 10px 24px rgba(2,132,199,0.18)"
+          : "0 2px 8px rgba(15,23,42,0.06)",
+        transition:
+          "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease",
         ...style,
       }}
     >
       <span
-        style={{
-          minWidth: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
+        style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
       >
         {children}
       </span>
@@ -166,10 +157,9 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: 999,
-            background: active ? "#2563EB" : "rgba(15,23,42,0.08)",
+            background: active ? "rgba(2,132,199,0.75)" : "rgba(15,23,42,0.08)",
             color: active ? "#fff" : THEME.text,
             whiteSpace: "nowrap",
-            transition: "all 160ms ease",
           }}
         >
           {badge}
@@ -217,7 +207,6 @@ export function StepChip({ n, label }) {
 }
 
 /* ===== Input系 ===== */
-
 export function TextInput({ style, ...props }) {
   return <input {...props} style={{ ...baseField, ...style }} />;
 }
