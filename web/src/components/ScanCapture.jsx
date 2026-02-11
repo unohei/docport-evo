@@ -35,6 +35,11 @@ export default function ScanCapture({
   const [devices, setDevices] = useState([]); // videoinput
   const [deviceId, setDeviceId] = useState(""); // selected deviceId
 
+  // ---- UI accents ----
+  const SKY = "#0ea5e9"; // DocPortのsky（統一色）
+  const SKY_TEXT = "#0369a1";
+  const DEEP = "#0F172A"; // deepsea（カメラ起動に使う）
+
   const canUseMedia =
     typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
@@ -107,15 +112,12 @@ export default function ScanCapture({
       setCamOn(true);
       await sleep(0);
 
-      // permission後じゃないとlabelが空のことが多いので、
-      // まず constraints を決めて getUserMedia → その後 enumerate でデバイス情報を更新する
       const constraints = {
         audio: false,
         video: (() => {
           if (forceDeviceId || deviceId) {
             return { deviceId: { exact: forceDeviceId || deviceId } };
           }
-          // 端末により facingMode が効く/効かないがあるので "ideal" にしておく
           return preferRearCamera
             ? { facingMode: { ideal: "environment" } }
             : { facingMode: { ideal: "user" } };
@@ -145,14 +147,12 @@ export default function ScanCapture({
           vids.find((d) => /back|rear|environment/i.test(d.label)) || null;
         if (rearLike?.deviceId) {
           setDeviceId(rearLike.deviceId);
-          // 今のstreamは停止して背面デバイスで取り直す
           await stopCamera();
           await sleep(0);
           return startCamera({ forceDeviceId: rearLike.deviceId });
         }
       }
 
-      // selected deviceId を保持（取れた範囲で）
       if (forceDeviceId) setDeviceId(forceDeviceId);
       else if (!deviceId && vids?.[0]?.deviceId) setDeviceId(vids[0].deviceId);
 
@@ -399,7 +399,6 @@ export default function ScanCapture({
     setErr("");
     if (!canSwitch) return;
 
-    // 次のdeviceへ
     const idx = devices.findIndex((d) => d.deviceId === deviceId);
     const next = devices[(idx + 1) % devices.length] || devices[0];
     if (!next?.deviceId) return;
@@ -417,7 +416,7 @@ export default function ScanCapture({
         background: "rgba(255,255,255,0.8)",
       }}
     >
-      <div style={{ fontWeight: 800, marginBottom: 6 }}>スキャンして置く</div>
+      <div style={{ fontWeight: 900, marginBottom: 6 }}>スキャンして置く</div>
       <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 12 }}>
         紙を撮影 → 自動で台形補正 → 白黒最適化 → PDFにして「置く」に渡します
       </div>
@@ -437,17 +436,35 @@ export default function ScanCapture({
       />
 
       {!camOn ? (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          {/* ★カメラ起動：別色（deep） */}
           <button
             onClick={() => startCamera()}
             disabled={busy || !opencvReady}
             style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(15, 23, 42, 0.18)",
-              background: "white",
-              fontWeight: 800,
-              cursor: busy ? "not-allowed" : "pointer",
+              padding: "12px 16px",
+              borderRadius: 14,
+              border: "1px solid rgba(15, 23, 42, 0.16)",
+              background: busy || !opencvReady ? "rgba(15,23,42,0.08)" : DEEP,
+              color: busy || !opencvReady ? "rgba(15,23,42,0.45)" : "#fff",
+              fontWeight: 900,
+              letterSpacing: 0.2,
+              cursor: busy || !opencvReady ? "not-allowed" : "pointer",
+              boxShadow:
+                busy || !opencvReady
+                  ? "none"
+                  : "0 10px 22px rgba(15,23,42,0.18)",
+              transform: busy || !opencvReady ? "none" : "translateY(-0.5px)",
+              transition:
+                "transform 140ms ease, box-shadow 140ms ease, background 140ms ease",
+              minWidth: 180,
             }}
           >
             📷 カメラを起動
@@ -457,18 +474,19 @@ export default function ScanCapture({
             onClick={onCancel}
             disabled={busy}
             style={{
-              padding: "10px 14px",
-              borderRadius: 12,
+              padding: "12px 16px",
+              borderRadius: 14,
               border: "1px solid rgba(15, 23, 42, 0.12)",
-              background: "transparent",
-              fontWeight: 700,
+              background: "rgba(255,255,255,0.75)",
+              fontWeight: 800,
               cursor: busy ? "not-allowed" : "pointer",
+              minWidth: 140,
             }}
           >
             キャンセル
           </button>
 
-          <div style={{ fontSize: 12, opacity: 0.7, alignSelf: "center" }}>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
             OpenCV: {opencvReady ? "ready" : "loading..."}
           </div>
         </div>
@@ -480,18 +498,32 @@ export default function ScanCapture({
               gap: 10,
               flexWrap: "wrap",
               marginTop: 10,
+              alignItems: "center",
             }}
           >
+            {/* ★スキャン：主役ボタン（sky強調） */}
             <button
               onClick={captureAndProcess}
               disabled={busy}
               style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(15, 23, 42, 0.18)",
-                background: "white",
-                fontWeight: 800,
+                padding: "14px 18px",
+                borderRadius: 16,
+                border: `1px solid ${
+                  busy ? "rgba(15,23,42,0.12)" : "rgba(14,165,233,0.45)"
+                }`,
+                background: busy
+                  ? "rgba(15,23,42,0.06)"
+                  : "rgba(224,242,254,0.85)",
+                color: busy ? "rgba(15,23,42,0.55)" : SKY_TEXT,
+                fontWeight: 950,
+                fontSize: 15,
+                letterSpacing: 0.25,
                 cursor: busy ? "not-allowed" : "pointer",
+                boxShadow: busy ? "none" : "0 14px 30px rgba(14,165,233,0.22)",
+                transform: busy ? "none" : "translateY(-1px)",
+                transition:
+                  "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, color 140ms ease",
+                minWidth: 220,
               }}
             >
               {busy ? "処理中..." : "📄 撮ってPDF化"}
@@ -502,12 +534,16 @@ export default function ScanCapture({
                 onClick={switchCamera}
                 disabled={busy}
                 style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(15, 23, 42, 0.12)",
-                  background: "transparent",
-                  fontWeight: 700,
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: `1px solid ${busy ? "rgba(15,23,42,0.10)" : "rgba(14,165,233,0.22)"}`,
+                  background: busy
+                    ? "rgba(15,23,42,0.06)"
+                    : "rgba(255,255,255,0.75)",
+                  color: "rgba(15,23,42,0.85)",
+                  fontWeight: 800,
                   cursor: busy ? "not-allowed" : "pointer",
+                  boxShadow: busy ? "none" : "0 8px 16px rgba(15,23,42,0.06)",
                 }}
               >
                 🔁 カメラ切替
@@ -518,18 +554,19 @@ export default function ScanCapture({
               onClick={stopCamera}
               disabled={busy}
               style={{
-                padding: "10px 14px",
-                borderRadius: 12,
+                padding: "12px 14px",
+                borderRadius: 14,
                 border: "1px solid rgba(15, 23, 42, 0.12)",
-                background: "transparent",
-                fontWeight: 700,
+                background: "rgba(255,255,255,0.75)",
+                fontWeight: 800,
                 cursor: busy ? "not-allowed" : "pointer",
+                boxShadow: busy ? "none" : "0 8px 16px rgba(15,23,42,0.06)",
               }}
             >
               カメラ停止
             </button>
 
-            <div style={{ fontSize: 12, opacity: 0.7, alignSelf: "center" }}>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
               device:{" "}
               {deviceId
                 ? devices.find((d) => d.deviceId === deviceId)?.label ||
@@ -547,7 +584,9 @@ export default function ScanCapture({
               style={{
                 width: "100%",
                 borderRadius: 14,
-                border: "1px dashed rgba(15, 23, 42, 0.18)",
+                border: `1px dashed ${
+                  busy ? "rgba(14,165,233,0.45)" : "rgba(15, 23, 42, 0.18)"
+                }`,
                 background: "white",
               }}
             />
