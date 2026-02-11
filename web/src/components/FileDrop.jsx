@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useId } from "react";
-import { THEME, Card, Pill } from "./ui/primitives";
+import { THEME, Card } from "./ui/primitives";
 
 export default function FileDrop({
   onFile,
@@ -12,7 +12,7 @@ export default function FileDrop({
   const [err, setErr] = useState("");
   const inputId = useId();
 
-  const accent = "#0ea5e9"; // sky (統一色)
+  const accent = "#0ea5e9"; // sky
   const accentText = "#0369a1";
 
   const pickFirst = (files) => (files && files.length ? files[0] : null);
@@ -55,29 +55,29 @@ export default function FileDrop({
         rimBg: "rgba(255,255,255,0.65)",
         wellBg: "rgba(148, 163, 184, 0.10)",
         text: "rgba(15,23,42,0.55)",
-        glow: "none",
+        glow: "0 10px 24px rgba(15,23,42,0.05)",
         slot: "rgba(148, 163, 184, 0.55)",
       };
     }
     if (dragOver) {
       return {
         rimBorder: "rgba(14, 165, 233, 0.55)",
-        rimBg: "rgba(255,255,255,0.78)",
+        rimBg: "rgba(255,255,255,0.82)",
         wellBg:
-          "linear-gradient(180deg, rgba(224,242,254,0.75), rgba(240,249,255,0.75))",
+          "linear-gradient(180deg, rgba(224,242,254,0.85), rgba(240,249,255,0.75))",
         text: THEME.text,
-        glow: "0 18px 38px rgba(14,165,233,0.26)",
-        slot: "rgba(14,165,233,0.85)",
+        glow: "0 22px 44px rgba(14,165,233,0.24)",
+        slot: "rgba(14,165,233,0.90)",
       };
     }
     return {
       rimBorder: "rgba(15,23,42,0.10)",
-      rimBg: "rgba(255,255,255,0.75)",
+      rimBg: "rgba(255,255,255,0.78)",
       wellBg:
-        "linear-gradient(180deg, rgba(255,255,255,0.65), rgba(242,247,251,0.75))",
+        "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(242,247,251,0.82))",
       text: THEME.text,
-      glow: "0 12px 26px rgba(15,23,42,0.08)",
-      slot: "rgba(2,132,199,0.55)",
+      glow: "0 14px 28px rgba(15,23,42,0.08)",
+      slot: "rgba(2,132,199,0.60)",
     };
   }, [dragOver, disabled]);
 
@@ -112,8 +112,8 @@ export default function FileDrop({
         onDrop={onDrop}
         style={{
           position: "relative",
-          borderRadius: 24,
-          padding: 12, // 外側リム用
+          borderRadius: 26,
+          padding: 12,
           cursor: disabled ? "not-allowed" : "pointer",
           userSelect: "none",
           transition:
@@ -126,78 +126,75 @@ export default function FileDrop({
           boxShadow: tone.glow,
           background: tone.rimBg,
           border: `1px solid ${tone.rimBorder}`,
-
-          // リムの厚み（上から見た“縁”）
-          // ほんのり立体に
-          filter: disabled ? "grayscale(0.05)" : "none",
+          // ほんの少し“上から”感（やりすぎない）
+          perspective: "900px",
         }}
       >
-        {/* 上面のライト */}
+        {/* 上面ライト */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
             inset: 0,
-            borderRadius: 24,
+            borderRadius: 26,
             pointerEvents: "none",
             background:
-              "linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0))",
-            opacity: 0.7,
+              "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0))",
+            opacity: 0.75,
           }}
         />
 
-        {/* リム内側の影（縁の立体感） */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 24,
-            pointerEvents: "none",
-            boxShadow:
-              "inset 0 2px 0 rgba(255,255,255,0.85), inset 0 -10px 18px rgba(15,23,42,0.06)",
-          }}
-        />
-
-        {/* ここから“受け皿（凹み）” */}
+        {/* ====== 凹み（well） ====== */}
         <div
           style={{
             position: "relative",
             borderRadius: 18,
-            minHeight: 240,
-            padding: "62px 20px 28px",
+            minHeight: 250,
+            padding: "66px 20px 34px",
             background: tone.wellBg,
             border: `1px solid ${dragOver ? "rgba(14,165,233,0.30)" : "rgba(15,23,42,0.08)"}`,
             boxShadow: dragOver
-              ? "inset 0 14px 26px rgba(14,165,233,0.10), inset 0 -10px 16px rgba(255,255,255,0.85)"
-              : "inset 0 14px 26px rgba(15,23,42,0.10), inset 0 -10px 16px rgba(255,255,255,0.85)",
+              ? "inset 0 18px 30px rgba(14,165,233,0.10), inset 0 -12px 18px rgba(255,255,255,0.88)"
+              : "inset 0 18px 30px rgba(15,23,42,0.10), inset 0 -12px 18px rgba(255,255,255,0.88)",
             transition:
               "box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease",
             transform: disabled
               ? "none"
               : dragOver
-                ? "translateY(1px)"
-                : "none",
+                ? "translateY(1px) rotateX(0.6deg)"
+                : "rotateX(0.4deg)",
             overflow: "hidden",
           }}
         >
-          {/* subtle pattern（トレイの材質感：うっすら） */}
+          {/* 左右の壁（箱感） */}
           <div
             aria-hidden="true"
             style={{
               position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              opacity: 0.25,
-              backgroundImage:
-                "radial-gradient(circle at 1px 1px, rgba(2,132,199,0.18) 1px, transparent 0)",
-              backgroundSize: "22px 22px",
-              maskImage:
-                "linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.1))",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: 22,
+              background:
+                "linear-gradient(90deg, rgba(15,23,42,0.10), rgba(15,23,42,0))",
+              opacity: 0.55,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              right: 0,
+              width: 22,
+              background:
+                "linear-gradient(270deg, rgba(15,23,42,0.10), rgba(15,23,42,0))",
+              opacity: 0.55,
             }}
           />
 
-          {/* 差し込み口（スリット） */}
+          {/* 差し込み口 */}
           <div
             aria-hidden="true"
             style={{
@@ -205,11 +202,11 @@ export default function FileDrop({
               top: 18,
               left: "50%",
               transform: "translateX(-50%)",
-              width: 160,
-              height: 10,
+              width: 172,
+              height: 12,
               borderRadius: 999,
-              background: "rgba(15,23,42,0.10)",
-              boxShadow: "inset 0 3px 6px rgba(15,23,42,0.20)",
+              background: "rgba(15,23,42,0.12)",
+              boxShadow: "inset 0 3px 7px rgba(15,23,42,0.22)",
             }}
           />
           <div
@@ -219,18 +216,128 @@ export default function FileDrop({
               top: 20,
               left: "50%",
               transform: "translateX(-50%)",
-              width: 156,
-              height: 6,
+              width: 166,
+              height: 7,
               borderRadius: 999,
               background: tone.slot,
               boxShadow: dragOver
-                ? "0 0 0 4px rgba(14,165,233,0.10), 0 10px 18px rgba(14,165,233,0.20)"
-                : "0 10px 18px rgba(2,132,199,0.10)",
+                ? "0 0 0 4px rgba(14,165,233,0.10), 0 12px 18px rgba(14,165,233,0.18)"
+                : "0 12px 18px rgba(2,132,199,0.10)",
               transition: "box-shadow 180ms ease, background 180ms ease",
             }}
           />
 
-          {/* ドラッグ時の“吸い込み”オーラ */}
+          {/* 中に刺さってる紙（箱っぽさの決定打） */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 34,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 280,
+              height: 120,
+              pointerEvents: "none",
+              opacity: disabled ? 0.4 : 0.9,
+            }}
+          >
+            {/* 3枚くらい重ねる */}
+            {[
+              { y: 18, s: 0.92, o: 0.45 },
+              { y: 10, s: 0.96, o: 0.65 },
+              { y: 0, s: 1.0, o: 0.9 },
+            ].map((p, idx) => (
+              <div
+                key={idx}
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: p.y,
+                  transform: `translateX(-50%) scale(${p.s})`,
+                  width: 230,
+                  height: 86,
+                  borderRadius: 14,
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.70))",
+                  border: "1px solid rgba(15,23,42,0.10)",
+                  boxShadow: "0 10px 16px rgba(15,23,42,0.08)",
+                  opacity: p.o,
+                }}
+              >
+                {/* 紙の上の薄い線（文字っぽさ） */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 16,
+                    left: 18,
+                    right: 18,
+                    height: 6,
+                    borderRadius: 6,
+                    background: "rgba(15,23,42,0.10)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 30,
+                    left: 18,
+                    right: 60,
+                    height: 6,
+                    borderRadius: 6,
+                    background: "rgba(15,23,42,0.08)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 44,
+                    left: 18,
+                    right: 90,
+                    height: 6,
+                    borderRadius: 6,
+                    background: "rgba(15,23,42,0.07)",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 手前のフチ（トレイ前面） */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 18,
+              right: 18,
+              bottom: 10,
+              height: 56,
+              borderRadius: 18,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.0), rgba(255,255,255,0.85))",
+              boxShadow:
+                "0 -10px 18px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.85)",
+              opacity: 1,
+              pointerEvents: "none",
+            }}
+          />
+          {/* 手前フチの影（“箱の奥行き”） */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 34,
+              right: 34,
+              bottom: 44,
+              height: 16,
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.08)",
+              filter: "blur(0.2px)",
+              opacity: 0.85,
+              pointerEvents: "none",
+            }}
+          />
+
+          {/* 吸い込みオーラ */}
           <div
             aria-hidden="true"
             style={{
@@ -238,44 +345,25 @@ export default function FileDrop({
               inset: 0,
               pointerEvents: "none",
               background: dragOver
-                ? "radial-gradient(circle at 50% 35%, rgba(14,165,233,0.18), rgba(14,165,233,0.00) 55%)"
-                : "radial-gradient(circle at 50% 35%, rgba(2,132,199,0.08), rgba(2,132,199,0.00) 55%)",
+                ? "radial-gradient(circle at 50% 45%, rgba(14,165,233,0.18), rgba(14,165,233,0.00) 60%)"
+                : "radial-gradient(circle at 50% 45%, rgba(2,132,199,0.08), rgba(2,132,199,0.00) 60%)",
               opacity: disabled ? 0.2 : 1,
               transition: "background 180ms ease",
             }}
           />
 
-          {/* 中身 */}
+          {/* 中身（テキスト） */}
           <div
             style={{
               display: "grid",
-              gap: 14,
+              gap: 12,
               textAlign: "center",
               justifyItems: "center",
               position: "relative",
-              zIndex: 1,
+              zIndex: 2,
+              marginTop: 84, // 紙の表現ぶん下げる
             }}
           >
-            {/* 紙アイコン（吸い込み表現） */}
-            <div
-              style={{
-                fontSize: 56,
-                transition:
-                  "transform 180ms ease, filter 180ms ease, opacity 180ms ease",
-                transform: disabled
-                  ? "none"
-                  : dragOver
-                    ? "translateY(-10px) scale(1.03)"
-                    : "translateY(0) scale(1)",
-                filter: dragOver
-                  ? "drop-shadow(0 10px 16px rgba(2,132,199,0.18))"
-                  : "none",
-                opacity: disabled ? 0.75 : 1,
-              }}
-            >
-              📄
-            </div>
-
             <div
               style={{
                 fontSize: 22,
@@ -287,34 +375,10 @@ export default function FileDrop({
               {title}
             </div>
 
-            <div style={{ fontSize: 14, opacity: 0.7, color: tone.text }}>
+            <div style={{ fontSize: 14, opacity: 0.72, color: tone.text }}>
               {hint}
             </div>
 
-            {/* <Pill
-              tone={{
-                bg: "rgba(14,165,233,0.12)",
-                text: accentText,
-                border: "rgba(14,165,233,0.35)",
-              }}
-              style={{
-                boxShadow: dragOver
-                  ? "0 10px 18px rgba(14,165,233,0.16)"
-                  : "0 8px 16px rgba(15,23,42,0.06)",
-                transform: dragOver ? "translateY(-1px)" : "none",
-                transition: "box-shadow 180ms ease, transform 180ms ease",
-              }}
-            >
-              送信ではなく「置く」です
-            </Pill> */}
-
-            {err ? (
-              <div style={{ fontSize: 13, color: "#991b1b", fontWeight: 800 }}>
-                {err}
-              </div>
-            ) : null}
-
-            {/* 補助テキスト（ドラッグ中だけ） */}
             {!disabled && dragOver ? (
               <div
                 style={{
@@ -326,6 +390,12 @@ export default function FileDrop({
                 }}
               >
                 そのまま離して “置く”
+              </div>
+            ) : null}
+
+            {err ? (
+              <div style={{ fontSize: 13, color: "#991b1b", fontWeight: 800 }}>
+                {err}
               </div>
             ) : null}
           </div>

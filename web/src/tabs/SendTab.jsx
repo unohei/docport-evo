@@ -108,9 +108,7 @@ export default function SendTab({
     <div style={{ display: "grid", gap: 12 }}>
       <div>
         <div style={headerTitle}>置く</div>
-        {/* <div style={headerDesc}>
-          ドラッグ＆ドロップ / スキャンでPDFを置きます
-        </div> */}
+        {/* <div style={headerDesc}>ドラッグ＆ドロップ / スキャンでPDFを置きます</div> */}
       </div>
 
       {/* Mode toggle */}
@@ -152,11 +150,11 @@ export default function SendTab({
           <div style={{ marginTop: 12 }}>
             {inputMode === "drop" ? (
               <FileDrop
-                onPick={(file) => setPdfFile(file)}
+                onFile={(file) => setPdfFile(file)} // ★ここが修正ポイント
                 accept="application/pdf"
-                hintTitle="PDFをここに置く"
-                hintSub="ドラッグ＆ドロップ / クリックで選択"
-                // hintPill="送信ではなく「置く」です"
+                // title/hintは FileDrop 側のデフォルトでOK（必要なら上書き可）
+                // title="ここに置く"
+                // hint="ドラッグ & タップで選択"
               />
             ) : (
               <ScanCapture
@@ -169,10 +167,6 @@ export default function SendTab({
               />
             )}
           </div>
-
-          {/* <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-            ※ PDFが選択されると、宛先とコメント入力フォームが表示されます
-          </div> */}
         </Card>
       ) : null}
 
