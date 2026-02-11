@@ -121,6 +121,11 @@ export function SecondaryButton({ children, style, ...props }) {
 /* ===== SidebarButton（アップグレード版） ===== */
 
 export function SidebarButton({ children, active, badge, style, ...props }) {
+  const ACTIVE_BG = "rgba(37, 99, 235, 0.12)"; // 青の薄背景
+  const ACTIVE_BORDER = "rgba(37, 99, 235, 0.4)";
+  const ACTIVE_TEXT = "#2563EB"; // メインブルー
+  const ACTIVE_RING = "rgba(37, 99, 235, 0.18)";
+
   return (
     <button
       {...props}
@@ -129,9 +134,9 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
         textAlign: "left",
         padding: "10px 12px",
         borderRadius: 14,
-        border: `1px solid ${active ? ACCENT.activeBorder : THEME.border}`,
-        background: active ? ACCENT.activeBg : "#fff",
-        color: active ? ACCENT.activeText : THEME.text,
+        border: `1px solid ${active ? ACTIVE_BORDER : THEME.border}`,
+        background: active ? ACTIVE_BG : "#fff",
+        color: active ? ACTIVE_TEXT : THEME.text,
         cursor: "pointer",
         fontWeight: 800,
         display: "flex",
@@ -139,7 +144,7 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
         alignItems: "center",
         gap: 8,
         minWidth: 0,
-        boxShadow: active ? `0 0 0 3px ${ACCENT.activeRing}` : "none",
+        boxShadow: active ? `0 0 0 3px ${ACTIVE_RING}` : "none",
         transition: "all 180ms ease",
         ...style,
       }}
@@ -161,7 +166,7 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: 999,
-            background: active ? THEME.primary : "rgba(15,23,42,0.08)",
+            background: active ? "#2563EB" : "rgba(15,23,42,0.08)",
             color: active ? "#fff" : THEME.text,
             whiteSpace: "nowrap",
             transition: "all 160ms ease",
