@@ -5,8 +5,17 @@ export const THEME = {
   bg: "#F5F8FC",
   topbar: "rgba(245,248,252,0.9)",
   text: "#0F172A",
-  primary: "#0F172A",
+  primary: "#0F172A", // 深いブルー（基準色）
   border: "rgba(15,23,42,0.15)",
+};
+
+/* === DocPort Accent Blue（UI統一用） === */
+const ACCENT = {
+  bg: "rgba(15, 23, 42, 0.08)",
+  activeBg: "rgba(15, 23, 42, 0.12)",
+  activeBorder: "rgba(15, 23, 42, 0.25)",
+  activeText: "#0F172A",
+  activeRing: "rgba(15, 23, 42, 0.18)",
 };
 
 const baseField = {
@@ -17,10 +26,11 @@ const baseField = {
   outline: "none",
   color: THEME.text,
   background: "#fff",
-  boxSizing: "border-box", // ★はみ出し対策の本丸
+  boxSizing: "border-box",
   minWidth: 0,
 };
 
+/* ===== Card ===== */
 export function Card({ children, style }) {
   return (
     <div
@@ -37,10 +47,7 @@ export function Card({ children, style }) {
   );
 }
 
-/**
- * Pill：ステータスバッジ用に tone を渡せる
- * tone例: { bg:"#..", text:"#..", border:"#.." }
- */
+/* ===== Pill ===== */
 export function Pill({ children, tone, style }) {
   const bg = tone?.bg ?? "rgba(255,255,255,0.8)";
   const text = tone?.text ?? THEME.text;
@@ -67,6 +74,8 @@ export function Pill({ children, tone, style }) {
   );
 }
 
+/* ===== Buttons ===== */
+
 export function PrimaryButton({ children, style, ...props }) {
   return (
     <button
@@ -79,6 +88,7 @@ export function PrimaryButton({ children, style, ...props }) {
         color: "#fff",
         cursor: "pointer",
         fontWeight: 800,
+        transition: "all 160ms ease",
         ...style,
       }}
     >
@@ -99,6 +109,7 @@ export function SecondaryButton({ children, style, ...props }) {
         color: THEME.text,
         cursor: "pointer",
         fontWeight: 800,
+        transition: "all 160ms ease",
         ...style,
       }}
     >
@@ -106,6 +117,8 @@ export function SecondaryButton({ children, style, ...props }) {
     </button>
   );
 }
+
+/* ===== SidebarButton（アップグレード版） ===== */
 
 export function SidebarButton({ children, active, badge, style, ...props }) {
   return (
@@ -115,10 +128,10 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
         width: "100%",
         textAlign: "left",
         padding: "10px 12px",
-        borderRadius: 12,
-        border: `1px solid ${THEME.border}`,
-        background: active ? THEME.primary : "#fff",
-        color: active ? "#fff" : THEME.text,
+        borderRadius: 14,
+        border: `1px solid ${active ? ACCENT.activeBorder : THEME.border}`,
+        background: active ? ACCENT.activeBg : "#fff",
+        color: active ? ACCENT.activeText : THEME.text,
         cursor: "pointer",
         fontWeight: 800,
         display: "flex",
@@ -126,14 +139,21 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
         alignItems: "center",
         gap: 8,
         minWidth: 0,
+        boxShadow: active ? `0 0 0 3px ${ACCENT.activeRing}` : "none",
+        transition: "all 180ms ease",
         ...style,
       }}
     >
       <span
-        style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+        style={{
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
       >
         {children}
       </span>
+
       {badge ? (
         <span
           style={{
@@ -141,10 +161,10 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: 999,
-            background: active
-              ? "rgba(255,255,255,0.22)"
-              : "rgba(15,23,42,0.08)",
+            background: active ? THEME.primary : "rgba(15,23,42,0.08)",
+            color: active ? "#fff" : THEME.text,
             whiteSpace: "nowrap",
+            transition: "all 160ms ease",
           }}
         >
           {badge}
@@ -154,6 +174,7 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
   );
 }
 
+/* ===== StepChip ===== */
 export function StepChip({ n, label }) {
   return (
     <div
@@ -191,6 +212,7 @@ export function StepChip({ n, label }) {
 }
 
 /* ===== Input系 ===== */
+
 export function TextInput({ style, ...props }) {
   return <input {...props} style={{ ...baseField, ...style }} />;
 }
