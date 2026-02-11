@@ -1,19 +1,16 @@
-// SendTab.jsx
 import { useMemo, useState } from "react";
-import FileDrop from "../components/FileDrop";
-import ScanCapture from "../components/ScanCapture";
 import {
   THEME,
   Card,
   PrimaryButton,
-  Select,
-  SecondaryButton,
-  TextArea,
+  TextInput,
 } from "../components/ui/primitives";
+import FileDrop from "../components/FileDrop";
+import ScanCapture from "../components/ScanCapture";
 
 export default function SendTab({
   headerTitle,
-  headerDesc,
+  // headerDesc,
   isMobile,
   myHospitalId,
   hospitals,
@@ -26,219 +23,235 @@ export default function SendTab({
   sending,
   createDocument,
 }) {
-  // ★入力方法（pdf未選択時のみ切替）
   const [inputMode, setInputMode] = useState("drop"); // "drop" | "scan"
+  const [hoverMode, setHoverMode] = useState(null); // "drop" | "scan" | null
 
   const hospitalOptions = useMemo(() => {
-    const list = hospitals ?? [];
-    return list
-      .filter((h) => String(h.id) !== String(myHospitalId))
-      .map((h) => ({
-        value: h.id,
-        label: h.name ?? h.code ?? String(h.id),
-      }));
+    return (hospitals || [])
+      .filter((h) => h.id !== myHospitalId)
+      .map((h) => ({ id: h.id, name: h.name }));
   }, [hospitals, myHospitalId]);
 
-  const canPlace =
-    !!pdfFile &&
-    !!toHospitalId &&
-    String(toHospitalId) !== String(myHospitalId);
+  const SegButton = ({ active, hovered, icon, children, ...props }) => {
+    const isHot = !!active || !!hovered;
+    const accentBg = "rgba(14, 165, 233, 0.14)"; // sky
+    const accentBorder = "rgba(14, 165, 233, 0.45)";
+    const accentText = "#0369a1";
 
-  const SegButton = ({ active, children, onClick }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        appearance: "none",
-        border: "1px solid rgba(15,23,42,0.12)",
-        background: active ? "white" : "transparent",
-        color: THEME.text,
-        fontWeight: 800,
-        fontSize: 13,
-        padding: "10px 12px",
-        borderRadius: 12,
-        cursor: "pointer",
-        boxShadow: active ? "0 1px 8px rgba(15,23,42,0.10)" : "none",
-        flex: 1,
-        minWidth: 0,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </button>
-  );
+    return (
+      <button
+        {...props}
+        aria-pressed={active ? "true" : "false"}
+        style={{
+          flex: 1,
+          minWidth: 160,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          padding: isMobile ? "12px 12px" : "14px 14px",
+          borderRadius: 14,
+          border: `1px solid ${
+            active
+              ? accentBorder
+              : isHot
+                ? "rgba(2, 132, 199, 0.28)"
+                : "rgba(15, 23, 42, 0.12)"
+          }`,
+          background: active
+            ? accentBg
+            : isHot
+              ? "rgba(2, 132, 199, 0.06)"
+              : "rgba(255,255,255,0.7)",
+          color: active ? accentText : THEME.text,
+          fontWeight: 900,
+          letterSpacing: 0.2,
+          cursor: "pointer",
+          userSelect: "none",
+          boxShadow: active
+            ? "0 10px 24px rgba(2, 132, 199, 0.18)"
+            : isHot
+              ? "0 8px 18px rgba(15, 23, 42, 0.10)"
+              : "0 2px 8px rgba(15, 23, 42, 0.06)",
+          transform: active
+            ? "translateY(-1px)"
+            : isHot
+              ? "translateY(-0.5px)"
+              : "none",
+          transition:
+            "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, color 140ms ease",
+          position: "relative",
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
+        <span>{children}</span>
+
+        {/* 選択中の“しるし” */}
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: 12,
+            bottom: 8,
+            width: 34,
+            height: 4,
+            borderRadius: 999,
+            background: active ? "rgba(2, 132, 199, 0.75)" : "transparent",
+            transition: "background 140ms ease",
+          }}
+        />
+      </button>
+    );
+  };
 
   return (
-    <Card>
-      <div style={headerTitle}>置く</div>
-      <div style={headerDesc}>ドラッグ＆ドロップ / スキャンでPDFを置きます</div>
+    <div style={{ display: "grid", gap: 12 }}>
+      <div>
+        <div style={headerTitle}>置く</div>
+        {/* <div style={headerDesc}>
+          ドラッグ＆ドロップ / スキャンでPDFを置きます
+        </div> */}
+      </div>
 
+      {/* Mode toggle */}
       {!pdfFile ? (
-        <>
-          {/* ★入力方法の切替（スイッチ） */}
+        <Card>
           <div
             style={{
-              marginTop: 14,
               display: "flex",
-              justifyContent: "center",
+              gap: 10,
+              padding: 10,
+              borderRadius: 16,
+              border: "1px solid rgba(15, 23, 42, 0.10)",
+              background: "rgba(255,255,255,0.65)",
             }}
           >
-            <div
-              style={{
-                width: "100%",
-                maxWidth: 520,
-                display: "flex",
-                gap: 10,
-                padding: 8,
-                borderRadius: 16,
-                border: "1px solid rgba(15,23,42,0.10)",
-                background: "rgba(255,255,255,0.65)",
-              }}
+            <SegButton
+              active={inputMode === "drop"}
+              hovered={hoverMode === "drop"}
+              onMouseEnter={() => setHoverMode("drop")}
+              onMouseLeave={() => setHoverMode(null)}
+              onClick={() => setInputMode("drop")}
+              icon="📎"
             >
-              <SegButton
-                active={inputMode === "drop"}
-                onClick={() => setInputMode("drop")}
-              >
-                📎 ドラッグで置く
-              </SegButton>
-              <SegButton
-                active={inputMode === "scan"}
-                onClick={() => setInputMode("scan")}
-              >
-                📷 スキャンで置く
-              </SegButton>
-            </div>
+              ドラッグで置く
+            </SegButton>
+
+            <SegButton
+              active={inputMode === "scan"}
+              hovered={hoverMode === "scan"}
+              onMouseEnter={() => setHoverMode("scan")}
+              onMouseLeave={() => setHoverMode(null)}
+              onClick={() => setInputMode("scan")}
+              icon="📷"
+            >
+              スキャンで置く
+            </SegButton>
           </div>
 
-          {/* ★選択中モードの表示 */}
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 12 }}>
             {inputMode === "drop" ? (
               <FileDrop
+                onPick={(file) => setPdfFile(file)}
                 accept="application/pdf"
-                onFile={(file) => setPdfFile(file)}
+                hintTitle="PDFをここに置く"
+                hintSub="ドラッグ＆ドロップ / クリックで選択"
+                hintPill="送信ではなく「置く」です"
               />
             ) : (
               <ScanCapture
                 filenameBase="紹介状"
-                preferRearCamera={true} // タブレットは背面推奨
-                onDone={(file) => setPdfFile(file)} // 既存の送信フローに乗せる
-                onCancel={() => {
-                  // ここでは閉じない（必要なら drop に戻すなど）
-                  // setInputMode("drop");
+                preferRearCamera={true}
+                onDone={(file) => {
+                  setPdfFile(file);
                 }}
+                onCancel={() => {}}
               />
             )}
           </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+          {/* <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
             ※ PDFが選択されると、宛先とコメント入力フォームが表示されます
-          </div>
-        </>
-      ) : (
-        <>
-          {/* 選択中PDF */}
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              flexWrap: "wrap",
-              alignItems: "center",
-              border: "1px solid rgba(15,23,42,0.12)",
-              borderRadius: 12,
-              padding: 12,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-                選択中のPDF
-              </div>
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 13,
-                  fontWeight: 800,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {pdfFile.name}
-              </div>
-            </div>
+          </div> */}
+        </Card>
+      ) : null}
 
-            <SecondaryButton
-              onClick={() => setPdfFile(null)}
-              disabled={sending}
+      {/* Form (shown when pdf selected) */}
+      {pdfFile ? (
+        <Card>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontWeight: 800 }}>置く先（宛先）</div>
+
+            <select
+              value={toHospitalId}
+              onChange={(e) => setToHospitalId(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                background: "rgba(255,255,255,0.85)",
+                fontWeight: 700,
+                color: THEME.text,
+              }}
             >
-              取り替える
-            </SecondaryButton>
-          </div>
+              <option value="">選択してください</option>
+              {hospitalOptions.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
 
-          {/* 宛先 / コメント */}
-          <div
-            style={{
-              marginTop: 14,
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-                宛先（病院）
-              </div>
-              <div style={{ marginTop: 6 }}>
-                <Select
-                  value={toHospitalId}
-                  onChange={(e) => setToHospitalId(e.target.value)}
-                  style={{ width: "100%" }}
-                >
-                  <option value="">選択してください</option>
-                  {hospitalOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
+            <div style={{ fontWeight: 800, marginTop: 6 }}>ひとこと</div>
+            <TextInput
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="例）紹介状お送りします。ご確認お願いします。"
+            />
 
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-                コメント（任意）
+            <div
+              style={{
+                marginTop: 6,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                選択中: <b>{pdfFile?.name}</b>
               </div>
-              <div style={{ marginTop: 6 }}>
-                <TextArea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="例：紹介状 / 検査結果 / 予約確認 など"
-                  rows={3}
-                  style={{
-                    width: "100%",
-                    resize: "vertical",
-                    maxWidth: "100%",
-                    boxSizing: "border-box",
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => {
+                    setPdfFile(null);
+                    setToHospitalId("");
+                    setComment("");
                   }}
-                />
+                  disabled={sending}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(15, 23, 42, 0.12)",
+                    background: "transparent",
+                    fontWeight: 800,
+                    cursor: sending ? "not-allowed" : "pointer",
+                  }}
+                >
+                  戻る
+                </button>
+
+                <PrimaryButton onClick={createDocument} disabled={sending}>
+                  {sending ? "置いています..." : "置く"}
+                </PrimaryButton>
               </div>
             </div>
           </div>
-
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              justifyContent: "flex-end",
-            }}
-          >
-            <PrimaryButton onClick={createDocument} disabled={!canPlace}>
-              {sending ? "置いています…" : "置く"}
-            </PrimaryButton>
-          </div>
-        </>
-      )}
-    </Card>
+        </Card>
+      ) : null}
+    </div>
   );
 }
