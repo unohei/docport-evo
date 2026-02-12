@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 
 /**
- * ScanCapture.jsx（カラー版）
+ * ScanCapture.jsx（カラー版 + ガイド + プレビュー）
  * - getUserMedia でカメラ起動
  * - OpenCV.js で書類検出（エッジ→輪郭→四隅推定）
+ * - ガイド：方眼＋四隅枠をオーバーレイ描画（軽量：~4-5fps）
  * - Perspective Transform で台形補正（★カラー出力）
- * - pdf-lib で 1ページPDF化
+ * - プレビューで止めて「この内容で置く」でPDF化 → onDone
  *
  * props:
  * - onDone(file: File): スキャン結果PDFを File として返す
@@ -21,14 +22,26 @@ export default function ScanCapture({
   preferRearCamera = true,
 }) {
   const videoRef = useRef(null);
-  const rawCanvasRef = useRef(null); // キャプチャ用（元画像）
-  const outCanvasRef = useRef(null); // 補正結果（★カラー）
+  const rawCanvasRef = useRef(null); // キャプチャ/解析用（元画像）
+  const outCanvasRef = useRef(null); // 補正結果（カラー、オフスクリーン）
+  const overlayRef = useRef(null); // ガイド描画（方眼 + 四隅枠）
   const streamRef = useRef(null);
+
+  // guide loop refs
+  const rafRef = useRef(null);
+  const lastGuideAtRef = useRef(0);
+  const lastQuadNormRef = useRef(null); // { pts: [{x,y}...], ok: bool }
 
   const [camOn, setCamOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [opencvReady, setOpenCvReady] = useState(false);
+
+  // capture flow
+  const [stage, setStage] = useState("idle"); // idle | camera | processing | preview
+  const [pendingName, setPendingName] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // device switching
   const [devices, setDevices] = useState([]); // videoinput
@@ -75,8 +88,20 @@ export default function ScanCapture({
     }
   };
 
-  const stopCamera = async () => {
+  const stopGuideLoop = () => {
     try {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    } catch {
+      // ignore
+    }
+  };
+
+  const stopCamera = async (opts = {}) => {
+    const { preserveStage = false } = opts;
+    try {
+      stopGuideLoop();
+
       const s = streamRef.current;
       if (s) s.getTracks().forEach((tr) => tr.stop());
       streamRef.current = null;
@@ -85,9 +110,33 @@ export default function ScanCapture({
       if (v) v.srcObject = null;
 
       setCamOn(false);
+      if (!preserveStage) setStage("idle");
     } catch {
       // ignore
     }
+  };
+
+  const startGuideLoop = () => {
+    stopGuideLoop();
+    lastGuideAtRef.current = 0;
+
+    const tick = (t) => {
+      rafRef.current = requestAnimationFrame(tick);
+
+      // throttle (ms) : スマホ向け（重くしない）
+      const THROTTLE = 220; // ~4-5fps
+      if (!camOn || stage !== "camera") return;
+      if (!opencvReady || !cv) return;
+
+      if (t - lastGuideAtRef.current < THROTTLE) {
+        drawGuide();
+        return;
+      }
+      lastGuideAtRef.current = t;
+      detectQuadForGuide();
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
   };
 
   const startCamera = async (opts = {}) => {
@@ -101,6 +150,7 @@ export default function ScanCapture({
 
     // 先に video を描画（黒画面/要素なし対策）
     setCamOn(true);
+    setStage("camera");
     await sleep(0);
 
     try {
@@ -130,6 +180,9 @@ export default function ScanCapture({
       await sleep(0);
       await v.play();
 
+      // Start guide loop when camera starts
+      startGuideLoop();
+
       const vids = (await refreshDevices()) || [];
 
       if (!forceDeviceId && !deviceId && vids.length >= 2 && preferRearCamera) {
@@ -147,19 +200,223 @@ export default function ScanCapture({
       else if (!deviceId && vids?.[0]?.deviceId) setDeviceId(vids[0].deviceId);
 
       setCamOn(true);
+      setStage("camera");
     } catch (e) {
       setErr(e?.message ?? String(e));
       setCamOn(false);
+      setStage("idle");
       await stopCamera();
     }
   };
 
   useEffect(() => {
     return () => {
+      stopGuideLoop();
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const drawGrid = (ctx, w, h) => {
+    const STEP = 56; // “間隔の広い方眼”
+    ctx.save();
+    ctx.globalAlpha = 0.14;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(2, 132, 199, 0.45)";
+
+    for (let x = 0; x <= w; x += STEP) {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= h; y += STEP) {
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(w, y + 0.5);
+      ctx.stroke();
+    }
+
+    // center crosshair（薄い十字）
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, h / 2 - 22);
+    ctx.lineTo(w / 2, h / 2 + 22);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - 22, h / 2);
+    ctx.lineTo(w / 2 + 22, h / 2);
+    ctx.stroke();
+
+    ctx.restore();
+  };
+
+  const drawGuide = () => {
+    const v = videoRef.current;
+    const c = overlayRef.current;
+    if (!v || !c) return;
+
+    const rect = v.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.round(rect.width * dpr);
+    const H = Math.round(rect.height * dpr);
+
+    if (c.width !== W) c.width = W;
+    if (c.height !== H) c.height = H;
+
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
+
+    // grid overlay
+    drawGrid(ctx, W, H);
+
+    const quad = lastQuadNormRef.current;
+    if (!quad?.pts?.length) return;
+
+    const pts = quad.pts;
+    const ok = !!quad.ok;
+
+    // draw quad
+    ctx.save();
+    ctx.globalAlpha = ok ? 0.9 : 0.55;
+    ctx.lineWidth = ok ? 4 : 3;
+    ctx.strokeStyle = ok
+      ? "rgba(16, 185, 129, 0.95)"
+      : "rgba(14, 165, 233, 0.95)";
+    ctx.fillStyle = ok
+      ? "rgba(16, 185, 129, 0.10)"
+      : "rgba(14, 165, 233, 0.08)";
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x * W, pts[0].y * H);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x * W, pts[i].y * H);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // corner dots
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ok ? "rgba(16, 185, 129, 1)" : "rgba(14, 165, 233, 1)";
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x * W, p.y * H, ok ? 6 : 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  const detectQuadForGuide = () => {
+    try {
+      const video = videoRef.current;
+      const rawCanvas = rawCanvasRef.current;
+      if (!video || !rawCanvas) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) {
+        lastQuadNormRef.current = null;
+        drawGuide();
+        return;
+      }
+
+      // smaller frame for guide detection
+      const MAX_W = 720;
+      const scale = vw > MAX_W ? MAX_W / vw : 1;
+      const cw = Math.round(vw * scale);
+      const ch = Math.round(vh * scale);
+
+      rawCanvas.width = cw;
+      rawCanvas.height = ch;
+      const ctx = rawCanvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, cw, ch);
+
+      const srcRGBA = cv.imread(rawCanvas);
+      const gray = new cv.Mat();
+      cv.cvtColor(srcRGBA, gray, cv.COLOR_RGBA2GRAY);
+
+      const denoise = new cv.Mat();
+      cv.bilateralFilter(gray, denoise, 7, 50, 50);
+
+      const edges = new cv.Mat();
+      cv.Canny(denoise, edges, 50, 150);
+
+      const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+      cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
+      kernel.delete();
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(
+        edges,
+        contours,
+        hierarchy,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE,
+      );
+
+      let bestQuad = null;
+      let bestArea = 0;
+
+      for (let i = 0; i < contours.size(); i++) {
+        const cnt = contours.get(i);
+        const peri = cv.arcLength(cnt, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+        if (approx.rows === 4) {
+          const area = cv.contourArea(approx);
+          const convex = cv.isContourConvex(approx);
+          const okArea = area >= cw * ch * 0.1;
+          if (convex && okArea && area > bestArea) {
+            bestArea = area;
+            bestQuad?.delete?.();
+            bestQuad = approx.clone();
+          }
+        }
+
+        approx.delete();
+        cnt.delete();
+      }
+
+      contours.delete();
+      hierarchy.delete();
+      edges.delete();
+      denoise.delete();
+      gray.delete();
+      srcRGBA.delete();
+
+      if (!bestQuad) {
+        lastQuadNormRef.current = null;
+        drawGuide();
+        return;
+      }
+
+      const pts = [];
+      for (let r = 0; r < 4; r++) {
+        pts.push({ x: bestQuad.intAt(r, 0), y: bestQuad.intAt(r, 1) });
+      }
+      bestQuad.delete();
+
+      const [tl, tr, br, bl] = orderQuadPoints(pts);
+
+      // normalized (0..1)
+      lastQuadNormRef.current = {
+        pts: [tl, tr, br, bl].map((p) => ({ x: p.x / cw, y: p.y / ch })),
+        ok: true,
+      };
+
+      drawGuide();
+    } catch {
+      // ignore guide errors
+      lastQuadNormRef.current = null;
+      drawGuide();
+    }
+  };
 
   function orderQuadPoints(pts) {
     const sum = pts.map((p) => p.x + p.y);
@@ -208,6 +465,7 @@ export default function ScanCapture({
     if (!video || !rawCanvas || !outCanvas) return;
 
     setBusy(true);
+    setStage("processing");
     try {
       const vw = video.videoWidth;
       const vh = video.videoHeight;
@@ -273,7 +531,7 @@ export default function ScanCapture({
           // 凸性チェック（紙以外のギザギザ排除）
           const convex = cv.isContourConvex(approx);
 
-          // 面積しきい値（画面の12%は踏襲）
+          // 面積しきい値
           const okArea = area >= cw * ch * 0.12;
 
           if (convex && okArea && area > bestArea) {
@@ -371,6 +629,7 @@ export default function ScanCapture({
       gray.delete();
       srcRGBA.delete();
 
+      // ---- preview (stop before auto place) ----
       const ymd = new Date();
       const stamp =
         `${ymd.getFullYear()}` +
@@ -381,15 +640,44 @@ export default function ScanCapture({
         `${String(ymd.getMinutes()).padStart(2, "0")}`;
 
       const outName = `${filenameBase}_${stamp}.pdf`;
-      const file = await canvasToPdfFile(outCanvas, outName);
+      setPendingName(outName);
+      setPreviewUrl(outCanvas.toDataURL("image/jpeg", 0.92));
+      setStage("preview");
 
-      await stopCamera();
+      // camera can be stopped to save battery; retake will restart
+      await stopCamera({ preserveStage: true });
+    } catch (e) {
+      setErr(e?.message ?? String(e));
+      setStage(camOn ? "camera" : "idle");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPlace = async () => {
+    if (submitting) return;
+    const outCanvas = outCanvasRef.current;
+    if (!outCanvas) return;
+    if (!pendingName) return;
+
+    setSubmitting(true);
+    setErr("");
+    try {
+      const file = await canvasToPdfFile(outCanvas, pendingName);
       onDone?.(file);
     } catch (e) {
       setErr(e?.message ?? String(e));
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
+  };
+
+  const retake = async () => {
+    setErr("");
+    setPreviewUrl("");
+    setPendingName("");
+    lastQuadNormRef.current = null;
+    await startCamera();
   };
 
   const canSwitch = devices.length >= 2;
@@ -416,24 +704,37 @@ export default function ScanCapture({
       }}
     >
       <div style={{ fontWeight: 900, marginBottom: 6 }}>スキャンして置く</div>
-      {/* <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 12 }}>
-        紙を撮影 → 自動で台形補正 → カラーPDFにして「置く」に渡します
-      </div> */}
 
-      <video
-        ref={videoRef}
-        playsInline
-        muted
-        autoPlay
-        style={{
-          width: "100%",
-          borderRadius: 14,
-          background: "#0b1220",
-          display: camOn ? "block" : "none",
-        }}
-      />
+      <div style={{ position: "relative" }}>
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          autoPlay
+          style={{
+            width: "100%",
+            borderRadius: 14,
+            background: "#0b1220",
+            display: camOn && stage === "camera" ? "block" : "none",
+          }}
+        />
 
-      {!camOn ? (
+        {/* Guide overlay (grid + detected quad) */}
+        <canvas
+          ref={overlayRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: camOn && stage === "camera" ? "100%" : 0,
+            height: camOn && stage === "camera" ? "100%" : 0,
+            borderRadius: 14,
+            pointerEvents: "none",
+            display: camOn && stage === "camera" ? "block" : "none",
+          }}
+        />
+      </div>
+
+      {!camOn && stage !== "preview" ? (
         <div
           style={{
             display: "flex",
@@ -487,7 +788,7 @@ export default function ScanCapture({
             OpenCV: {opencvReady ? "ready" : "loading..."}
           </div>
         </div>
-      ) : (
+      ) : stage === "camera" ? (
         <>
           <div
             style={{
@@ -573,25 +874,119 @@ export default function ScanCapture({
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
+          {/* capture result canvas is kept off-screen until preview */}
+          <canvas ref={outCanvasRef} style={{ display: "none" }} />
+        </>
+      ) : stage === "preview" ? (
+        <>
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
               プレビュー（補正後・カラー）
             </div>
-            <canvas
-              ref={outCanvasRef}
+
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="scan preview"
+                style={{
+                  width: "100%",
+                  borderRadius: 14,
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  background: "white",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  border: "1px dashed rgba(15, 23, 42, 0.18)",
+                  background: "rgba(255,255,255,0.7)",
+                  fontSize: 13,
+                  opacity: 0.75,
+                }}
+              >
+                プレビュー画像を生成中...
+              </div>
+            )}
+
+            <div
               style={{
-                width: "100%",
-                borderRadius: 14,
-                border: `1px dashed ${
-                  busy ? "rgba(14,165,233,0.45)" : "rgba(15, 23, 42, 0.18)"
-                }`,
-                background: "white",
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
               }}
-            />
+            >
+              <button
+                onClick={confirmPlace}
+                disabled={submitting}
+                style={{
+                  padding: "14px 18px",
+                  borderRadius: 16,
+                  border: `1px solid ${
+                    submitting ? "rgba(15,23,42,0.12)" : "rgba(14,165,233,0.45)"
+                  }`,
+                  background: submitting
+                    ? "rgba(15,23,42,0.06)"
+                    : "rgba(224,242,254,0.85)",
+                  color: submitting ? "rgba(15,23,42,0.55)" : SKY_TEXT,
+                  fontWeight: 950,
+                  fontSize: 15,
+                  letterSpacing: 0.25,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  boxShadow: submitting
+                    ? "none"
+                    : "0 14px 30px rgba(14,165,233,0.22)",
+                  minWidth: 220,
+                }}
+              >
+                {submitting ? "作成中..." : "✅ この内容で置く"}
+              </button>
+
+              <button
+                onClick={retake}
+                disabled={submitting}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  background: "rgba(255,255,255,0.75)",
+                  fontWeight: 800,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  boxShadow: submitting
+                    ? "none"
+                    : "0 8px 16px rgba(15,23,42,0.06)",
+                }}
+              >
+                🔄 撮り直す
+              </button>
+
+              <button
+                onClick={() => {
+                  setPreviewUrl("");
+                  setPendingName("");
+                  setStage("idle");
+                  onCancel?.();
+                }}
+                disabled={submitting}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  background: "transparent",
+                  fontWeight: 800,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </>
-      )}
+      ) : null}
 
+      {/* rawCanvasは解析用。見せない */}
       <canvas ref={rawCanvasRef} style={{ display: "none" }} />
 
       {err ? (
