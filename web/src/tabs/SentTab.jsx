@@ -19,29 +19,12 @@ export default function SentTab({
   cancelDocument,
   statusLabel,
   statusTone,
-  // ★追加（任意）：Sent側の「開く」処理を外から渡せるように
-  openSentDocument,
+  openPreview, // ★変更：プレビュー起動
 }) {
   const getThumbUrl = (doc) =>
     doc?.thumb_url || doc?.thumbnail_url || doc?.thumbUrl || "";
 
-  const guessFileUrl = (doc) =>
-    doc?.file_url ||
-    doc?.download_url ||
-    doc?.signed_url ||
-    doc?.url ||
-    doc?.fileUrl ||
-    doc?.downloadUrl ||
-    "";
-
-  const openDoc = (doc) => {
-    if (openSentDocument) return openSentDocument(doc);
-    const url = guessFileUrl(doc);
-    if (!url) return;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const canOpen = (doc) => !!openSentDocument || !!guessFileUrl(doc);
+  const canOpen = (doc) => !!openPreview;
 
   return (
     <Card>
@@ -100,11 +83,11 @@ export default function SentTab({
                       flex: 1,
                     }}
                   >
-                    {/* サムネ（タップで開く） */}
+                    {/* サムネ（タップでプレビュー） */}
                     <button
-                      onClick={() => openDoc(doc)}
+                      onClick={() => openPreview(doc)}
                       disabled={!canOpen(doc)}
-                      title={canOpen(doc) ? "開く" : "開くURLがありません"}
+                      title={canOpen(doc) ? "プレビュー" : "開けません"}
                       style={{
                         width: 86,
                         height: 86,
@@ -193,10 +176,10 @@ export default function SentTab({
                   }}
                 >
                   <PrimaryButton
-                    onClick={() => openDoc(doc)}
+                    onClick={() => openPreview(doc)}
                     disabled={!canOpen(doc)}
                   >
-                    開く
+                    プレビュー
                   </PrimaryButton>
 
                   <SecondaryButton

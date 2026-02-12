@@ -51,12 +51,173 @@ function isLegacyKey(fileKey) {
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 console.log("API_BASE =", API_BASE);
 
+// ---- Preview Modal (App内に同梱) ----
+function PreviewModal({
+  isOpen,
+  onClose,
+  title,
+  url,
+  loading,
+  error,
+  metaLeft,
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.45)",
+        zIndex: 80,
+        display: "grid",
+        placeItems: "center",
+        padding: 12,
+      }}
+    >
+      <div
+        style={{
+          width: "min(1020px, 100%)",
+          height: "min(88vh, 920px)",
+          background: "rgba(255,255,255,0.93)",
+          border: "1px solid rgba(15,23,42,0.12)",
+          borderRadius: 16,
+          boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateRows: "56px 1fr",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(15,23,42,0.10)",
+            background: "rgba(248,250,252,0.9)",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 900,
+                fontSize: 14,
+                color: THEME.text,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={title}
+            >
+              {title || "プレビュー"}
+            </div>
+            {metaLeft ? (
+              <div style={{ marginTop: 2, fontSize: 12, opacity: 0.7 }}>
+                {metaLeft}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* 端末で開く（外部ビューア） */}
+            <a
+              href={url || "#"}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{
+                pointerEvents: url ? "auto" : "none",
+                opacity: url ? 1 : 0.5,
+                textDecoration: "none",
+              }}
+            >
+              <button
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: "rgba(14,165,233,0.10)",
+                  fontWeight: 900,
+                  color: THEME.text,
+                  cursor: url ? "pointer" : "not-allowed",
+                }}
+              >
+                端末で開く
+              </button>
+            </a>
+
+            <button
+              onClick={onClose}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: "rgba(255,255,255,0.85)",
+                fontWeight: 900,
+                color: THEME.text,
+                cursor: "pointer",
+              }}
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ background: "rgba(255,255,255,0.72)" }}>
+          {loading ? (
+            <div style={{ padding: 16, fontWeight: 900, opacity: 0.78 }}>
+              読み込み中...
+            </div>
+          ) : error ? (
+            <div style={{ padding: 16 }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                プレビューできませんでした
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>{error}</div>
+              <div style={{ marginTop: 12, fontSize: 13 }}>
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={{ fontWeight: 900 }}
+                  >
+                    端末で開く（外部）
+                  </a>
+                ) : (
+                  <span style={{ opacity: 0.7 }}>
+                    ※URLを取得できませんでした
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : url ? (
+            <iframe
+              title="pdf-preview"
+              src={url}
+              style={{ width: "100%", height: "100%", border: "none" }}
+            />
+          ) : (
+            <div style={{ padding: 16, opacity: 0.75 }}>URL取得待ち</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [tab, setTab] = useState("send"); // inbox | send | sent
   const [loading, setLoading] = useState(true);
 
-  // ★メールリンク経由タブ判定（このフラグが“2タブ違和感”を減らす）
+  // ★メールリンク経由タブ判定
   const [authReturn, setAuthReturn] = useState(false);
 
   // data
@@ -80,15 +241,21 @@ export default function App() {
   const [qInbox, setQInbox] = useState("");
   const [qSent, setQSent] = useState("");
 
+  // Preview (Modal)
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
   // breakpoints
   const isMobile = useMediaQuery("(max-width: 820px)");
   const isNarrow = useMediaQuery("(max-width: 1024px)");
 
-  // ロゴサイズ（ここだけ触ればOK）
+  // ロゴサイズ
   const logoLoginSize = isMobile ? 72 : 180;
   const logoTopbarSize = isMobile ? 28 : 80;
 
-  // 病院アイコンサイズ（ここだけ触ればOK）
+  // 病院アイコンサイズ
   const hospitalIconTopbarSize = isMobile ? 22 : 34;
 
   useEffect(() => {
@@ -96,14 +263,12 @@ export default function App() {
       typeof window !== "undefined" &&
       (window.location.search || window.location.hash);
 
-    // 「メールリンクを開いたタブ」っぽいならフラグON
     if (hasAuthParams) setAuthReturn(true);
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null);
       setLoading(false);
 
-      // URLに ?code= / #... が付いてたら消す（authReturnフラグは残す）
       if (data.session && hasAuthParams) {
         window.history.replaceState({}, document.title, "/");
       }
@@ -118,7 +283,6 @@ export default function App() {
 
       if (nowHasAuthParams) setAuthReturn(true);
 
-      // ログイン成立＋URLに認証情報が付いてたら掃除
       if (sess && nowHasAuthParams) {
         window.history.replaceState({}, document.title, "/");
       }
@@ -137,11 +301,11 @@ export default function App() {
   // 病院ID -> 表示名
   const nameOf = (hid) => hospitals.find((h) => h.id === hid)?.name ?? hid;
 
-  // 病院ID -> アイコンURL（なければデフォルト）
+  // 病院ID -> アイコンURL
   const iconOf = (hid) =>
     hospitals.find((h) => h.id === hid)?.icon_url || "/default-hospital.svg";
 
-  // 未読件数（期限切れ・アーカイブは除外）
+  // 未読件数
   const unreadCount = useMemo(() => {
     return inboxDocs.filter(
       (d) =>
@@ -200,7 +364,6 @@ export default function App() {
     }
     setProfile(prof);
 
-    // ★ icon_url を取得に含める
     const { data: hs, error: hsErr } = await supabase
       .from("hospitals")
       .select("id, name, code, icon_url")
@@ -255,6 +418,12 @@ export default function App() {
     setQInbox("");
     setQSent("");
     setAuthReturn(false);
+
+    // preview reset
+    setPreviewDoc(null);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(false);
   };
 
   // ---- R2 presign helpers ----
@@ -334,70 +503,63 @@ export default function App() {
     }
   };
 
-  const downloadDocument = async (doc) => {
-    try {
-      if (!doc.file_key) return alert("file_keyが空です（旧データの可能性）");
-      if (isLegacyKey(doc.file_key))
-        return alert(
-          `旧データの可能性があるためDLをブロックしました。\nfile_key: ${doc.file_key}`,
-        );
-      if (isExpired(doc.expires_at))
-        return alert("期限切れのためダウンロードできません");
-      if (doc.status === "CANCELLED")
-        return alert("相手により取り消されました");
-      if (doc.status === "ARCHIVED") return alert("アーカイブ済みです");
-
-      const { download_url } = await getPresignedDownload(doc.file_key);
-      window.open(download_url, "_blank");
-
-      await supabase
-        .from("documents")
-        .update({ status: "DOWNLOADED" })
-        .eq("id", doc.id);
-
-      await supabase.from("document_events").insert({
-        document_id: doc.id,
-        actor_user_id: session.user.id,
-        action: "DOWNLOAD",
-      });
-
-      await loadAll();
-    } catch (e) {
-      alert(`DL失敗: ${e?.message ?? e}`);
-    }
+  // ---- Preview (Inbox/Sent共通) ----
+  const closePreview = () => {
+    setPreviewDoc(null);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(false);
   };
 
-  const openSentDocument = async (doc) => {
-    // ① まず新タブを試す（許可されていればUX良し）
-    const w = window.open("about:blank", "_blank", "noopener,noreferrer");
-
+  const openPreview = async (doc, opts = { markDownloaded: false }) => {
     try {
-      if (!doc.file_key)
-        throw new Error("file_keyが空です（旧データの可能性）");
+      if (!doc?.file_key) return alert("file_keyが空です（旧データの可能性）");
       if (isLegacyKey(doc.file_key))
-        throw new Error(
+        return alert(
           `旧データの可能性があるためブロックしました。\nfile_key: ${doc.file_key}`,
         );
-      if (isExpired(doc.expires_at))
-        throw new Error("期限切れのため開けません");
-      if (doc.status === "CANCELLED") throw new Error("取り消し済みです");
+      if (isExpired(doc.expires_at)) return alert("期限切れのため開けません");
+      if (doc.status === "CANCELLED") return alert("取り消し済みです");
+      if (doc.status === "ARCHIVED") return alert("アーカイブ済みです");
+
+      setPreviewDoc(doc);
+      setPreviewLoading(true);
+      setPreviewError("");
+      setPreviewUrl("");
 
       const { download_url } = await getPresignedDownload(doc.file_key);
       if (!download_url) throw new Error("download_url が取得できませんでした");
 
-      // ② 新タブが開けたならそこへ遷移
-      if (w) {
-        w.location.href = download_url;
-        return;
-      }
+      setPreviewUrl(download_url);
 
-      // ③ ブロックされたら同一タブで開く（確実）
-      window.location.assign(download_url);
+      // Inboxは「見たら既読」に寄せる（必要なければ opts を false に）
+      if (opts?.markDownloaded && session?.user?.id) {
+        if (doc.status !== "DOWNLOADED") {
+          await supabase
+            .from("documents")
+            .update({ status: "DOWNLOADED" })
+            .eq("id", doc.id);
+
+          await supabase.from("document_events").insert({
+            document_id: doc.id,
+            actor_user_id: session.user.id,
+            action: "DOWNLOAD",
+          });
+
+          await loadAll();
+        }
+      }
     } catch (e) {
-      if (w) w.close();
-      alert(`開くのに失敗: ${e?.message ?? e}`);
+      setPreviewError(e?.message ?? String(e));
+    } finally {
+      setPreviewLoading(false);
     }
   };
+
+  // Inbox用（既読化あり）
+  const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: true });
+  // Sent用（既読化なし）
+  const openSentPreview = (doc) => openPreview(doc, { markDownloaded: false });
 
   const archiveDocument = async (doc) => {
     try {
@@ -499,8 +661,6 @@ export default function App() {
   // ---- Rendering ----
   if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
 
-  // ★メールリンクで開いたタブが「ログイン済み」になったら、完了画面を出す
-  // これで“2タブとも普通にアプリが動く”違和感を減らす
   if (session && authReturn) {
     return (
       <Root>
@@ -534,7 +694,6 @@ export default function App() {
             >
               <PrimaryButton
                 onClick={() => {
-                  // 通常表示に戻す（=このタブでもアプリを使いたい場合用）
                   setAuthReturn(false);
                   window.history.replaceState({}, document.title, "/");
                 }}
@@ -542,12 +701,7 @@ export default function App() {
                 DocPortを開く
               </PrimaryButton>
 
-              <SecondaryButton
-                onClick={() => {
-                  // メールアプリ起点だと閉じれないことが多い（その場合は手動でOK）
-                  window.close();
-                }}
-              >
+              <SecondaryButton onClick={() => window.close()}>
                 このタブを閉じる
               </SecondaryButton>
             </div>
@@ -632,6 +786,21 @@ export default function App() {
   const headerTitle = { fontSize: 18, fontWeight: 800, color: THEME.text };
   const headerDesc = { fontSize: 12, opacity: 0.7, color: THEME.text };
 
+  const isInboxPreviewing =
+    !!previewDoc && previewDoc.to_hospital_id === myHospitalId;
+
+  const previewTitle = previewDoc
+    ? isInboxPreviewing
+      ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}`
+      : `記録 / ${nameOf(previewDoc.to_hospital_id)}`
+    : "";
+
+  const previewMetaLeft = previewDoc
+    ? `${fmt(previewDoc.created_at)}${
+        previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""
+      }`
+    : "";
+
   return (
     <Root>
       {/* Top bar */}
@@ -687,7 +856,9 @@ export default function App() {
               >
                 <span>
                   {myHospitalName
-                    ? `所属：${myHospitalName}${unreadCount ? ` / 未読: ${unreadCount}` : ""}`
+                    ? `所属：${myHospitalName}${
+                        unreadCount ? ` / 未読: ${unreadCount}` : ""
+                      }`
                     : "所属：（profiles未設定）"}
                 </span>
 
@@ -817,7 +988,7 @@ export default function App() {
               nameOf={nameOf}
               fmt={fmt}
               isExpired={isExpired}
-              downloadDocument={downloadDocument}
+              openPreview={openInboxPreview}
               archiveDocument={archiveDocument}
               statusLabel={statusLabel}
               isLegacyKey={isLegacyKey}
@@ -839,11 +1010,22 @@ export default function App() {
               cancelDocument={cancelDocument}
               statusLabel={statusLabel}
               statusTone={statusTone}
-              openSentDocument={openSentDocument}
+              openPreview={openSentPreview}
             />
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <PreviewModal
+        isOpen={!!previewDoc}
+        onClose={closePreview}
+        title={previewTitle}
+        metaLeft={previewMetaLeft}
+        url={previewUrl}
+        loading={previewLoading}
+        error={previewError}
+      />
     </Root>
   );
 }

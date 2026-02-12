@@ -20,7 +20,7 @@ export default function InboxTab({
   nameOf,
   fmt,
   isExpired,
-  downloadDocument,
+  openPreview, // ★変更：プレビュー起動
   archiveDocument,
   statusLabel,
   isLegacyKey,
@@ -33,7 +33,7 @@ export default function InboxTab({
     <Card>
       <div style={headerTitle}>受け取る</div>
       <div style={{ ...headerDesc, marginTop: 6 }}>
-        クリックでDL（「未読」から「既読」）
+        プレビューで確認（右上「端末で開く」も可）
       </div>
 
       <div
@@ -116,9 +116,9 @@ export default function InboxTab({
                     }}
                   >
                     <button
-                      onClick={() => downloadDocument(doc)}
+                      onClick={() => openPreview(doc)}
                       disabled={disabledOpen}
-                      title={disabledOpen ? "開けません" : "開く"}
+                      title={disabledOpen ? "開けません" : "プレビュー"}
                       style={{
                         width: 86,
                         height: 86,
@@ -207,7 +207,7 @@ export default function InboxTab({
                   </div>
                 </div>
 
-                {/* 下：ボタン（既存のまま） */}
+                {/* 下：ボタン */}
                 <div
                   style={{
                     display: "flex",
@@ -217,10 +217,10 @@ export default function InboxTab({
                   }}
                 >
                   <PrimaryButton
-                    onClick={() => downloadDocument(doc)}
+                    onClick={() => openPreview(doc)}
                     disabled={disabledOpen}
                   >
-                    開く
+                    プレビュー
                   </PrimaryButton>
 
                   <SecondaryButton
