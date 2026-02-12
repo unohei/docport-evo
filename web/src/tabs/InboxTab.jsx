@@ -79,11 +79,13 @@ export default function InboxTab({
               <div
                 key={doc.id}
                 style={{
+                  backgroundColor: "rgba(186, 230, 253, 0.6)",
                   border: "1px solid rgba(15,23,42,0.12)",
                   borderRadius: 12,
                   padding: 12,
                   display: "grid",
                   gap: 10,
+                  boxShadow: "0 6px 14px rgba(15, 23, 42, 0.08)",
                 }}
               >
                 <div
