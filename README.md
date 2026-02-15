@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="screenshots/置く画面.png" width="50%" />
+  <img src="screenshots/ログイン.png" width="70%" />
 </p>
 
 # DocPort
@@ -19,16 +19,16 @@ DocPort は、病院間での FAX・電話・紙に依存した情報共有を�
 
 # 主な機能
 
-<p align="left">
-  <img src="screenshots/記録画面.png" width="50%" />
-</p>
-
 ## 🟦 置く（Send）
 
 - PDFをドラッグ＆ドロップで配置
 - 宛先病院を選択して「置く」だけ
 - スキャン機能（台形補正・PDF化）
 - 送信ではなく「状態として残す」設計
+
+<p align="left">
+  <img src="screenshots/置く画面.png" width="70%" />
+</p>
 
 ---
 
@@ -47,6 +47,10 @@ DocPort は、病院間での FAX・電話・紙に依存した情報共有を�
 - 未読・期限内のみ取消可能
 - ステータスで確認状況を把握
 - プレビュー対応
+
+<p align="left">
+  <img src="screenshots/記録画面.png" width="70%" />
+</p>
 
 ---
 
