@@ -438,7 +438,11 @@ export default function App() {
   }, [session]);
 
   const sendMagicLink = async () => {
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    // v1.6: emailRedirectTo で現在の環境（origin）に戻るよう固定
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
     if (error) alert(error.message);
     else alert("メール送信しました（届いたリンクを開いてログイン）");
   };
