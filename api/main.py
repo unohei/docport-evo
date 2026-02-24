@@ -351,6 +351,12 @@ _SENSITIVE_KEYWORDS = [
 ]
 
 
+@app.post("/ocr")
+def ocr_compat(body: OcrRequest, user: dict = Depends(verify_jwt)):
+    """compat: Vite proxy 経由のローカル開発用（/api/ocr と同じ処理）"""
+    return ocr_pdf(body, user)
+
+
 @app.post("/api/ocr")
 def ocr_pdf(body: OcrRequest, user: dict = Depends(verify_jwt)):
     """
