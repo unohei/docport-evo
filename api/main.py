@@ -1,21 +1,23 @@
-# 変更点（v1.7 CORS修正）:
-# 1. allow_origins を廃止し allow_origin_regex のみに統一（混在による不整合を解消）
-# 2. デフォルト regex で docport.pages.dev / docport-evo.pages.dev / localhost:5173 を許可
-# 3. 環境変数 ALLOW_ORIGIN_REGEX がある場合はそちらを優先（既存の運用を維持）
+# 変更点（v1.8 JWT検証をES256/JWKSに対応）:
+# 1. PyJWT(HS256) を廃止し python-jose で JWKS から公開鍵取得・ES256 検証に切り替え
+# 2. SUPABASE_JWT_SECRET は不要になった（環境変数から削除可）
+# 3. JWKS は1時間キャッシュし、kid 不一致時は強制再取得（key rotation 対応）
 # ---- 以下は前バージョンからの継続 ----
 # presign-upload/download 全4エンドポイントに Supabase JWT 検証を追加
 # presign-download は documents.file_key で hospital_id 一致チェック（RLS + FastAPI 二重防御）
-# 新規環境変数: SUPABASE_URL / SUPABASE_ANON_KEY（Supabase REST API 呼び出し用）
+# CORS は allow_origin_regex のみで制御（allow_origins は使用しない）
 
 import io
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
-import jwt
+from jose import jwt as jose_jwt
+from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 from pypdf import PdfReader
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -52,35 +54,111 @@ app.add_middleware(
 
 
 # ----------------------------
-# JWT 検証ヘルパー
+# Supabase 設定
 # ----------------------------
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
-# Supabase REST API 呼び出し用（user JWT を渡すため RLS が有効に機能する）
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")        # 例: https://xxxx.supabase.co
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 _bearer = HTTPBearer()
 
 
+# ----------------------------
+# JWKS キャッシュ（TTL: 1時間）
+# ----------------------------
+_jwks_keys: dict = {}     # kid -> JWK dict
+_jwks_fetched_at: float = 0.0
+_JWKS_CACHE_TTL = 3600    # seconds
+
+
+def _refresh_jwks() -> None:
+    """
+    Supabase の JWKS エンドポイントから公開鍵を取得してモジュール変数に格納する。
+    urllib のみ使用（新規ライブラリ不要）。
+    """
+    global _jwks_keys, _jwks_fetched_at
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="SUPABASE_URL が未設定です")
+    url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=500, detail=f"JWKS 取得失敗: {e.code}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JWKS 取得エラー: {e}")
+
+    _jwks_keys = {k["kid"]: k for k in data.get("keys", []) if "kid" in k}
+    _jwks_fetched_at = time.time()
+
+
+def _get_signing_key(kid: str) -> dict:
+    """
+    kid に対応する JWK dict を返す（TTL キャッシュ付き）。
+    キャッシュにない場合は強制再取得（key rotation 対応）。
+    """
+    global _jwks_keys, _jwks_fetched_at
+
+    # TTL 切れなら再取得
+    if time.time() - _jwks_fetched_at > _JWKS_CACHE_TTL:
+        _refresh_jwks()
+
+    if kid in _jwks_keys:
+        return _jwks_keys[kid]
+
+    # キャッシュにない → key rotation の可能性があるので強制再取得
+    _refresh_jwks()
+    if kid not in _jwks_keys:
+        raise HTTPException(
+            status_code=401,
+            detail="対応する公開鍵が見つかりません（kid 不一致）",
+        )
+    return _jwks_keys[kid]
+
+
+# ----------------------------
+# JWT 検証ヘルパー（ES256/JWKS）
+# ----------------------------
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
     """
-    Supabase JWT（HS256）を検証する。
-    SUPABASE_JWT_SECRET は Supabase Dashboard > Settings > API の JWT Secret。
-    FastAPI 内部の依存注入で同一リクエスト内は _bearer の結果がキャッシュされる。
+    Supabase JWT（ES256）を JWKS 経由で検証する。
+    - kid から公開鍵を取得（TTL キャッシュ付き）
+    - audience: authenticated
+    - issuer: https://<SUPABASE_URL>/auth/v1
+    FastAPI の依存注入で同一リクエスト内は _bearer の結果がキャッシュされる。
     """
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(status_code=500, detail="SUPABASE_JWT_SECRET が未設定です")
+    token = credentials.credentials
+
+    # ヘッダーから kid / alg を取得（未検証）
     try:
-        payload = jwt.decode(
-            credentials.credentials,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+        header = jose_jwt.get_unverified_header(token)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="無効なトークンです（ヘッダー解析失敗）")
+
+    kid = header.get("kid")
+    alg = header.get("alg", "ES256")
+
+    if not kid:
+        raise HTTPException(status_code=401, detail="JWT に kid がありません")
+
+    jwk_key = _get_signing_key(kid)
+    issuer = f"{SUPABASE_URL.rstrip('/')}/auth/v1"
+
+    try:
+        # python-jose は {"keys": [...]} 形式の JWKS dict を直接受け取れる
+        payload = jose_jwt.decode(
+            token,
+            {"keys": [jwk_key]},
+            algorithms=[alg],
             audience="authenticated",
+            issuer=issuer,
         )
         return payload
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="トークンの有効期限が切れています")
-    except jwt.InvalidTokenError:
+    except JWTClaimsError as e:
+        raise HTTPException(status_code=401, detail=f"トークンのクレームが無効です: {e}")
+    except JWTError:
         raise HTTPException(status_code=401, detail="無効なトークンです")
 
 
@@ -211,7 +289,7 @@ def _presign_download(key: str):
 
 
 # ----------------------------
-# Presign エンドポイント（JWT 認可追加）
+# Presign エンドポイント（JWT 認可）
 # ----------------------------
 @app.post("/api/presign-upload")
 def presign_upload_api(
