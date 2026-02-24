@@ -467,7 +467,12 @@ export default function App() {
 
   // ---- R2 presign helpers ----
   const getPresignedUpload = async () => {
-    const res = await fetch(`${API_BASE}/presign-upload`, { method: "POST" });
+    // v1.6: JWT を付与（認可チェック追加）
+    const token = session?.access_token;
+    const res = await fetch(`${API_BASE}/presign-upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json(); // { upload_url, file_key }
   };
@@ -485,8 +490,11 @@ export default function App() {
   };
 
   const getPresignedDownload = async (fileKey) => {
+    // v1.6: JWT を付与（hospital_id 一致チェック追加）
+    const token = session?.access_token;
     const res = await fetch(
       `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
     );
     if (!res.ok) throw new Error(await res.text());
     return res.json(); // { download_url }
