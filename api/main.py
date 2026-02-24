@@ -1,8 +1,11 @@
-# 変更点（v1.6 presign認可追加）:
-# 1. presign-upload/download 全4エンドポイントに Supabase JWT 検証を追加
-# 2. presign-download は documents.file_key で hospital_id 一致チェック（RLS + FastAPI 二重防御）
-# 3. 新規環境変数: SUPABASE_URL / SUPABASE_ANON_KEY（Supabase REST API 呼び出し用）
-# 4. GET /health エンドポイント追加（Render ウォームアップ用）
+# 変更点（v1.7 CORS修正）:
+# 1. allow_origins を廃止し allow_origin_regex のみに統一（混在による不整合を解消）
+# 2. デフォルト regex で docport.pages.dev / docport-evo.pages.dev / localhost:5173 を許可
+# 3. 環境変数 ALLOW_ORIGIN_REGEX がある場合はそちらを優先（既存の運用を維持）
+# ---- 以下は前バージョンからの継続 ----
+# presign-upload/download 全4エンドポイントに Supabase JWT 検証を追加
+# presign-download は documents.file_key で hospital_id 一致チェック（RLS + FastAPI 二重防御）
+# 新規環境変数: SUPABASE_URL / SUPABASE_ANON_KEY（Supabase REST API 呼び出し用）
 
 import io
 import json
@@ -26,16 +29,21 @@ app = FastAPI()
 
 # ----------------------------
 # CORS（本番 + ローカル）
+# allow_origins は使用しない。allow_origin_regex のみで制御する。
+# デフォルト: docport.pages.dev / docport-evo.pages.dev / localhost:5173
 # ----------------------------
-ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "http://localhost:5173").split(",")
-ALLOW_ORIGIN_REGEX = os.getenv(
-    "ALLOW_ORIGIN_REGEX",
-    r"^https:\/\/([a-z0-9-]+\.)?docport\.pages\.dev$",
+_DEFAULT_ORIGIN_REGEX = (
+    r"^("
+    r"https://docport\.pages\.dev"
+    r"|https://docport-evo\.pages\.dev"
+    r"|http://localhost:5173"
+    r")$"
 )
+ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX", _DEFAULT_ORIGIN_REGEX)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in ALLOW_ORIGINS if o.strip()],
+    allow_origins=[],           # allow_origin_regex に一本化するため空にする
     allow_origin_regex=ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
