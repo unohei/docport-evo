@@ -944,7 +944,7 @@ export default function App() {
         return alert("未読（UPLOADED）かつ期限内のみ取り消しできます");
 
       const ok = confirm(
-        "この"置いた"共有を取り消しますか？（相手はDLできなくなります）",
+        "この「置いた」共有を取り消しますか？（相手はDLできなくなります）",
       );
       if (!ok) return;
 
