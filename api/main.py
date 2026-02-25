@@ -480,7 +480,7 @@ def _ocr_impl(
     """
     画像OCR実装。
     1. file_key バリデーション
-    2. documents テーブルで hospital_id アクセス権チェック（presign-download と同じ）
+    2. JWT + hospital_id 確認（送信前PDF＝まだ documents 未登録のため DB照合はしない）
     3. R2 から PDF 取得（Presigned GET）+ サイズチェック
     4. pypdfium2 でページ画像化（最大3ページ）
     5. Gemini or OpenAI Vision API で OCR
@@ -500,11 +500,13 @@ def _ocr_impl(
     if not body.file_key.startswith("documents/") or not body.file_key.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="無効な file_key です")
 
-    # ---- アクセス権チェック（presign-download と同じ二重防御） ----
+    # ---- JWT + hospital_id 確認 ----
+    # OCR は「送信前」専用のため documents テーブルにまだレコードが存在しない。
+    # _assert_download_access（DB照合）は行わず、有効な JWT + hospital_id を持つ
+    # ログイン済みユーザーであることのみ確認する。
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
-    hospital_id = _get_hospital_id(user_id, jwt_token)
-    _assert_download_access(body.file_key, hospital_id, jwt_token)
+    _get_hospital_id(user_id, jwt_token)  # hospital_id 未設定ユーザーを弾く
 
     _remaining()
 
