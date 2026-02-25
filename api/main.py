@@ -1,12 +1,9 @@
-# 変更点（v1.8 JWT検証をES256/JWKSに対応）:
-# 1. PyJWT(HS256) を廃止し python-jose で JWKS から公開鍵取得・ES256 検証に切り替え
-# 2. SUPABASE_JWT_SECRET は不要になった（環境変数から削除可）
-# 3. JWKS は1時間キャッシュし、kid 不一致時は強制再取得（key rotation 対応）
-# ---- 以下は前バージョンからの継続 ----
-# presign-upload/download 全4エンドポイントに Supabase JWT 検証を追加
-# presign-download は documents.file_key で hospital_id 一致チェック（RLS + FastAPI 二重防御）
-# CORS は allow_origin_regex のみで制御（allow_origins は使用しない）
+# 変更点（v1.9 OCR を画像OCR専用に刷新）:
+# 1. pypdf を撤廃し pypdfium2 でPDFをページ画像化（最大3ページ、10MB上限）
+# 2. OCR は Gemini（優先）または OpenAI Vision API を使用（どちらも未設定なら500）
+# 3. /api/ocr も presign-download 同様に documents テーブルで hospital_id アクセス権チェックを実施
 
+import base64
 import io
 import json
 import os
@@ -16,9 +13,9 @@ import urllib.parse
 import urllib.request
 import uuid
 
+import pypdfium2 as pdfium
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
-from pypdf import PdfReader
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -338,11 +335,14 @@ def presign_download_compat(
 
 
 # ----------------------------
-# OCR API（v1.5 変更なし）
+# OCR 設定
 # ----------------------------
-class OcrRequest(BaseModel):
-    file_key: str
+_MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024   # 10MB
+_MAX_OCR_PAGES = 3                        # ページ上限
+_OCR_TIMEOUT_SECS = 30                    # 処理全体のタイムアウト（秒）
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # 要配慮情報の注意喚起キーワード（断定ではなく可能性の通知のみ）
 _SENSITIVE_KEYWORDS = [
@@ -350,29 +350,165 @@ _SENSITIVE_KEYWORDS = [
     "手術", "入院", "HIV", "感染症", "精神", "がん",
 ]
 
+_OCR_PROMPT = (
+    "以下の医療文書の画像に含まれるテキストをすべて正確に抽出してください。"
+    "レイアウトをできる限り維持し、文字を漏れなく出力してください。"
+)
 
-@app.post("/ocr")
-def ocr_compat(body: OcrRequest, user: dict = Depends(verify_jwt)):
-    """compat: Vite proxy 経由のローカル開発用（/api/ocr と同じ処理）"""
-    return ocr_pdf(body, user)
 
-
-@app.post("/api/ocr")
-def ocr_pdf(body: OcrRequest, user: dict = Depends(verify_jwt)):
+# ----------------------------
+# OCR 内部ヘルパー
+# ----------------------------
+def _render_pdf_to_png_list(pdf_bytes: bytes) -> tuple[list[bytes], int]:
     """
-    POST /api/ocr
-    送信前PDFのテキスト抽出API。AIの判断で送信確定はしない。
-
-    - JWT検証済みユーザーのみ利用可
-    - R2からPresigned GETでPDFを一時取得
-    - pypdf でテキストレイヤーを抽出（画像PDFは warnings で通知）
-    - 返却: { text, meta, warnings }
+    pypdfium2 でPDFをページ画像化する。
+    - 最大 _MAX_OCR_PAGES ページまで処理
+    - scale=2.0（約144 DPI）でレンダリング（OCR精度向上）
+    - 戻り値: (PNG bytes のリスト, 総ページ数)
     """
-    # file_key バリデーション（パストラバーサル防止）
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    total_pages = len(pdf)
+    pages_to_render = min(total_pages, _MAX_OCR_PAGES)
+
+    png_list: list[bytes] = []
+    for i in range(pages_to_render):
+        page = pdf[i]
+        bitmap = page.render(scale=2.0)
+        pil_image = bitmap.to_pil()
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG")
+        png_list.append(buf.getvalue())
+
+    return png_list, total_pages
+
+
+def _call_gemini_ocr(png_list: list[bytes], timeout: float) -> str:
+    """
+    Gemini Vision API でページ画像をまとめてOCRする。
+    全ページを1リクエストで送信してテキストを取得する。
+    """
+    parts: list[dict] = []
+    for png in png_list:
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": base64.b64encode(png).decode(),
+            }
+        })
+    parts.append({"text": _OCR_PROMPT})
+
+    payload = json.dumps({"contents": [{"parts": parts}]}).encode()
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    )
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=int(timeout)) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        raise HTTPException(status_code=502, detail=f"Gemini API エラー ({e.code}): {body}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini API 接続エラー: {e}")
+
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise HTTPException(status_code=502, detail=f"Gemini レスポンス解析失敗: {e}")
+
+
+def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
+    """
+    OpenAI Vision API（gpt-4o）でページ画像をまとめてOCRする。
+    全ページを1リクエストで送信してテキストを取得する。
+    """
+    content: list[dict] = []
+    for png in png_list:
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{base64.b64encode(png).decode()}"
+            },
+        })
+    content.append({"type": "text", "text": _OCR_PROMPT})
+
+    payload = json.dumps({
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": content}],
+        "max_tokens": 4096,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=int(timeout)) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        raise HTTPException(status_code=502, detail=f"OpenAI API エラー ({e.code}): {body}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI API 接続エラー: {e}")
+
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI レスポンス解析失敗: {e}")
+
+
+# ----------------------------
+# OCR 実装（/api/ocr と /ocr の共通処理）
+# ----------------------------
+class OcrRequest(BaseModel):
+    file_key: str
+
+
+def _ocr_impl(
+    body: OcrRequest,
+    credentials: HTTPAuthorizationCredentials,
+    user: dict,
+) -> dict:
+    """
+    画像OCR実装。
+    1. file_key バリデーション
+    2. documents テーブルで hospital_id アクセス権チェック（presign-download と同じ）
+    3. R2 から PDF 取得（Presigned GET）+ サイズチェック
+    4. pypdfium2 でページ画像化（最大3ページ）
+    5. Gemini or OpenAI Vision API で OCR
+    6. 結果テキスト + メタ + 警告を返す
+    """
+    start_time = time.time()
+
+    # ---- タイムアウト残時間チェック（内部ヘルパー） ----
+    def _remaining() -> float:
+        elapsed = time.time() - start_time
+        remaining = _OCR_TIMEOUT_SECS - elapsed
+        if remaining <= 2.0:
+            raise HTTPException(status_code=504, detail="OCR処理がタイムアウトしました")
+        return remaining
+
+    # ---- file_key バリデーション（パストラバーサル防止） ----
     if not body.file_key.startswith("documents/") or not body.file_key.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="無効な file_key です")
 
-    # Presigned GET URL を生成（有効期限60秒: OCR処理分のみ）
+    # ---- アクセス権チェック（presign-download と同じ二重防御） ----
+    jwt_token = credentials.credentials
+    user_id = user.get("sub", "")
+    hospital_id = _get_hospital_id(user_id, jwt_token)
+    _assert_download_access(body.file_key, hospital_id, jwt_token)
+
+    _remaining()
+
+    # ---- R2 から PDF を取得（Presigned GET、有効期限60秒） ----
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
@@ -385,45 +521,103 @@ def ocr_pdf(body: OcrRequest, user: dict = Depends(verify_jwt)):
         ExpiresIn=60,
     )
 
-    # R2 から PDF を取得
     try:
-        with urllib.request.urlopen(presigned_url) as resp:
+        with urllib.request.urlopen(presigned_url, timeout=10) as resp:
             pdf_bytes = resp.read()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"PDF取得失敗: {e}")
 
-    # テキスト抽出（pypdf: テキストレイヤーのみ対応）
-    text = ""
-    page_count = 0
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        page_count = len(reader.pages)
-        text = "\n".join(
-            page.extract_text() or "" for page in reader.pages
-        ).strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OCR処理失敗: {e}")
+    # ---- サイズチェック ----
+    if len(pdf_bytes) > _MAX_PDF_SIZE_BYTES:
+        mb = len(pdf_bytes) / 1024 / 1024
+        raise HTTPException(
+            status_code=400,
+            detail=f"PDFサイズが上限（10MB）を超えています（{mb:.1f}MB）",
+        )
 
-    # メタ情報（MVP最小構成）
+    _remaining()
+
+    # ---- pypdfium2 でページ画像化 ----
+    try:
+        png_list, total_pages = _render_pdf_to_png_list(pdf_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF画像化失敗: {e}")
+
+    if not png_list:
+        raise HTTPException(status_code=400, detail="PDFにページが含まれていません")
+
+    # ---- APIキー確認 ----
+    if not GEMINI_API_KEY and not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="APIキーが未設定です（GEMINI_API_KEY または OPENAI_API_KEY を設定してください）",
+        )
+
+    remaining = _remaining()
+
+    # ---- OCR 実行（Gemini 優先、なければ OpenAI） ----
+    if GEMINI_API_KEY:
+        text = _call_gemini_ocr(png_list, timeout=remaining)
+    else:
+        text = _call_openai_ocr(png_list, timeout=remaining)
+
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    # ---- メタ情報 ----
     meta = {
-        "page_count": page_count,
-        "char_count": len(text),
+        "page_count": total_pages,
+        "char_count": len(text.strip()),
         "file_key": body.file_key,
+        "elapsed_ms": elapsed_ms,
     }
 
-    # 警告生成
-    warnings = []
-    if not text:
+    # ---- 警告生成 ----
+    warnings: list[str] = []
+    stripped = text.strip()
+    if not stripped:
         warnings.append(
-            "テキストを抽出できませんでした。スキャンPDF（画像PDF）の可能性があります。"
+            "画像OCRでもテキストを抽出できませんでした。"
             "内容をご確認の上、送信可否を判断してください。"
         )
     else:
-        found = [kw for kw in _SENSITIVE_KEYWORDS if kw in text]
+        found = [kw for kw in _SENSITIVE_KEYWORDS if kw in stripped]
         if found:
             warnings.append(
                 f"要配慮情報の可能性があります：{', '.join(found)} 等のキーワードが含まれています。"
                 "送信前に内容をご確認ください。"
             )
 
-    return {"text": text, "meta": meta, "warnings": warnings}
+    return {"text": stripped, "meta": meta, "warnings": warnings}
+
+
+# ----------------------------
+# OCR エンドポイント
+# ----------------------------
+@app.post("/api/ocr")
+def ocr_pdf(
+    body: OcrRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """
+    POST /api/ocr
+    送信前PDFの画像OCR API。AIの判断で送信確定はしない。
+
+    - JWT検証済みユーザーのみ利用可
+    - documents テーブルで hospital_id アクセス権チェック（RLS + FastAPI 二重防御）
+    - R2 から Presigned GET でPDF取得（10MB上限）
+    - pypdfium2 でページ画像化（最大3ページ）
+    - Gemini / OpenAI Vision API で画像OCR
+    - 返却: { text, meta, warnings }
+    """
+    return _ocr_impl(body, credentials, user)
+
+
+@app.post("/ocr")
+def ocr_compat(
+    body: OcrRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """compat: Vite proxy 経由のローカル開発用（/api/ocr と同じ処理）"""
+    return _ocr_impl(body, credentials, user)
