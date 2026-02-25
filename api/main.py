@@ -2,6 +2,11 @@
 # 1. pypdf を撤廃し pypdfium2 でPDFをページ画像化（最大3ページ、10MB上限）
 # 2. OCR は Gemini（優先）または OpenAI Vision API を使用（どちらも未設定なら500）
 # 3. /api/ocr も presign-download 同様に documents テーブルで hospital_id アクセス権チェックを実施
+#
+# 変更点（v2.0 OCRテキストの構造化JSON生成を追加）:
+# 1. _structure_referral_text: OCR済みテキストを gpt-4o で医療紹介状の構造化JSONへ変換
+# 2. /api/ocr のレスポンスに structured フィールドを追加（失敗時は null、OCR全体は落とさない）
+# 3. 既存のVision OCR処理・認証ロジックは一切変更なし
 
 import base64
 import io
@@ -355,6 +360,32 @@ _OCR_PROMPT = (
     "レイアウトをできる限り維持し、文字を漏れなく出力してください。"
 )
 
+# ----------------------------
+# 構造化 設定
+# ----------------------------
+_STRUCTURE_TIMEOUT_SECS = 20   # Vision OCR とは別タイムアウト（失敗しても OCR 全体は落とさない）
+
+_STRUCTURE_PROMPT = """\
+以下は医療紹介状から抽出したテキストです。
+次のJSONフォーマットで情報を抽出してください。
+- 不明・記載なしの項目は null にしてください
+- テキストに明示されていない情報は推測しないでください
+- 余計な説明文や前置きは不要です。JSONのみ出力してください
+
+{
+  "patient_name": null,
+  "patient_id": null,
+  "birth_date": null,
+  "referrer_hospital": null,
+  "referrer_doctor": null,
+  "referral_date": null,
+  "chief_complaint": null,
+  "suspected_diagnosis": null,
+  "allergies": null,
+  "medications": null
+}
+"""
+
 
 # ----------------------------
 # OCR 内部ヘルパー
@@ -466,6 +497,55 @@ def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
 
 
 # ----------------------------
+# 構造化 内部ヘルパー
+# ----------------------------
+def _structure_referral_text(
+    text: str,
+    timeout: float = _STRUCTURE_TIMEOUT_SECS,
+) -> dict | None:
+    """
+    OCRで抽出したテキストを OpenAI gpt-4o で医療紹介状の構造化JSONに変換する。
+    - OPENAI_API_KEY 未設定、text が空、API エラーの場合はすべて None を返す
+    - 失敗してもOCRレスポンス全体は落とさない（graceful degradation）
+    """
+    if not OPENAI_API_KEY or not text.strip():
+        return None
+
+    payload = json.dumps({
+        "model": "gpt-4o",
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "user",
+                "content": f"{_STRUCTURE_PROMPT}\nテキスト:\n{text}",
+            }
+        ],
+        "max_tokens": 1024,
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=int(timeout)) as resp:
+            data = json.loads(resp.read())
+        raw = data["choices"][0]["message"]["content"].strip()
+        # Markdownコードブロック（```json...```）も含め、最初の { ～ 最後の } を抽出してパース
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            return None
+        return json.loads(raw[start:end])
+    except Exception:
+        return None
+
+
+# ----------------------------
 # OCR 実装（/api/ocr と /ocr の共通処理）
 # ----------------------------
 class OcrRequest(BaseModel):
@@ -484,7 +564,8 @@ def _ocr_impl(
     3. R2 から PDF 取得（Presigned GET）+ サイズチェック
     4. pypdfium2 でページ画像化（最大3ページ）
     5. Gemini or OpenAI Vision API で OCR
-    6. 結果テキスト + メタ + 警告を返す
+    6. OpenAI gpt-4o で構造化JSON生成（失敗時は structured=null）
+    7. 結果テキスト + メタ + 警告 + 構造化JSON を返す
     """
     start_time = time.time()
 
@@ -589,7 +670,10 @@ def _ocr_impl(
                 "送信前に内容をご確認ください。"
             )
 
-    return {"text": stripped, "meta": meta, "warnings": warnings}
+    # ---- 構造化JSON生成（gpt-4o でフィールド抽出、失敗時は null） ----
+    structured = _structure_referral_text(stripped)
+
+    return {"text": stripped, "meta": meta, "warnings": warnings, "structured": structured}
 
 
 # ----------------------------
@@ -610,7 +694,8 @@ def ocr_pdf(
     - R2 から Presigned GET でPDF取得（10MB上限）
     - pypdfium2 でページ画像化（最大3ページ）
     - Gemini / OpenAI Vision API で画像OCR
-    - 返却: { text, meta, warnings }
+    - OpenAI gpt-4o で構造化JSON生成（OPENAI_API_KEY 未設定時は structured=null）
+    - 返却: { text, meta, warnings, structured }
     """
     return _ocr_impl(body, credentials, user)
 
