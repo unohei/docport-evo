@@ -355,6 +355,21 @@ _SENSITIVE_KEYWORDS = [
     "手術", "入院", "HIV", "感染症", "精神", "がん",
 ]
 
+# アラートキーワード定義（severity: high / medium / low）
+# evidence に前後30文字スニペット付きで返す（断定禁止トーン）
+_ALERT_KEYWORDS = [
+    {"id": "hiv",        "label": "HIV/AIDS",   "severity": "high",   "keywords": ["HIV", "AIDS"]},
+    {"id": "mental",     "label": "精神疾患",     "severity": "high",   "keywords": ["精神", "うつ病", "統合失調"]},
+    {"id": "cancer",     "label": "悪性腫瘍",     "severity": "high",   "keywords": ["がん", "癌", "腫瘍", "悪性"]},
+    {"id": "diagnosis",  "label": "病名・診断",   "severity": "medium", "keywords": ["病名", "診断"]},
+    {"id": "test",       "label": "検査結果",     "severity": "medium", "keywords": ["検査結果", "検査値", "検査所見"]},
+    {"id": "meds",       "label": "投薬・処方",   "severity": "medium", "keywords": ["投薬", "処方", "処方薬"]},
+    {"id": "infect",     "label": "感染症",       "severity": "medium", "keywords": ["感染症", "感染"]},
+    {"id": "disability", "label": "障害",         "severity": "medium", "keywords": ["障害"]},
+    {"id": "surgery",    "label": "手術",         "severity": "low",    "keywords": ["手術", "術後"]},
+    {"id": "admit",      "label": "入院",         "severity": "low",    "keywords": ["入院"]},
+]
+
 _OCR_PROMPT = (
     "以下の医療文書の画像に含まれるテキストをすべて正確に抽出してください。"
     "レイアウトをできる限り維持し、文字を漏れなく出力してください。"
@@ -378,6 +393,7 @@ _STRUCTURE_PROMPT = """\
   "birth_date": null,
   "referrer_hospital": null,
   "referrer_doctor": null,
+  "referral_to_hospital": null,
   "referral_date": null,
   "chief_complaint": null,
   "suspected_diagnosis": null,
@@ -516,6 +532,48 @@ def _strip_code_fences(text: str) -> str:
         return t
     inner = t[first_newline + 1 : len(t) - 3]
     return inner.strip()
+
+
+# ----------------------------
+# アラート生成ヘルパー
+# ----------------------------
+def _generate_alerts(text: str) -> list[dict]:
+    """
+    テキストから要配慮キーワードを検索し、注意喚起リストを返す。
+    - 断定禁止：「可能性があります」「確認してください」トーンのみ
+    - evidence: キーワード前後30文字のスニペット（最大3件/アラート）
+    - フロントエンドでのハイライト表示を前提に keyword フィールドも返す
+    """
+    alerts: list[dict] = []
+    for entry in _ALERT_KEYWORDS:
+        evidence: list[dict] = []
+        seen: set[int] = set()
+        for kw in entry["keywords"]:
+            pos = 0
+            while len(evidence) < 3:
+                idx = text.find(kw, pos)
+                if idx < 0:
+                    break
+                if idx not in seen:
+                    seen.add(idx)
+                    s = max(0, idx - 30)
+                    e = min(len(text), idx + len(kw) + 30)
+                    snippet = text[s:e]
+                    if s > 0:
+                        snippet = "…" + snippet
+                    if e < len(text):
+                        snippet = snippet + "…"
+                    evidence.append({"page": 1, "snippet": snippet, "keyword": kw})
+                pos = idx + 1
+        if evidence:
+            alerts.append({
+                "id":       entry["id"],
+                "label":    entry["label"],
+                "severity": entry["severity"],
+                "keyword":  entry["keywords"][0],
+                "evidence": evidence,
+            })
+    return alerts
 
 
 # ----------------------------
@@ -701,7 +759,10 @@ def _ocr_impl(
         None if body.mode == "text_only" else _structure_referral_text(stripped)
     )
 
-    return {"text": stripped, "meta": meta, "warnings": warnings, "structured": structured}
+    # ---- アラート生成（キーワードマッチ方式、断定禁止） ----
+    alerts = _generate_alerts(stripped) if stripped else []
+
+    return {"text": stripped, "meta": meta, "warnings": warnings, "structured": structured, "alerts": alerts}
 
 
 # ----------------------------

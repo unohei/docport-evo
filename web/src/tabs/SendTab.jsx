@@ -1,7 +1,7 @@
-// v3.0 変更点（チェックモードUI追加）:
-// 1. ファイル選択前に「チェックモード ON/OFF」「チェック強度 高速/詳細」トグルを表示
-// 2. uploadStatus（uploading/ocr_running/ready/error）に応じた5段階のOCR状態表示
-// 3. 構造化情報（structured）をラベル付きテーブルで表示（null値はスキップ）
+// v4.0 変更点（alerts + 黄色マーカー + 宛先病院候補）:
+// 1. OCRテキストにアラートキーワードを severity 別カラーでハイライト表示
+// 2. 要配慮注意喚起 alerts パネル（主役、断定禁止トーン）をテキスト前に表示
+// 3. structured.referral_to_hospital から宛先病院AI候補ボタンを表示
 
 import { useMemo, useState } from "react";
 import {
@@ -15,17 +15,106 @@ import ScanCapture from "../components/ScanCapture";
 
 // 構造化JSONの表示ラベル（順序保持のため配列）
 const STRUCTURED_LABELS = [
-  ["patient_name",       "患者名"],
-  ["patient_id",         "患者ID"],
-  ["birth_date",         "生年月日"],
-  ["referrer_hospital",  "紹介元病院"],
-  ["referrer_doctor",    "紹介元医師"],
-  ["referral_date",      "紹介日"],
-  ["chief_complaint",    "主訴"],
-  ["suspected_diagnosis","疑い病名"],
-  ["allergies",          "アレルギー"],
-  ["medications",        "処方薬"],
+  ["patient_name",         "患者名"],
+  ["patient_id",           "患者ID"],
+  ["birth_date",           "生年月日"],
+  ["referrer_hospital",    "紹介元病院"],
+  ["referrer_doctor",      "紹介元医師"],
+  ["referral_to_hospital", "紹介先病院"],  // v4.0追加
+  ["referral_date",        "紹介日"],
+  ["chief_complaint",      "主訴"],
+  ["suspected_diagnosis",  "疑い病名"],
+  ["allergies",            "アレルギー"],
+  ["medications",          "処方薬"],
 ];
+
+// アラートキーワードのハイライト背景色（severity別）
+function getHighlightBg(severity) {
+  if (severity === "high")   return "rgba(239,68,68,0.18)";   // 薄赤/ピンク
+  if (severity === "medium") return "rgba(234,179,8,0.28)";   // 黄
+  return "rgba(234,179,8,0.14)";                               // 薄黄
+}
+
+// アラートパネルの配色（severity別）
+function alertStyle(severity) {
+  if (severity === "high")
+    return { bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.28)", labelColor: "#991b1b", badge: "rgba(239,68,68,0.15)", badgeLabel: "要注意" };
+  if (severity === "medium")
+    return { bg: "rgba(234,179,8,0.08)", border: "rgba(234,179,8,0.35)", labelColor: "#854d0e", badge: "rgba(234,179,8,0.20)", badgeLabel: "注意" };
+  return { bg: "rgba(234,179,8,0.05)", border: "rgba(234,179,8,0.20)", labelColor: "#a16207", badge: "rgba(234,179,8,0.12)", badgeLabel: "参考" };
+}
+
+// OCRテキストをアラートキーワードでハイライトセグメントに分割
+// 戻り値: [{text, highlight, severity?}]
+function buildHighlightedSegments(text, alerts) {
+  if (!text || !alerts?.length) return [{ text, highlight: false }];
+
+  const ranges = [];
+  for (const alert of alerts) {
+    for (const ev of alert.evidence || []) {
+      const kw = ev.keyword || alert.keyword;
+      if (!kw) continue;
+      let pos = 0;
+      while (pos < text.length) {
+        const idx = text.indexOf(kw, pos);
+        if (idx < 0) break;
+        ranges.push({ start: idx, end: idx + kw.length, severity: alert.severity });
+        pos = idx + 1;
+      }
+    }
+  }
+
+  if (!ranges.length) return [{ text, highlight: false }];
+
+  // ソート＆重複マージ（高severity優先）
+  ranges.sort((a, b) => a.start - b.start);
+  const priority = { high: 3, medium: 2, low: 1 };
+  const merged = [];
+  for (const r of ranges) {
+    if (merged.length && r.start < merged[merged.length - 1].end) {
+      const last = merged[merged.length - 1];
+      last.end = Math.max(last.end, r.end);
+      if ((priority[r.severity] || 0) > (priority[last.severity] || 0)) {
+        last.severity = r.severity;
+      }
+    } else {
+      merged.push({ ...r });
+    }
+  }
+
+  // セグメント構築
+  const segments = [];
+  let cursor = 0;
+  for (const { start, end, severity } of merged) {
+    if (cursor < start) segments.push({ text: text.slice(cursor, start), highlight: false });
+    segments.push({ text: text.slice(start, end), highlight: true, severity });
+    cursor = end;
+  }
+  if (cursor < text.length) segments.push({ text: text.slice(cursor), highlight: false });
+
+  return segments;
+}
+
+// 病院名を正規化（スペース除去・サフィックス除去・小文字化）
+function normalizeForMatch(name) {
+  if (!name) return "";
+  return name
+    .replace(/[\s\u3000]+/g, "")
+    .replace(/(病院|医院|クリニック|診療所|センター|医療センター|総合病院)$/, "")
+    .toLowerCase();
+}
+
+// 宛先病院のAI候補を検索（部分一致、自院除外）
+function findHospitalCandidates(targetName, hospitals, excludeId) {
+  if (!targetName || !hospitals?.length) return [];
+  const normTarget = normalizeForMatch(targetName);
+  if (!normTarget || normTarget.length < 2) return [];
+  return hospitals.filter((h) => {
+    if (h.id === excludeId) return false;
+    const normH = normalizeForMatch(h.name);
+    return normH.includes(normTarget) || normTarget.includes(normH);
+  });
+}
 
 // インラインスピナー（index.css の @keyframes spin を使用）
 function Spinner() {
@@ -77,6 +166,12 @@ export default function SendTab({
       .filter((h) => h.id !== myHospitalId)
       .map((h) => ({ id: h.id, name: h.name }));
   }, [hospitals, myHospitalId]);
+
+  // 宛先病院AI候補（structured.referral_to_hospital から導出）
+  const hospitalCandidates = useMemo(() => {
+    const targetName = ocrResult?.structured?.referral_to_hospital;
+    return findHospitalCandidates(targetName, hospitals, myHospitalId);
+  }, [ocrResult, hospitals, myHospitalId]);
 
   // ---- SegButton（入力モード切替用）----
   const SegButton = ({ active, hovered, icon, children, ...props }) => {
@@ -262,6 +357,41 @@ export default function SendTab({
               ))}
             </select>
 
+            {/* 宛先病院AI候補（structured.referral_to_hospital がある場合） */}
+            {checkMode && ocrResult?.structured?.referral_to_hospital && hospitalCandidates.length > 0 && (
+              <div style={{
+                padding: "8px 12px", borderRadius: 10,
+                background: "rgba(14,165,233,0.06)",
+                border: "1px solid rgba(14,165,233,0.18)",
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", marginBottom: 6 }}>
+                  AI候補（紹介状から読み取った宛先: {ocrResult.structured.referral_to_hospital}）
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {hospitalCandidates.map((h) => (
+                    <button
+                      key={h.id}
+                      onClick={() => setToHospitalId(h.id)}
+                      style={{
+                        padding: "5px 12px", borderRadius: 8,
+                        border: toHospitalId === h.id
+                          ? "1px solid rgba(14,165,233,0.55)"
+                          : "1px solid rgba(14,165,233,0.30)",
+                        background: toHospitalId === h.id
+                          ? "rgba(14,165,233,0.18)"
+                          : "rgba(255,255,255,0.85)",
+                        color: "#0369a1", fontWeight: 800, fontSize: 12,
+                        cursor: "pointer",
+                        transition: "background 120ms, border-color 120ms",
+                      }}
+                    >
+                      {h.name} {toHospitalId === h.id ? "✓" : "適用"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ fontWeight: 800, marginTop: 6 }}>ひとこと</div>
             <TextInput
               value={comment}
@@ -335,7 +465,7 @@ export default function SendTab({
               {/* チェックON で ready + OCR結果あり */}
               {uploadStatus === "ready" && checkMode && ocrResult && (
                 <div>
-                  {/* warnings */}
+                  {/* 1. warnings */}
                   {ocrResult.warnings?.length > 0 && (
                     <div style={{ marginBottom: 10 }}>
                       {ocrResult.warnings.map((w, i) => (
@@ -355,12 +485,73 @@ export default function SendTab({
                     </div>
                   )}
 
-                  {/* meta */}
-                  <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 6, color: THEME.text }}>
+                  {/* 2. meta */}
+                  <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 8, color: THEME.text }}>
                     ページ数: {ocrResult.meta?.page_count} ／ 文字数: {ocrResult.meta?.char_count}
                   </div>
 
-                  {/* 抽出テキスト */}
+                  {/* 3. alerts（要配慮注意喚起 - 主役） */}
+                  {ocrResult.alerts?.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 6, color: THEME.text }}>
+                        要配慮情報の確認
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {ocrResult.alerts.map((alert) => {
+                          const s = alertStyle(alert.severity);
+                          return (
+                            <div
+                              key={alert.id}
+                              style={{
+                                padding: "8px 12px", borderRadius: 8,
+                                background: s.bg, border: `1px solid ${s.border}`,
+                              }}
+                            >
+                              <div style={{
+                                display: "flex", alignItems: "center", gap: 6, marginBottom: 4,
+                              }}>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 800, padding: "2px 6px",
+                                  borderRadius: 4, background: s.badge, color: s.labelColor,
+                                  letterSpacing: 0.4,
+                                }}>
+                                  {s.badgeLabel}
+                                </span>
+                                <span style={{ fontSize: 13, fontWeight: 800, color: s.labelColor }}>
+                                  {alert.label}
+                                </span>
+                                <span style={{ fontSize: 11, color: s.labelColor, opacity: 0.7 }}>
+                                  の可能性があります
+                                </span>
+                              </div>
+                              {alert.evidence?.slice(0, 2).map((ev, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    fontSize: 11, color: THEME.text, opacity: 0.75,
+                                    fontFamily: "monospace", lineHeight: 1.5,
+                                    background: "rgba(255,255,255,0.6)",
+                                    borderRadius: 4, padding: "2px 6px",
+                                    marginTop: i === 0 ? 0 : 2,
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {ev.snippet}
+                                </div>
+                              ))}
+                              <div style={{
+                                fontSize: 10, color: s.labelColor, opacity: 0.6, marginTop: 4,
+                              }}>
+                                ※ 送信前に内容をご確認ください（AIによる検出のため断定できません）
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. 抽出テキスト（アラートキーワードをハイライト表示） */}
                   <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
                     抽出テキスト
                   </div>
@@ -368,14 +559,37 @@ export default function SendTab({
                     background: "rgba(248,250,252,0.9)",
                     border: "1px solid rgba(15,23,42,0.10)",
                     borderRadius: 8, padding: "10px 12px",
-                    fontSize: 13, whiteSpace: "pre-wrap",
+                    fontSize: 13,
                     overflowY: "auto", maxHeight: 200,
                     lineHeight: 1.65, fontFamily: "monospace", color: THEME.text,
+                    whiteSpace: "pre-wrap", wordBreak: "break-all",
                   }}>
-                    {ocrResult.text || "（テキストを抽出できませんでした）"}
+                    {(() => {
+                      const text = ocrResult.text || "";
+                      if (!text) return "（テキストを抽出できませんでした）";
+                      const segments = buildHighlightedSegments(text, ocrResult.alerts || []);
+                      const hasHighlight = segments.some((s) => s.highlight);
+                      if (!hasHighlight) return text;
+                      return segments.map((seg, i) =>
+                        seg.highlight ? (
+                          <mark
+                            key={i}
+                            style={{
+                              background: getHighlightBg(seg.severity),
+                              borderRadius: 3,
+                              padding: "0 1px",
+                            }}
+                          >
+                            {seg.text}
+                          </mark>
+                        ) : (
+                          <span key={i}>{seg.text}</span>
+                        )
+                      );
+                    })()}
                   </div>
 
-                  {/* 構造化情報（structured が null でなく、非null項目があるとき表示）*/}
+                  {/* 5. 構造化情報（null 項目はスキップ）*/}
                   {(() => {
                     if (!ocrResult.structured) return null;
                     const entries = STRUCTURED_LABELS.filter(
@@ -406,7 +620,7 @@ export default function SendTab({
                               }}
                             >
                               <span style={{
-                                width: 88, flexShrink: 0,
+                                width: 96, flexShrink: 0,
                                 fontWeight: 700, opacity: 0.55, color: THEME.text,
                               }}>
                                 {label}
