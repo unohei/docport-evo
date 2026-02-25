@@ -1,3 +1,9 @@
+// v2.0 変更点（ドロップ直後OCR自動実行・インライン表示）:
+// 1. onFileDrop: drop直後にupload+OCRをApp側で実行（FileDrop/ScanCapture共通）
+// 2. OCR結果（loading/result/error）をフォーム内にインライン表示
+// 3. 「置く」ボタン: ocrLoading中はdisabled / OCR完了後に有効化
+// 4. 「戻る」ボタン: onCancelFile() でApp側のOCR stateをまとめてリセット
+
 import { useMemo, useState } from "react";
 import {
   THEME,
@@ -19,9 +25,13 @@ export default function SendTab({
   comment,
   setComment,
   pdfFile,
-  setPdfFile,
+  onFileDrop,
+  onCancelFile,
   sending,
-  createDocument,
+  ocrLoading,
+  ocrResult,
+  ocrError,
+  finalizeDocument,
 }) {
   const [inputMode, setInputMode] = useState("drop"); // "drop" | "scan"
   const [hoverMode, setHoverMode] = useState(null); // "drop" | "scan" | null
@@ -86,7 +96,7 @@ export default function SendTab({
         <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
         <span>{children}</span>
 
-        {/* 選択中の“しるし” */}
+        {/* 選択中の"しるし" */}
         <span
           aria-hidden="true"
           style={{
@@ -108,10 +118,9 @@ export default function SendTab({
     <div style={{ display: "grid", gap: 12 }}>
       <div>
         <div style={headerTitle}>置く</div>
-        {/* <div style={headerDesc}>ドラッグ＆ドロップ / スキャンでPDFを置きます</div> */}
       </div>
 
-      {/* Mode toggle */}
+      {/* Mode toggle（PDF未選択時のみ表示） */}
       {!pdfFile ? (
         <Card>
           <div
@@ -150,19 +159,14 @@ export default function SendTab({
           <div style={{ marginTop: 12 }}>
             {inputMode === "drop" ? (
               <FileDrop
-                onFile={(file) => setPdfFile(file)} // ★ここが修正ポイント
+                onFile={(file) => onFileDrop(file)}
                 accept="application/pdf"
-                // title/hintは FileDrop 側のデフォルトでOK（必要なら上書き可）
-                // title="ここに置く"
-                // hint="ドラッグ & タップで選択"
               />
             ) : (
               <ScanCapture
                 filenameBase="紹介状"
                 preferRearCamera={true}
-                onDone={(file) => {
-                  setPdfFile(file);
-                }}
+                onDone={(file) => onFileDrop(file)}
                 onCancel={() => {}}
               />
             )}
@@ -170,7 +174,7 @@ export default function SendTab({
         </Card>
       ) : null}
 
-      {/* Form (shown when pdf selected) */}
+      {/* フォーム（PDF選択後に表示） */}
       {pdfFile ? (
         <Card>
           <div style={{ display: "grid", gap: 10 }}>
@@ -179,6 +183,7 @@ export default function SendTab({
             <select
               value={toHospitalId}
               onChange={(e) => setToHospitalId(e.target.value)}
+              disabled={sending}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -202,8 +207,152 @@ export default function SendTab({
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="例）紹介状お送りします。ご確認お願いします。"
+              disabled={sending}
             />
 
+            {/* ---- OCR 解析結果エリア ---- */}
+            <div style={{ marginTop: 4 }}>
+              {/* ローディング中 */}
+              {ocrLoading && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    background: "rgba(14,165,233,0.07)",
+                    border: "1px solid rgba(14,165,233,0.20)",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 14,
+                      height: 14,
+                      border: "2px solid rgba(14,165,233,0.25)",
+                      borderTopColor: "rgba(14,165,233,0.9)",
+                      borderRadius: "50%",
+                      animation: "spin 0.7s linear infinite",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{ fontSize: 13, fontWeight: 800, color: "#0369a1" }}
+                  >
+                    OCR解析中...
+                  </span>
+                </div>
+              )}
+
+              {/* OCRエラー */}
+              {!ocrLoading && ocrError && (
+                <div
+                  style={{
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      color: "#991b1b",
+                      marginBottom: 4,
+                      fontSize: 13,
+                    }}
+                  >
+                    OCR取得失敗
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{ocrError}</div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 12,
+                      color: THEME.text,
+                      opacity: 0.7,
+                    }}
+                  >
+                    内容確認の上そのまま置くこともできます。
+                  </div>
+                </div>
+              )}
+
+              {/* OCR成功 */}
+              {!ocrLoading && ocrResult && (
+                <div>
+                  {/* warnings */}
+                  {ocrResult.warnings?.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      {ocrResult.warnings.map((w, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            background: "rgba(239,68,68,0.08)",
+                            border: "1px solid rgba(239,68,68,0.25)",
+                            borderRadius: 8,
+                            padding: "8px 12px",
+                            color: "#991b1b",
+                            fontSize: 13,
+                            fontWeight: 700,
+                            marginBottom: 6,
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          ⚠️ {w}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* meta */}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.55,
+                      marginBottom: 6,
+                      color: THEME.text,
+                    }}
+                  >
+                    ページ数: {ocrResult.meta?.page_count} ／ 文字数:{" "}
+                    {ocrResult.meta?.char_count}
+                  </div>
+
+                  {/* 抽出テキスト */}
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 13,
+                      marginBottom: 4,
+                      color: THEME.text,
+                    }}
+                  >
+                    抽出テキスト
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(248,250,252,0.9)",
+                      border: "1px solid rgba(15,23,42,0.10)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      fontSize: 13,
+                      whiteSpace: "pre-wrap",
+                      overflowY: "auto",
+                      maxHeight: 200,
+                      lineHeight: 1.65,
+                      fontFamily: "monospace",
+                      color: THEME.text,
+                    }}
+                  >
+                    {ocrResult.text || "（テキストを抽出できませんでした）"}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* ---- /OCR 解析結果エリア ---- */}
+
+            {/* ボタン行 */}
             <div
               style={{
                 marginTop: 6,
@@ -220,26 +369,31 @@ export default function SendTab({
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button
-                  onClick={() => {
-                    setPdfFile(null);
-                    setToHospitalId("");
-                    setComment("");
-                  }}
-                  disabled={sending}
+                  onClick={onCancelFile}
+                  disabled={ocrLoading || sending}
                   style={{
                     padding: "10px 14px",
                     borderRadius: 12,
                     border: "1px solid rgba(15, 23, 42, 0.12)",
                     background: "transparent",
                     fontWeight: 800,
-                    cursor: sending ? "not-allowed" : "pointer",
+                    cursor:
+                      ocrLoading || sending ? "not-allowed" : "pointer",
+                    opacity: ocrLoading || sending ? 0.5 : 1,
                   }}
                 >
                   戻る
                 </button>
 
-                <PrimaryButton onClick={createDocument} disabled={sending}>
-                  {sending ? "置いています..." : "置く"}
+                <PrimaryButton
+                  onClick={finalizeDocument}
+                  disabled={ocrLoading || sending}
+                >
+                  {sending
+                    ? "置いています..."
+                    : ocrLoading
+                      ? "解析中..."
+                      : "置く"}
                 </PrimaryButton>
               </div>
             </div>

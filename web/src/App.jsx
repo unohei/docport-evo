@@ -1,3 +1,9 @@
+// v2.0 変更点（ドロップ直後OCR自動実行）:
+// 1. OcrConfirmModal廃止 → OCR結果をSendTab内インライン表示へ
+// 2. ocrModal state → ocrLoading / ocrResult / ocrError / pendingFileKey に分割
+// 3. handleFileDrop: drop直後にupload+OCRを自動実行（「置く」ボタン押下時は実行しない）
+// 4. finalizeDocument: pendingFileKeyを使ってdocuments INSERTのみ実行
+
 console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
 import { useEffect, useMemo, useState } from "react";
@@ -212,242 +218,6 @@ function PreviewModal({
   );
 }
 
-// ---- OCR 確認モーダル（v1.8 新規追加）----
-// ocrModal: null | { loading, result, error, pendingInsert }
-function OcrConfirmModal({ modal, onConfirm, onCancel, sending }) {
-  if (!modal) return null;
-
-  const { loading, result, error } = modal;
-
-  return (
-    <div
-      onMouseDown={(e) => {
-        // ローディング中はオーバーレイクリックで閉じない
-        if (!loading && e.target === e.currentTarget) onCancel();
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.50)",
-        zIndex: 90,
-        display: "grid",
-        placeItems: "center",
-        padding: 12,
-      }}
-    >
-      <div
-        style={{
-          width: "min(720px, 100%)",
-          maxHeight: "88vh",
-          background: "rgba(255,255,255,0.97)",
-          border: "1px solid rgba(15,23,42,0.12)",
-          borderRadius: 16,
-          boxShadow: "0 20px 50px rgba(0,0,0,0.20)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-            padding: "12px 16px",
-            borderBottom: "1px solid rgba(15,23,42,0.10)",
-            background: "rgba(248,250,252,0.95)",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 15, color: THEME.text }}>
-            OCR確認（送信前チェック）
-          </div>
-          {!loading && (
-            <button
-              onClick={onCancel}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "transparent",
-                fontWeight: 900,
-                cursor: "pointer",
-                color: THEME.text,
-              }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-          {loading ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: 40,
-                opacity: 0.65,
-                fontWeight: 800,
-                fontSize: 15,
-              }}
-            >
-              OCR解析中...
-            </div>
-          ) : error ? (
-            /* OCR失敗 */
-            <div>
-              <div
-                style={{
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.25)",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                  marginBottom: 12,
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 900,
-                    color: "#991b1b",
-                    marginBottom: 4,
-                  }}
-                >
-                  OCR取得失敗
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>{error}</div>
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: THEME.text }}>
-                確認の上そのまま置きますか？
-              </div>
-            </div>
-          ) : result ? (
-            /* OCR成功 */
-            <div>
-              {/* warnings */}
-              {result.warnings.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  {result.warnings.map((w, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: "rgba(239,68,68,0.08)",
-                        border: "1px solid rgba(239,68,68,0.25)",
-                        borderRadius: 8,
-                        padding: "8px 12px",
-                        color: "#991b1b",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        marginBottom: 6,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      ⚠️ {w}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* meta */}
-              <div
-                style={{
-                  fontSize: 12,
-                  opacity: 0.55,
-                  marginBottom: 8,
-                  color: THEME.text,
-                }}
-              >
-                ページ数: {result.meta.page_count} ／ 文字数:{" "}
-                {result.meta.char_count}
-              </div>
-
-              {/* extracted text */}
-              <div
-                style={{
-                  fontWeight: 800,
-                  fontSize: 13,
-                  marginBottom: 6,
-                  color: THEME.text,
-                }}
-              >
-                抽出テキスト
-              </div>
-              <div
-                style={{
-                  background: "rgba(248,250,252,0.9)",
-                  border: "1px solid rgba(15,23,42,0.10)",
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  fontSize: 13,
-                  whiteSpace: "pre-wrap",
-                  overflowY: "auto",
-                  maxHeight: 280,
-                  lineHeight: 1.65,
-                  fontFamily: "monospace",
-                  color: THEME.text,
-                }}
-              >
-                {result.text || "（テキストを抽出できませんでした）"}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Footer */}
-        {!loading && (
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              justifyContent: "flex-end",
-              padding: "12px 16px",
-              borderTop: "1px solid rgba(15,23,42,0.10)",
-              background: "rgba(248,250,252,0.95)",
-              flexShrink: 0,
-            }}
-          >
-            <button
-              onClick={onCancel}
-              disabled={sending}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "transparent",
-                fontWeight: 800,
-                cursor: sending ? "not-allowed" : "pointer",
-                color: THEME.text,
-              }}
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={sending}
-              style={{
-                padding: "10px 22px",
-                borderRadius: 12,
-                border: "none",
-                background: sending
-                  ? "rgba(14,165,233,0.45)"
-                  : "rgba(14,165,233,0.9)",
-                color: "#fff",
-                fontWeight: 900,
-                cursor: sending ? "not-allowed" : "pointer",
-                fontSize: 14,
-              }}
-            >
-              {sending ? "置いています..." : error ? "そのまま置く" : "確認して置く"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [tab, setTab] = useState("send"); // inbox | send | sent
@@ -483,9 +253,11 @@ export default function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
 
-  // OCR Modal（v1.8 追加）
-  // null | { loading: bool, result: null|{text,meta,warnings}, error: string, pendingInsert: object }
-  const [ocrModal, setOcrModal] = useState(null);
+  // OCR state（v2.0: ocrModal廃止→インライン表示用に分割）
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrResult, setOcrResult] = useState(null);   // { text, meta, warnings }
+  const [ocrError, setOcrError] = useState(null);
+  const [pendingFileKey, setPendingFileKey] = useState(null); // R2アップ済みfile_key
 
   // breakpoints
   const isMobile = useMediaQuery("(max-width: 820px)");
@@ -708,8 +480,11 @@ export default function App() {
     setPreviewError("");
     setPreviewLoading(false);
 
-    // ocr modal reset
-    setOcrModal(null);
+    // ocr reset
+    setPendingFileKey(null);
+    setOcrLoading(false);
+    setOcrResult(null);
+    setOcrError(null);
   };
 
   // ---- R2 presign helpers ----
@@ -747,11 +522,25 @@ export default function App() {
     return res.json(); // { download_url }
   };
 
-  // ---- OCR helpers（v1.8 追加）----
+  // ---- OCR helpers（v2.0: ドロップ直後に自動実行）----
 
-  // Step1: アップロード完了後に OCR API を非同期で呼ぶ
-  const _runOcr = async (fileKey) => {
+  // ドロップ直後に呼ばれる: presign-upload → R2 PUT → /api/ocr を連続実行
+  const handleFileDrop = async (file) => {
+    if (!file) return;
+
+    setPdfFile(file);
+    setOcrLoading(true);
+    setOcrResult(null);
+    setOcrError(null);
+    setPendingFileKey(null);
+
     try {
+      // R2 アップロード
+      const { upload_url, file_key } = await getPresignedUpload();
+      await putPdf(upload_url, file);
+      setPendingFileKey(file_key);
+
+      // OCR 実行
       const token = session?.access_token;
       const res = await fetch(`${API_BASE}/ocr`, {
         method: "POST",
@@ -759,33 +548,64 @@ export default function App() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ file_key: fileKey }),
+        body: JSON.stringify({ file_key }),
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json(); // { text, meta, warnings }
-      setOcrModal((prev) =>
-        prev ? { ...prev, loading: false, result } : null,
-      );
+      setOcrResult(result);
     } catch (e) {
-      setOcrModal((prev) =>
-        prev
-          ? { ...prev, loading: false, error: e?.message ?? String(e) }
-          : null,
-      );
+      setOcrError(e?.message ?? String(e));
+    } finally {
+      setOcrLoading(false);
     }
   };
 
-  // Step2: OCRモーダルで「確認して置く」または「そのまま置く」押下後に documents INSERT
-  const finalizeDocument = async () => {
-    const pendingInsert = ocrModal?.pendingInsert;
-    if (!pendingInsert) return;
+  // ファイル選択を取り消す（OCR中も可。R2に残るが許容）
+  const onCancelFile = () => {
+    setPdfFile(null);
+    setPendingFileKey(null);
+    setOcrLoading(false);
+    setOcrResult(null);
+    setOcrError(null);
+    setToHospitalId("");
+    setComment("");
+  };
 
-    setOcrModal(null);
+  // 「置く」ボタン押下時: documents INSERT のみ（アップロード・OCRは実行済み）
+  const finalizeDocument = async () => {
+    if (sending || ocrLoading) return;
+
+    if (!myHospitalId) return alert("profileのhospital_idが取れてません");
+    if (!toHospitalId) return alert("宛先病院を選んでください");
+    if (toHospitalId === myHospitalId)
+      return alert("自院宛は選べません（テストならOKにしても良い）");
+
+    if (!pendingFileKey) {
+      return alert(
+        "アップロードに失敗しています。ファイルを選び直してください",
+      );
+    }
+
+    // OCR未実行（正常フローでは起きないが念のため確認）
+    if (!ocrResult && !ocrError) {
+      const ok = confirm("OCR未実行です。そのまま置きますか？");
+      if (!ok) return;
+    }
+
     setSending(true);
     try {
+      const insertData = {
+        from_hospital_id: myHospitalId,
+        to_hospital_id: toHospitalId,
+        comment: comment || null,
+        file_key: pendingFileKey,
+        status: "UPLOADED",
+        expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      };
+
       const { data, error } = await supabase
         .from("documents")
-        .insert(pendingInsert)
+        .insert(insertData)
         .select()
         .single();
 
@@ -797,62 +617,19 @@ export default function App() {
         action: "UPLOAD",
       });
 
+      // 送信完了 → state リセット
       setComment("");
       setToHospitalId("");
       setPdfFile(null);
+      setPendingFileKey(null);
+      setOcrResult(null);
+      setOcrError(null);
       await loadAll();
       setTab("sent");
       alert("置きました（相手の受け取りBOXに入りました）");
     } catch (e) {
       alert(`送信に失敗: ${e?.message ?? e}`);
     } finally {
-      setSending(false);
-    }
-  };
-
-  // OCRモーダルをキャンセル（PDFはR2に残るが許容）
-  const cancelOcr = () => {
-    setOcrModal(null);
-    setPdfFile(null); // 再選択できるようリセット
-  };
-
-  // ---- createDocument: アップロード → OCRモーダル表示まで ----
-  const createDocument = async () => {
-    if (sending) return;
-
-    // バリデーション（既存のまま）
-    if (!myHospitalId) return alert("profileのhospital_idが取れてません");
-    if (!toHospitalId) return alert("宛先病院を選んでください");
-    if (toHospitalId === myHospitalId)
-      return alert("自院宛は選べません（テストならOKにしても良い）");
-    if (!pdfFile) return alert("PDFを選択してください");
-    if (pdfFile.type !== "application/pdf")
-      return alert("PDFのみアップロードできます");
-
-    setSending(true);
-    try {
-      // R2 アップロード
-      const { upload_url, file_key } = await getPresignedUpload();
-      await putPdf(upload_url, pdfFile);
-
-      // INSERT に必要なデータを確定（モーダルが開いている間に state が変わっても安全）
-      const pendingInsert = {
-        from_hospital_id: myHospitalId,
-        to_hospital_id: toHospitalId,
-        comment: comment || null,
-        file_key,
-        status: "UPLOADED",
-        expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-      };
-
-      // アップロード完了 → sending 解除 → OCRモーダルを開く
-      setSending(false);
-      setOcrModal({ loading: true, result: null, error: "", pendingInsert });
-
-      // OCR を非同期で実行（モーダルが loading → result/error に遷移）
-      _runOcr(file_key);
-    } catch (e) {
-      alert(`アップロード失敗: ${e?.message ?? e}`);
       setSending(false);
     }
   };
@@ -1318,9 +1095,13 @@ export default function App() {
               comment={comment}
               setComment={setComment}
               pdfFile={pdfFile}
-              setPdfFile={setPdfFile}
+              onFileDrop={handleFileDrop}
+              onCancelFile={onCancelFile}
               sending={sending}
-              createDocument={createDocument}
+              ocrLoading={ocrLoading}
+              ocrResult={ocrResult}
+              ocrError={ocrError}
+              finalizeDocument={finalizeDocument}
             />
           )}
 
@@ -1376,14 +1157,6 @@ export default function App() {
         url={previewUrl}
         loading={previewLoading}
         error={previewError}
-      />
-
-      {/* OCR 確認モーダル（v1.8）*/}
-      <OcrConfirmModal
-        modal={ocrModal}
-        onConfirm={finalizeDocument}
-        onCancel={cancelOcr}
-        sending={sending}
       />
     </Root>
   );
