@@ -572,6 +572,7 @@ def _structure_referral_text(
 # ----------------------------
 class OcrRequest(BaseModel):
     file_key: str
+    mode: str = "full"  # "full" | "text_only"（text_only は structured をスキップ）
 
 
 def _ocr_impl(
@@ -695,8 +696,10 @@ def _ocr_impl(
                 "送信前に内容をご確認ください。"
             )
 
-    # ---- 構造化JSON生成（gpt-4o でフィールド抽出、失敗時は null） ----
-    structured = _structure_referral_text(stripped)
+    # ---- 構造化JSON生成（mode=full のみ実行。text_only はスキップして null） ----
+    structured = (
+        None if body.mode == "text_only" else _structure_referral_text(stripped)
+    )
 
     return {"text": stripped, "meta": meta, "warnings": warnings, "structured": structured}
 
