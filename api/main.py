@@ -497,6 +497,28 @@ def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
 
 
 # ----------------------------
+# テキスト正規化ヘルパー
+# ----------------------------
+def _strip_code_fences(text: str) -> str:
+    """
+    OCR結果がコードフェンス（```...```）で全体を囲まれている場合に本文のみを返す。
+    Gemini / OpenAI が Markdown 形式で応答するケースへの対処。
+    例: ```plaintext\n本文\n``` → 本文
+    部分的なフェンスや複数フェンスは除去しない（全体を囲む1ブロックのみ対象）。
+    """
+    t = text.strip()
+    if not t.startswith("```"):
+        return t
+    first_newline = t.find("\n")
+    if first_newline < 0:
+        return t
+    if not t.endswith("```"):
+        return t
+    inner = t[first_newline + 1 : len(t) - 3]
+    return inner.strip()
+
+
+# ----------------------------
 # 構造化 内部ヘルパー
 # ----------------------------
 def _structure_referral_text(
@@ -643,6 +665,9 @@ def _ocr_impl(
         text = _call_gemini_ocr(png_list, timeout=remaining)
     else:
         text = _call_openai_ocr(png_list, timeout=remaining)
+
+    # ---- テキスト正規化（コードフェンス除去） ----
+    text = _strip_code_fences(text)
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 
