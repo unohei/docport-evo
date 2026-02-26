@@ -1,8 +1,8 @@
-// v3.3 変更点（preview_file_key 対応 + プレビュー可否 UI）:
-// 1. utils/preview.js を追加: getPreviewKey / isPreviewable
-// 2. openPreview が preview_file_key を優先して presign。プレビュー不可形式はモーダルで DL 促進
-// 3. SELECT_EXT / SELECT_BASE に preview_file_key を追加
-// ※ v3.2 以前の変更点はそのまま維持
+// v3.4 変更点（監査ログ v1 / best-effort logEvent 統一）:
+// 1. utils/audit.js (logEvent) を追加: document_events への best-effort insert を共通化
+// 2. DOC_CREATED（documents INSERT 後）/ OCR_RUN（OCR 実行時）/ STRUCTURED_EDIT（人が修正時）を追加
+// 3. 既存の DOWNLOAD / ARCHIVE / CANCEL も logEvent に移行（失敗しても本体処理を継続）
+// ※ v3.3 以前の変更点はそのまま維持
 
 console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
@@ -25,6 +25,7 @@ import SendTab from "./tabs/SendTab";
 import InboxTab from "./tabs/InboxTab";
 import SentTab from "./tabs/SentTab";
 import { getPreviewKey, isPreviewable } from "./utils/preview";
+import { logEvent } from "./utils/audit";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -636,11 +637,15 @@ export default function App() {
         data = d1;
       }
 
-      await supabase.from("document_events").insert({
-        document_id: data.id,
-        actor_user_id: session.user.id,
-        action: "UPLOAD",
-      });
+      // 監査ログ（best-effort: logEvent 内で失敗を吸収する）
+      const uid = session.user.id;
+      await logEvent(data.id, uid, "DOC_CREATED");
+      // OCR を実行した場合のみ記録（ocrResult がある = チェックON + PDF + OCR成功）
+      if (ocrResult !== null) await logEvent(data.id, uid, "OCR_RUN");
+      // 人が構造化情報を編集した場合のみ記録
+      if (structuredPayload?.structured_updated_by === "human") {
+        await logEvent(data.id, uid, "STRUCTURED_EDIT");
+      }
 
       setComment("");
       setToHospitalId("");
@@ -694,11 +699,7 @@ export default function App() {
       if (opts?.markDownloaded && session?.user?.id) {
         if (doc.status !== "DOWNLOADED") {
           await supabase.from("documents").update({ status: "DOWNLOADED" }).eq("id", doc.id);
-          await supabase.from("document_events").insert({
-            document_id: doc.id,
-            actor_user_id: session.user.id,
-            action: "DOWNLOAD",
-          });
+          await logEvent(doc.id, session.user.id, "DOWNLOAD");
           await loadAll();
         }
       }
@@ -716,9 +717,7 @@ export default function App() {
     try {
       if (!doc?.id || doc.status === "ARCHIVED") return;
       await supabase.from("documents").update({ status: "ARCHIVED" }).eq("id", doc.id);
-      await supabase.from("document_events").insert({
-        document_id: doc.id, actor_user_id: session.user.id, action: "ARCHIVE",
-      });
+      await logEvent(doc.id, session.user.id, "ARCHIVE");
       await loadAll();
     } catch (e) {
       alert(`アーカイブ失敗: ${e?.message ?? e}`);
@@ -734,9 +733,7 @@ export default function App() {
       const ok = confirm("この「置いた」共有を取り消しますか？（相手はDLできなくなります）");
       if (!ok) return;
       await supabase.from("documents").update({ status: "CANCELLED" }).eq("id", doc.id);
-      await supabase.from("document_events").insert({
-        document_id: doc.id, actor_user_id: session.user.id, action: "CANCEL",
-      });
+      await logEvent(doc.id, session.user.id, "CANCEL");
       await loadAll();
     } catch (e) {
       alert(`取り消し失敗: ${e?.message ?? e}`);
