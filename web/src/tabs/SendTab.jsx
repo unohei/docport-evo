@@ -162,7 +162,11 @@ export default function SendTab({
   setCheckIntensity,
   finalizeDocument,
   userId,           // Supabase auth user id（差分ログ用）
+  allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
 }) {
+  // FileDrop に渡す許可 MIME リスト（allowedMimeExt が未渡しなら PDF のみ）
+  const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
+  const isPdfFile = pdfFile?.type === "application/pdf";
   const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
 
@@ -358,7 +362,12 @@ export default function SendTab({
             </div>
             <div style={{ marginTop: 12 }}>
               {inputMode === "drop" ? (
-                <FileDrop onFile={(file) => onFileDrop(file)} accept="application/pdf" />
+                <FileDrop
+                  onFile={(file) => onFileDrop(file)}
+                  allowedTypes={allowedTypes}
+                  title="ここに置く"
+                  hint="PDF / 画像 / Word / Excel / PowerPoint"
+                />
               ) : (
                 <ScanCapture
                   filenameBase="紹介状" preferRearCamera={true}
@@ -491,6 +500,22 @@ export default function SendTab({
                 </div>
               )}
 
+              {/* PDF以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
+              {uploadStatus === "ready" && !isPdfFile && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "10px 14px", borderRadius: 10,
+                  background: "rgba(14,165,233,0.05)",
+                  border: "1px solid rgba(14,165,233,0.18)",
+                  fontSize: 13, fontWeight: 700, color: "#0369a1",
+                }}>
+                  <span>OCR対象外</span>
+                  <span style={{ fontWeight: 400, opacity: 0.75 }}>
+                    — PDF以外のファイルはテキスト抽出をスキップします。内容を確認の上「置く」を押してください。
+                  </span>
+                </div>
+              )}
+
               {uploadStatus === "error" && ocrError && (
                 <div style={{
                   background: "rgba(239,68,68,0.08)",
@@ -507,8 +532,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* チェックON で ready + OCR結果あり */}
-              {uploadStatus === "ready" && checkMode && ocrResult && (
+              {/* チェックON + PDF + OCR結果あり */}
+              {uploadStatus === "ready" && checkMode && isPdfFile && ocrResult && (
                 <div>
                   {/* 1. warnings */}
                   {ocrResult.warnings?.length > 0 && (
@@ -634,8 +659,8 @@ export default function SendTab({
                     })()}
                   </div>
 
-                  {/* 5. 構造化情報（編集可能フォーム） */}
-                  {structuredEdit && (
+                  {/* 5. 構造化情報（編集可能フォーム）— full モード時のみ */}
+                  {structuredEdit && checkIntensity === "full" && (
                     <div style={{ marginTop: 10 }}>
                       <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
                         構造化情報

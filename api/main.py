@@ -22,7 +22,7 @@ import pypdfium2 as pdfium
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -253,26 +253,55 @@ def health():
 
 
 # ----------------------------
+# アップロード許可 MIME マップ（許可リスト方式・単一の真実）
+# フロント → FastAPI に content_type を渡し、ここで検証してから presign を発行する。
+# 拡張子だけに依存せず MIME で判定する（二重防御の最終判断はここ）
+# ----------------------------
+ALLOWED_MIME_EXT: dict[str, str] = {
+    "application/pdf":                                                              "pdf",
+    "image/png":                                                                    "png",
+    "image/jpeg":                                                                   "jpg",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":      "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":            "xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":    "pptx",
+}
+
+
+class PresignUploadRequest(BaseModel):
+    content_type: str = "application/pdf"   # MIME タイプ（未送信時は PDF）
+    filename: str = ""                      # オリジナルファイル名（ログ用）
+
+
+# ----------------------------
 # Presign 内部ヘルパー
 # ----------------------------
-def _presign_upload():
+def _presign_upload(content_type: str = "application/pdf") -> dict:
+    # MIME 許可リスト検証（拡張子は MIME から決定する）
+    if content_type not in ALLOWED_MIME_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"許可されていないファイル形式です: {content_type}。"
+                   f"対応形式: {', '.join(ALLOWED_MIME_EXT.keys())}",
+        )
+    ext = ALLOWED_MIME_EXT[content_type]
+
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    key = f"documents/{uuid.uuid4()}.pdf"
+    key = f"documents/{uuid.uuid4()}.{ext}"
     url = s3.generate_presigned_url(
         ClientMethod="put_object",
         Params={
             "Bucket": bucket,
             "Key": key,
-            "ContentType": "application/pdf",
+            "ContentType": content_type,   # presigned URL に ContentType を含めることで PUT 時の MIME を強制
         },
-        ExpiresIn=60 * 5,
+        ExpiresIn=60 * 10,  # 10分（アップロード操作）
     )
-    return {"upload_url": url, "file_key": key}
+    return {"upload_url": url, "file_key": key, "content_type": content_type, "file_ext": ext}
 
 
 def _presign_download(key: str):
@@ -295,11 +324,14 @@ def _presign_download(key: str):
 # ----------------------------
 @app.post("/api/presign-upload")
 def presign_upload_api(
+    body: PresignUploadRequest | None = Body(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
-    """ログイン済みユーザーのみ署名 URL を発行（JWT 必須）"""
-    return _presign_upload()
+    """ログイン済みユーザーのみ署名 URL を発行（JWT 必須）。
+    body 未送信（後方互換クライアント）の場合は application/pdf として扱う。"""
+    req = body if body is not None else PresignUploadRequest()
+    return _presign_upload(req.content_type)
 
 
 @app.get("/api/presign-download")
@@ -318,11 +350,13 @@ def presign_download_api(
 
 @app.post("/presign-upload")
 def presign_upload_compat(
+    body: PresignUploadRequest | None = Body(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
     """compat: Vite proxy 経由のローカル開発用（同じ認可）"""
-    return _presign_upload()
+    req = body if body is not None else PresignUploadRequest()
+    return _presign_upload(req.content_type)
 
 
 @app.get("/presign-download")

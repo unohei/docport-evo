@@ -1,13 +1,27 @@
 import React, { useMemo, useState, useId } from "react";
 import { THEME, Card } from "./ui/primitives";
 
+// 許可 MIME の簡易ラベル（エラー文言用）
+const MIME_LABEL = {
+  "application/pdf":                                                            "PDF",
+  "image/png":                                                                  "PNG",
+  "image/jpeg":                                                                 "JPEG",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":    "DOCX",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":          "XLSX",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":  "PPTX",
+};
+
 export default function FileDrop({
   onFile,
-  accept = "application/pdf",
+  // allowedTypes: 許可する MIME タイプの配列（省略時は PDF のみ）
+  allowedTypes = ["application/pdf"],
   disabled = false,
   title = "ここに置く",
   hint = "ドラッグ & タップで選択",
 }) {
+  // <input accept> 属性文字列を allowedTypes から自動生成
+  const accept = allowedTypes.join(",");
+
   const [dragOver, setDragOver] = useState(false);
   const [err, setErr] = useState("");
   const inputId = useId();
@@ -19,11 +33,16 @@ export default function FileDrop({
 
   const validate = (file) => {
     if (!file) return null;
-    const isPdf =
-      file.type === "application/pdf" ||
-      (file.name || "").toLowerCase().endsWith(".pdf");
-    if (!isPdf) return "PDFのみアップロードできます";
-    return null;
+    if (allowedTypes.includes(file.type)) return null;
+    // MIME が空（一部ブラウザ）の場合: 拡張子フォールバック
+    const ext = (file.name || "").split(".").pop()?.toLowerCase();
+    const extOk = allowedTypes.some((mt) => {
+      const label = MIME_LABEL[mt]?.toLowerCase();
+      return label && (ext === label || (mt === "image/jpeg" && ext === "jpeg"));
+    });
+    if (extOk) return null;
+    const labels = allowedTypes.map((mt) => MIME_LABEL[mt] || mt).join(" / ");
+    return `対応形式: ${labels}`;
   };
 
   const handleFile = (file) => {

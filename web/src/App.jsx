@@ -56,6 +56,17 @@ function isLegacyKey(fileKey) {
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 console.log("API_BASE =", API_BASE);
 
+// アップロード許可 MIME → 拡張子マップ（サーバー側 ALLOWED_MIME_EXT と同期を保つこと）
+// フロントはUX用の早期バリデーション専用。最終判断は FastAPI が行う。
+const ALLOWED_MIME_EXT = {
+  "application/pdf":                                                             "pdf",
+  "image/png":                                                                   "png",
+  "image/jpeg":                                                                  "jpg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":     "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":           "xlsx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":   "pptx",
+};
+
 // ---- Preview Modal ----
 function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft }) {
   if (!isOpen) return null;
@@ -379,20 +390,29 @@ export default function App() {
   };
 
   // ---- R2 presign helpers ----
-  const getPresignedUpload = async () => {
+  const getPresignedUpload = async (file) => {
     const token = session?.access_token;
+    // content_type と filename を POST body に含める（後方互換: body なし → PDF として扱われる）
+    const body = file
+      ? JSON.stringify({ content_type: file.type || "application/pdf", filename: file.name || "" })
+      : undefined;
     const res = await fetch(`${API_BASE}/presign-upload`, {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body,
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   };
 
-  const putPdf = async (uploadUrl, file) => {
+  // R2 PUT（Content-Type はファイル実体のMIMEを使用）
+  const putFile = async (uploadUrl, file) => {
     const res = await fetch(uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": "application/pdf" },
+      headers: { "Content-Type": file.type || "application/pdf" },
       body: file,
     });
     if (!res.ok) {
@@ -411,9 +431,16 @@ export default function App() {
     return res.json();
   };
 
-  // ---- ドロップ直後: upload → OCR（チェックモードで分岐）----
+  // ---- ドロップ直後: upload → OCR（チェックモード + ファイル種別で分岐）----
   const handleFileDrop = async (file) => {
     if (!file) return;
+
+    // フロント側の早期バリデーション（最終判断はサーバー）
+    const mimeOk = Object.prototype.hasOwnProperty.call(ALLOWED_MIME_EXT, file.type);
+    if (!mimeOk) {
+      alert(`対応していないファイル形式です: ${file.type || "不明"}\n対応形式: PDF, PNG, JPEG, DOCX, XLSX, PPTX`);
+      return;
+    }
 
     setPdfFile(file);
     setOcrResult(null);
@@ -421,11 +448,19 @@ export default function App() {
     setPendingFileKey(null);
     setUploadStatus("uploading");
 
+    const isPdf = file.type === "application/pdf";
+
     try {
-      // R2 アップロード
-      const { upload_url, file_key } = await getPresignedUpload();
-      await putPdf(upload_url, file);
+      // R2 アップロード（content_type を渡して正しい拡張子・MIME で presign）
+      const { upload_url, file_key } = await getPresignedUpload(file);
+      await putFile(upload_url, file);
       setPendingFileKey(file_key);
+
+      // PDF以外: OCRをスキップして即 ready（チェックモード問わず）
+      if (!isPdf) {
+        setUploadStatus("ready");
+        return;
+      }
 
       // チェックOFF: OCR呼ばない
       if (!checkMode) {
@@ -433,7 +468,7 @@ export default function App() {
         return;
       }
 
-      // チェックON: OCR実行（checkIntensity で mode 切替）
+      // チェックON + PDF: OCR実行
       setUploadStatus("ocr_running");
       const token = session?.access_token;
       const res = await fetch(`${API_BASE}/ocr`, {
@@ -491,7 +526,7 @@ export default function App() {
 
     setSending(true);
     try {
-      const insertData = {
+      const baseInsert = {
         from_hospital_id: myHospitalId,
         to_hospital_id: toHospitalId,
         comment: comment || null,
@@ -500,9 +535,31 @@ export default function App() {
         expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from("documents").insert(insertData).select().single();
-      if (error) throw new Error(error.message);
+      // 拡張カラム（original_filename, content_type, file_ext）が存在する場合に保存。
+      // カラム未追加の場合（PGERR 42703）はベースカラムのみで再試行するフォールバック。
+      const extInsert = {
+        ...baseInsert,
+        original_filename: pdfFile?.name ?? null,
+        content_type: pdfFile?.type ?? null,
+        file_ext: pendingFileKey?.split(".").pop() ?? null,
+      };
+
+      let data;
+      const { data: d1, error: e1 } = await supabase
+        .from("documents").insert(extInsert).select().single();
+      if (e1) {
+        // 42703 = undefined_column（カラム未追加）の場合はフォールバック
+        if (e1.code === "42703" || e1.message?.includes("column")) {
+          const { data: d2, error: e2 } = await supabase
+            .from("documents").insert(baseInsert).select().single();
+          if (e2) throw new Error(e2.message);
+          data = d2;
+        } else {
+          throw new Error(e1.message);
+        }
+      } else {
+        data = d1;
+      }
 
       await supabase.from("document_events").insert({
         document_id: data.id,
@@ -795,6 +852,7 @@ export default function App() {
               setCheckIntensity={setCheckIntensity}
               finalizeDocument={finalizeDocument}
               userId={session?.user?.id ?? null}
+              allowedMimeExt={ALLOWED_MIME_EXT}
             />
           )}
           {tab === "inbox" && (
