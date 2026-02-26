@@ -1,9 +1,9 @@
-// v4.0 変更点（alerts + 黄色マーカー + 宛先病院候補）:
-// 1. OCRテキストにアラートキーワードを severity 別カラーでハイライト表示
-// 2. 要配慮注意喚起 alerts パネル（主役、断定禁止トーン）をテキスト前に表示
-// 3. structured.referral_to_hospital から宛先病院AI候補ボタンを表示
+// v5.0 変更点（structured 編集可能化・差分可視化）:
+// 1. structured_edit state 追加（AI抽出原本 vs 人が編集した確定値）
+// 2. changedKeys で差分キーを算出し、変更行を薄黄背景＋「人が編集」バッジで表示
+// 3. 「置く」時に {structured_raw, structured_final, changed_keys, edited_by, edited_at} を console.log
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   THEME,
   Card,
@@ -20,7 +20,7 @@ const STRUCTURED_LABELS = [
   ["birth_date",           "生年月日"],
   ["referrer_hospital",    "紹介元病院"],
   ["referrer_doctor",      "紹介元医師"],
-  ["referral_to_hospital", "紹介先病院"],  // v4.0追加
+  ["referral_to_hospital", "紹介先病院"],
   ["referral_date",        "紹介日"],
   ["chief_complaint",      "主訴"],
   ["suspected_diagnosis",  "疑い病名"],
@@ -28,14 +28,23 @@ const STRUCTURED_LABELS = [
   ["medications",          "処方薬"],
 ];
 
-// アラートキーワードのハイライト背景色（severity別）
-function getHighlightBg(severity) {
-  if (severity === "high")   return "rgba(239,68,68,0.18)";   // 薄赤/ピンク
-  if (severity === "medium") return "rgba(234,179,8,0.28)";   // 黄
-  return "rgba(234,179,8,0.14)";                               // 薄黄
+// ラベルルックアップ（差分サマリー表示用）
+const LABEL_MAP = Object.fromEntries(STRUCTURED_LABELS);
+
+// 差分比較の正規化（trim + 連続スペース圧縮）
+function normalizeVal(val) {
+  if (val == null) return "";
+  return String(val).trim().replace(/\s+/g, " ");
 }
 
-// アラートパネルの配色（severity別）
+// アラートキーワードのハイライト背景色
+function getHighlightBg(severity) {
+  if (severity === "high")   return "rgba(239,68,68,0.18)";
+  if (severity === "medium") return "rgba(234,179,8,0.28)";
+  return "rgba(234,179,8,0.14)";
+}
+
+// アラートパネルの配色
 function alertStyle(severity) {
   if (severity === "high")
     return { bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.28)", labelColor: "#991b1b", badge: "rgba(239,68,68,0.15)", badgeLabel: "要注意" };
@@ -45,7 +54,6 @@ function alertStyle(severity) {
 }
 
 // OCRテキストをアラートキーワードでハイライトセグメントに分割
-// 戻り値: [{text, highlight, severity?}]
 function buildHighlightedSegments(text, alerts) {
   if (!text || !alerts?.length) return [{ text, highlight: false }];
 
@@ -66,7 +74,6 @@ function buildHighlightedSegments(text, alerts) {
 
   if (!ranges.length) return [{ text, highlight: false }];
 
-  // ソート＆重複マージ（高severity優先）
   ranges.sort((a, b) => a.start - b.start);
   const priority = { high: 3, medium: 2, low: 1 };
   const merged = [];
@@ -82,7 +89,6 @@ function buildHighlightedSegments(text, alerts) {
     }
   }
 
-  // セグメント構築
   const segments = [];
   let cursor = 0;
   for (const { start, end, severity } of merged) {
@@ -95,7 +101,7 @@ function buildHighlightedSegments(text, alerts) {
   return segments;
 }
 
-// 病院名を正規化（スペース除去・サフィックス除去・小文字化）
+// 病院名の正規化（スペース除去・サフィックス除去・小文字化）
 function normalizeForMatch(name) {
   if (!name) return "";
   return name
@@ -104,7 +110,7 @@ function normalizeForMatch(name) {
     .toLowerCase();
 }
 
-// 宛先病院のAI候補を検索（部分一致、自院除外）
+// 宛先病院のAI候補を検索
 function findHospitalCandidates(targetName, hospitals, excludeId) {
   if (!targetName || !hospitals?.length) return [];
   const normTarget = normalizeForMatch(targetName);
@@ -116,7 +122,7 @@ function findHospitalCandidates(targetName, hospitals, excludeId) {
   });
 }
 
-// インラインスピナー（index.css の @keyframes spin を使用）
+// インラインスピナー
 function Spinner() {
   return (
     <span
@@ -155,9 +161,56 @@ export default function SendTab({
   checkIntensity,   // 'full' | 'text_only'
   setCheckIntensity,
   finalizeDocument,
+  userId,           // Supabase auth user id（差分ログ用）
 }) {
-  const [inputMode, setInputMode] = useState("drop"); // "drop" | "scan"
+  const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
+
+  // ---- structured 編集state ----
+  // structured_raw は ocrResult.structured のまま（変更しない）
+  // structured_edit は人が編集する確定値（初期値は raw と同じ）
+  const [structuredEdit, setStructuredEdit] = useState(null);
+  const [editedAt, setEditedAt] = useState(null);
+
+  // ocrResult が変わるたびに編集stateをリセット
+  useEffect(() => {
+    const raw = ocrResult?.structured ?? null;
+    setStructuredEdit(raw ? { ...raw } : null);
+    setEditedAt(null);
+  }, [ocrResult]);
+
+  const structuredRaw = ocrResult?.structured ?? null;
+
+  // 差分キー（正規化比較）
+  const changedKeys = useMemo(() => {
+    if (!structuredRaw || !structuredEdit) return [];
+    return STRUCTURED_LABELS
+      .map(([key]) => key)
+      .filter((key) => normalizeVal(structuredRaw[key]) !== normalizeVal(structuredEdit[key]));
+  }, [structuredRaw, structuredEdit]);
+
+  const handleFieldEdit = (key, value) => {
+    setStructuredEdit((prev) => ({ ...prev, [key]: value === "" ? null : value }));
+    setEditedAt(Date.now());
+  };
+
+  const handleFieldReset = (key) => {
+    setStructuredEdit((prev) => ({ ...prev, [key]: structuredRaw?.[key] ?? null }));
+  };
+
+  // ---- 置くボタンのラッパー（console.log） ----
+  const handleFinalize = () => {
+    if (structuredRaw && structuredEdit) {
+      console.log("[DocPort] structured audit trail:", {
+        structured_raw: structuredRaw,
+        structured_final: structuredEdit,
+        changed_keys: changedKeys,
+        edited_by: userId,
+        edited_at: editedAt,
+      });
+    }
+    finalizeDocument();
+  };
 
   const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
 
@@ -167,13 +220,13 @@ export default function SendTab({
       .map((h) => ({ id: h.id, name: h.name }));
   }, [hospitals, myHospitalId]);
 
-  // 宛先病院AI候補（structured.referral_to_hospital から導出）
+  // 宛先病院AI候補
   const hospitalCandidates = useMemo(() => {
     const targetName = ocrResult?.structured?.referral_to_hospital;
     return findHospitalCandidates(targetName, hospitals, myHospitalId);
   }, [ocrResult, hospitals, myHospitalId]);
 
-  // ---- SegButton（入力モード切替用）----
+  // ---- SegButton ----
   const SegButton = ({ active, hovered, icon, children, ...props }) => {
     const isHot = !!active || !!hovered;
     return (
@@ -210,7 +263,7 @@ export default function SendTab({
     );
   };
 
-  // ---- トグルボタン（チェックモード・強度共通スタイル）----
+  // ---- ToggleBtn ----
   const ToggleBtn = ({ active, onClick, children, small = false }) => (
     <button
       onClick={onClick}
@@ -239,10 +292,8 @@ export default function SendTab({
       {/* ========== ファイル未選択: チェック設定 + モード選択 ========== */}
       {!pdfFile && (
         <>
-          {/* チェック設定カード */}
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* チェックモード ON / OFF */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: THEME.text, minWidth: 100 }}>
                   チェックモード
@@ -258,7 +309,6 @@ export default function SendTab({
                 )}
               </div>
 
-              {/* チェック強度（ON時のみ表示）*/}
               {checkMode && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, fontWeight: 800, color: THEME.text, minWidth: 100 }}>
@@ -285,7 +335,6 @@ export default function SendTab({
             </div>
           </Card>
 
-          {/* 入力モード切替 + FileDrop/ScanCapture */}
           <Card>
             <div style={{
               display: "flex", gap: 10, padding: 10,
@@ -325,7 +374,7 @@ export default function SendTab({
       {pdfFile && (
         <Card>
           <div style={{ display: "grid", gap: 10 }}>
-            {/* チェックモード適用中の表示 */}
+            {/* チェックモード表示 */}
             <div style={{
               display: "flex", alignItems: "center", gap: 6,
               fontSize: 11, opacity: 0.6, color: THEME.text,
@@ -357,7 +406,7 @@ export default function SendTab({
               ))}
             </select>
 
-            {/* 宛先病院AI候補（structured.referral_to_hospital がある場合） */}
+            {/* 宛先病院AI候補 */}
             {checkMode && ocrResult?.structured?.referral_to_hospital && hospitalCandidates.length > 0 && (
               <div style={{
                 padding: "8px 12px", borderRadius: 10,
@@ -403,7 +452,6 @@ export default function SendTab({
             {/* ---- OCR / アップロード 状態エリア ---- */}
             <div style={{ marginTop: 4 }}>
 
-              {/* アップロード中 */}
               {uploadStatus === "uploading" && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
@@ -418,7 +466,6 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* OCRチェック中 */}
               {uploadStatus === "ocr_running" && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
@@ -433,7 +480,6 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* チェックOFF で ready: スキップ表示 */}
               {uploadStatus === "ready" && !checkMode && (
                 <div style={{
                   padding: "10px 14px", borderRadius: 10,
@@ -445,7 +491,6 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* エラー */}
               {uploadStatus === "error" && ocrError && (
                 <div style={{
                   background: "rgba(239,68,68,0.08)",
@@ -490,7 +535,7 @@ export default function SendTab({
                     ページ数: {ocrResult.meta?.page_count} ／ 文字数: {ocrResult.meta?.char_count}
                   </div>
 
-                  {/* 3. alerts（要配慮注意喚起 - 主役） */}
+                  {/* 3. alerts（要配慮注意喚起） */}
                   {ocrResult.alerts?.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 6, color: THEME.text }}>
@@ -551,7 +596,7 @@ export default function SendTab({
                     </div>
                   )}
 
-                  {/* 4. 抽出テキスト（アラートキーワードをハイライト表示） */}
+                  {/* 4. 抽出テキスト（ハイライトあり） */}
                   <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
                     抽出テキスト
                   </div>
@@ -589,51 +634,140 @@ export default function SendTab({
                     })()}
                   </div>
 
-                  {/* 5. 構造化情報（null 項目はスキップ）*/}
-                  {(() => {
-                    if (!ocrResult.structured) return null;
-                    const entries = STRUCTURED_LABELS.filter(
-                      ([key]) => ocrResult.structured[key] != null
-                    );
-                    if (entries.length === 0) return null;
-                    return (
-                      <div style={{ marginTop: 10 }}>
+                  {/* 5. 構造化情報（編集可能フォーム） */}
+                  {structuredEdit && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
+                        構造化情報
+                      </div>
+
+                      {/* 注意文言（固定） */}
+                      <div style={{
+                        fontSize: 11, color: "#6b7280",
+                        padding: "7px 10px", marginBottom: 6,
+                        borderRadius: 6, lineHeight: 1.6,
+                        background: "rgba(15,23,42,0.04)",
+                        border: "1px solid rgba(15,23,42,0.08)",
+                      }}>
+                        AIは抽出・整理の補助です。送信内容の最終確定は担当者が行います。
+                        編集した項目は "人が編集" として記録されます。
+                      </div>
+
+                      {/* 編集サマリー（変更がある場合のみ） */}
+                      {changedKeys.length > 0 && (
                         <div style={{
-                          fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text,
+                          fontSize: 11, fontWeight: 700,
+                          padding: "6px 10px", marginBottom: 6,
+                          borderRadius: 6, lineHeight: 1.7,
+                          background: "rgba(234,179,8,0.10)",
+                          border: "1px solid rgba(234,179,8,0.30)",
+                          color: "#854d0e",
                         }}>
-                          構造化情報
+                          <div>
+                            編集箇所: {changedKeys.length}件（{changedKeys.map((k) => LABEL_MAP[k] || k).join("、")}）
+                          </div>
+                          {userId && (
+                            <div style={{ opacity: 0.8 }}>
+                              編集者: {userId}
+                            </div>
+                          )}
+                          {editedAt && (
+                            <div style={{ opacity: 0.8 }}>
+                              編集日時: {new Date(editedAt).toLocaleString()}
+                            </div>
+                          )}
                         </div>
-                        <div style={{
-                          border: "1px solid rgba(15,23,42,0.10)",
-                          borderRadius: 8, overflow: "hidden", fontSize: 12,
-                        }}>
-                          {entries.map(([key, label], i) => (
+                      )}
+
+                      {/* 各フィールド（入力フォーム） */}
+                      <div style={{
+                        border: "1px solid rgba(15,23,42,0.10)",
+                        borderRadius: 8, overflow: "hidden", fontSize: 12,
+                      }}>
+                        {STRUCTURED_LABELS.map(([key, label], i) => {
+                          const isChanged = changedKeys.includes(key);
+                          const rowBg = isChanged
+                            ? "rgba(234,179,8,0.10)"
+                            : i % 2 === 0
+                              ? "rgba(248,250,252,0.9)"
+                              : "rgba(255,255,255,0.9)";
+                          return (
                             <div
                               key={key}
                               style={{
-                                display: "flex", gap: 8,
+                                display: "flex", alignItems: "center", gap: 8,
                                 padding: "5px 10px",
-                                borderBottom: i < entries.length - 1
+                                borderBottom: i < STRUCTURED_LABELS.length - 1
                                   ? "1px solid rgba(15,23,42,0.06)" : "none",
-                                background: i % 2 === 0
-                                  ? "rgba(248,250,252,0.9)" : "rgba(255,255,255,0.9)",
+                                background: rowBg,
+                                transition: "background 200ms ease",
                               }}
                             >
+                              {/* ラベル */}
                               <span style={{
-                                width: 96, flexShrink: 0,
+                                width: 88, flexShrink: 0,
                                 fontWeight: 700, opacity: 0.55, color: THEME.text,
                               }}>
                                 {label}
                               </span>
-                              <span style={{ flex: 1, color: THEME.text }}>
-                                {ocrResult.structured[key]}
-                              </span>
+
+                              {/* 入力フィールド */}
+                              <input
+                                type="text"
+                                value={structuredEdit[key] ?? ""}
+                                onChange={(e) => handleFieldEdit(key, e.target.value)}
+                                placeholder="—"
+                                style={{
+                                  flex: 1,
+                                  padding: "3px 7px",
+                                  border: isChanged
+                                    ? "1px solid rgba(234,179,8,0.50)"
+                                    : "1px solid rgba(15,23,42,0.10)",
+                                  borderRadius: 5,
+                                  background: isChanged
+                                    ? "rgba(255,255,255,0.85)"
+                                    : "rgba(255,255,255,0.65)",
+                                  fontSize: 12,
+                                  color: THEME.text,
+                                  outline: "none",
+                                  minWidth: 0,
+                                }}
+                              />
+
+                              {/* 変更あり: バッジ + 元に戻すボタン */}
+                              {isChanged && (
+                                <>
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 800,
+                                    padding: "2px 5px", borderRadius: 4,
+                                    background: "rgba(234,179,8,0.20)",
+                                    color: "#854d0e", whiteSpace: "nowrap", flexShrink: 0,
+                                  }}>
+                                    人が編集
+                                  </span>
+                                  <button
+                                    onClick={() => handleFieldReset(key)}
+                                    title="AI抽出値に戻す"
+                                    style={{
+                                      padding: "2px 7px", borderRadius: 4, flexShrink: 0,
+                                      border: "1px solid rgba(15,23,42,0.15)",
+                                      background: "rgba(255,255,255,0.85)",
+                                      fontSize: 10, fontWeight: 700,
+                                      color: THEME.text, cursor: "pointer",
+                                      whiteSpace: "nowrap",
+                                      opacity: 0.75,
+                                    }}
+                                  >
+                                    元に戻す
+                                  </button>
+                                </>
+                              )}
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -663,7 +797,7 @@ export default function SendTab({
                 </button>
 
                 <PrimaryButton
-                  onClick={finalizeDocument}
+                  onClick={handleFinalize}
                   disabled={isProcessing || sending}
                 >
                   {sending

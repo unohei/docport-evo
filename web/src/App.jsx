@@ -794,6 +794,7 @@ export default function App() {
               checkIntensity={checkIntensity}
               setCheckIntensity={setCheckIntensity}
               finalizeDocument={finalizeDocument}
+              userId={session?.user?.id ?? null}
             />
           )}
           {tab === "inbox" && (
