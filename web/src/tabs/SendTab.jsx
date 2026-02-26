@@ -1,8 +1,8 @@
 // SendTab.jsx
-// 変更点（structured 永続化対応）:
-// 1. handleFinalize が structuredPayload を組み立てて finalizeDocument(payload) に渡す
-// 2. changedKeys.length > 0 → structured_updated_by = "human"、それ以外 → "ai"
-// 3. structured が null（チェックOFF・非PDF）の場合は payload = null を渡す
+// 変更点（hospitalMatch.js 切り出し）:
+// 1. normalizeForMatch / findHospitalCandidates を utils/hospitalMatch.js に移動
+//    → スコアリング追加（完全一致100 / 短縮名70 / 前方一致50）・上位3件に制限
+// ※ 以前の変更点（structured 永続化対応）はそのまま維持
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../components/ui/primitives";
 import FileDrop from "../components/FileDrop";
 import ScanCapture from "../components/ScanCapture";
+import { findHospitalCandidates } from "../utils/hospitalMatch";
 
 // 構造化JSONの表示ラベル（順序保持のため配列）
 const STRUCTURED_LABELS = [
@@ -100,27 +101,6 @@ function buildHighlightedSegments(text, alerts) {
   if (cursor < text.length) segments.push({ text: text.slice(cursor), highlight: false });
 
   return segments;
-}
-
-// 病院名の正規化（スペース除去・サフィックス除去・小文字化）
-function normalizeForMatch(name) {
-  if (!name) return "";
-  return name
-    .replace(/[\s\u3000]+/g, "")
-    .replace(/(病院|医院|クリニック|診療所|センター|医療センター|総合病院)$/, "")
-    .toLowerCase();
-}
-
-// 宛先病院のAI候補を検索
-function findHospitalCandidates(targetName, hospitals, excludeId) {
-  if (!targetName || !hospitals?.length) return [];
-  const normTarget = normalizeForMatch(targetName);
-  if (!normTarget || normTarget.length < 2) return [];
-  return hospitals.filter((h) => {
-    if (h.id === excludeId) return false;
-    const normH = normalizeForMatch(h.name);
-    return normH.includes(normTarget) || normTarget.includes(normH);
-  });
 }
 
 // インラインスピナー
