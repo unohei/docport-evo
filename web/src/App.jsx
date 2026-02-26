@@ -58,8 +58,11 @@ function isLegacyKey(fileKey) {
 const SELECT_EXT =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
   "original_filename, file_ext, structured_json, structured_updated_by";
+// SELECT_BASE: structured_* が未反映の環境向けフォールバック。
+// original_filename / file_ext は確実に存在するので含める（title・バッジ維持）
 const SELECT_BASE =
-  "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key";
+  "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
+  "original_filename, file_ext";
 
 // PostgREST の列不存在エラーを判定（HTTP 400 / PGRST schema cache）
 function isColumnError(err) {
