@@ -1,3 +1,9 @@
+// InboxTab.jsx
+// 変更点（カード用要約追加）:
+// 1. buildCardSummary を import し、各カード上部に title/subtitle を表示
+// 2. 各カード下部（ボタン行の直前）にバッジ行を追加（最大3個）
+// 3. 既存のカードレイアウトは変更なし
+
 import {
   Card,
   Pill,
@@ -5,6 +11,7 @@ import {
   SecondaryButton,
   TextInput,
 } from "../components/ui/primitives";
+import { buildCardSummary } from "../utils/cardSummary";
 
 export default function InboxTab({
   headerTitle,
@@ -78,6 +85,7 @@ export default function InboxTab({
             const expired = isExpired(doc.expires_at);
             const legacy = isLegacyKey(doc.file_key);
             const thumbUrl = getThumbUrl(doc);
+            const summary = buildCardSummary(doc);
 
             const disabledOpen =
               expired ||
@@ -97,6 +105,31 @@ export default function InboxTab({
                   boxShadow: "0 6px 14px rgba(15, 23, 42, 0.08)",
                 }}
               >
+                {/* ── カード上部：title / subtitle ── */}
+                {summary.title && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                      paddingBottom: 6,
+                      borderBottom: "1px solid rgba(15,23,42,0.09)",
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      alignItems: "baseline",
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: "#0f172a" }}>
+                      {summary.title}
+                    </span>
+                    {summary.subtitle && (
+                      <span style={{ opacity: 0.6, fontSize: 11 }}>
+                        {summary.subtitle}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: "flex",
@@ -207,7 +240,22 @@ export default function InboxTab({
                   </div>
                 </div>
 
-                {/* 下：ボタン */}
+                {/* ── カード下部：badges ── */}
+                {summary.badges.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {summary.badges.map((b, i) => (
+                      <Pill
+                        key={i}
+                        tone={b.tone}
+                        style={{ fontSize: 11, padding: "3px 9px" }}
+                      >
+                        {b.label}
+                      </Pill>
+                    ))}
+                  </div>
+                )}
+
+                {/* ボタン */}
                 <div
                   style={{
                     display: "flex",

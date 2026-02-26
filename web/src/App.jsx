@@ -1,8 +1,7 @@
-// v3.0 変更点（チェックモード追加）:
-// 1. ocrLoading → uploadStatus（'idle'|'uploading'|'ocr_running'|'ready'|'error'）に置換
-// 2. checkMode（ON/OFF）・checkIntensity（'full'|'text_only'）state を追加
-// 3. handleFileDrop: checkMode=OFF時はOCRをスキップ、ON時はcheckIntensityでmode切替
-// 4. finalizeDocument: checkMode=OFF時に confirm を表示
+// v3.1 変更点（structured 永続化対応）:
+// 1. finalizeDocument が structuredPayload を引数で受け取り extInsert にスプレッド
+// 2. Inbox / Sent の SELECT に structured_json, structured_updated_by を追加
+// ※ v3.0 以前の変更点はそのまま維持
 
 console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
@@ -331,7 +330,7 @@ export default function App() {
 
     const { data: inbox, error: inboxErr } = await supabase
       .from("documents")
-      .select("id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key")
+      .select("id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, original_filename, file_ext, structured_json, structured_updated_by")
       .eq("to_hospital_id", prof.hospital_id)
       .order("created_at", { ascending: false });
     if (inboxErr) return alert(`inbox取得に失敗: ${inboxErr.message}`);
@@ -339,7 +338,7 @@ export default function App() {
 
     const { data: sent, error: sentErr } = await supabase
       .from("documents")
-      .select("id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key")
+      .select("id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, original_filename, file_ext, structured_json, structured_updated_by")
       .eq("from_hospital_id", prof.hospital_id)
       .order("created_at", { ascending: false });
     if (sentErr) return alert(`sent取得に失敗: ${sentErr.message}`);
@@ -501,7 +500,8 @@ export default function App() {
   };
 
   // ---- 「置く」ボタン: documents INSERT のみ ----
-  const finalizeDocument = async () => {
+  // structuredPayload: SendTab から渡される { structured_json, structured_version, ... } または null
+  const finalizeDocument = async (structuredPayload = null) => {
     const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
     if (sending || isProcessing) return;
 
@@ -535,13 +535,15 @@ export default function App() {
         expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
       };
 
-      // 拡張カラム（original_filename, content_type, file_ext）が存在する場合に保存。
+      // 拡張カラム（original_filename, content_type, file_ext, structured_*）が存在する場合に保存。
       // カラム未追加の場合（PGERR 42703）はベースカラムのみで再試行するフォールバック。
+      // structuredPayload が null の場合は structured_* を省略（DB 側で NULL default）
       const extInsert = {
         ...baseInsert,
         original_filename: pdfFile?.name ?? null,
         content_type: pdfFile?.type ?? null,
         file_ext: pendingFileKey?.split(".").pop() ?? null,
+        ...(structuredPayload ?? {}),
       };
 
       let data;

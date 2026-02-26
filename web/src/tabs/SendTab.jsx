@@ -1,7 +1,8 @@
-// v5.0 変更点（structured 編集可能化・差分可視化）:
-// 1. structured_edit state 追加（AI抽出原本 vs 人が編集した確定値）
-// 2. changedKeys で差分キーを算出し、変更行を薄黄背景＋「人が編集」バッジで表示
-// 3. 「置く」時に {structured_raw, structured_final, changed_keys, edited_by, edited_at} を console.log
+// SendTab.jsx
+// 変更点（structured 永続化対応）:
+// 1. handleFinalize が structuredPayload を組み立てて finalizeDocument(payload) に渡す
+// 2. changedKeys.length > 0 → structured_updated_by = "human"、それ以外 → "ai"
+// 3. structured が null（チェックOFF・非PDF）の場合は payload = null を渡す
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -160,7 +161,7 @@ export default function SendTab({
   setCheckMode,
   checkIntensity,   // 'full' | 'text_only'
   setCheckIntensity,
-  finalizeDocument,
+  finalizeDocument, // (structuredPayload: object|null) => void
   userId,           // Supabase auth user id（差分ログ用）
   allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
 }) {
@@ -202,8 +203,22 @@ export default function SendTab({
     setStructuredEdit((prev) => ({ ...prev, [key]: structuredRaw?.[key] ?? null }));
   };
 
-  // ---- 置くボタンのラッパー（console.log） ----
+  // ---- 置くボタンのラッパー ----
+  // structuredPayload を組み立てて finalizeDocument に渡す
   const handleFinalize = () => {
+    // structured があれば payload を作る、なければ null（DB は NULL のまま）
+    const structuredPayload = structuredRaw
+      ? {
+          structured_json: structuredEdit ?? structuredRaw,
+          structured_version: "v1",
+          structured_updated_at: new Date().toISOString(),
+          // 人が編集した項目がある場合は 'human'、AI抽出のみなら 'ai'
+          structured_updated_by: changedKeys.length > 0 ? "human" : "ai",
+          structured_source: "openai",
+        }
+      : null;
+
+    // 監査ログ（console）
     if (structuredRaw && structuredEdit) {
       console.log("[DocPort] structured audit trail:", {
         structured_raw: structuredRaw,
@@ -213,7 +228,8 @@ export default function SendTab({
         edited_at: editedAt,
       });
     }
-    finalizeDocument();
+
+    finalizeDocument(structuredPayload);
   };
 
   const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
@@ -675,7 +691,7 @@ export default function SendTab({
                         border: "1px solid rgba(15,23,42,0.08)",
                       }}>
                         AIは抽出・整理の補助です。送信内容の最終確定は担当者が行います。
-                        編集した項目は "人が編集" として記録されます。
+                        編集した項目は "人が修正" として記録されます。
                       </div>
 
                       {/* 編集サマリー（変更がある場合のみ） */}
@@ -768,7 +784,7 @@ export default function SendTab({
                                     background: "rgba(234,179,8,0.20)",
                                     color: "#854d0e", whiteSpace: "nowrap", flexShrink: 0,
                                   }}>
-                                    人が編集
+                                    人が修正
                                   </span>
                                   <button
                                     onClick={() => handleFieldReset(key)}
