@@ -1,6 +1,8 @@
 // SentTab.jsx
-// 変更点（カード用要約追加）:
+// 変更点（カード用要約追加 + title統一）:
 // 1. buildCardSummary を import し、各カード上部に title/subtitle を表示
+//    - title: 常に original_filename（ブレなし）
+//    - subtitle: structured_json がある場合のみ "患者名 / 疑い病名" 形式
 // 2. 各カード下部（ボタン行の直前）にバッジ行を追加（最大3個）
 // 3. 既存のカードレイアウトは変更なし
 

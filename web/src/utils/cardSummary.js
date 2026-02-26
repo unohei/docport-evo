@@ -1,13 +1,15 @@
 // cardSummary.js
-// 変更点:
-// 1. 参照先を doc.structured → doc.structured_json に変更（DB永続化対応）
-// 2. structured_updated_by === 'human' の場合に「人が修正」バッジを追加（優先3位）
-// 3. structured_json が NULL でも安全に動作（既存データ対応）
+// 変更点（案A: title/subtitle を一定ルールに統一）:
+// 1. title: 常に original_filename → file_key末尾 → "untitled"（ブレなし）
+// 2. subtitle: structured_json がある場合のみ "患者名 / 疑い病名" 形式で整形。
+//             structured_json が null の場合は subtitle を出さない（ブレ防止）
+// 3. badges / null安全 はそのまま維持
 
-/** 20文字超えたら末尾を省略 */
-function trunc(str, len = 20) {
+/** 指定文字数を超えたら末尾を省略 */
+function trunc(str, len) {
   if (!str) return null;
-  const s = String(str);
+  const s = String(str).trim();
+  if (!s) return null;
   return s.length > len ? s.slice(0, len) + "…" : s;
 }
 
@@ -33,30 +35,33 @@ const TONE = {
  * @param {object} doc         - documents テーブルの行
  * @param {object} [_hospitalMap] - 将来拡張用（現在未使用）
  * @returns {{
- *   title: string|null,
- *   subtitle: string|null,
+ *   title: string,                          // 常に非null（filename or "untitled"）
+ *   subtitle: string|null,                  // structured_json がある場合のみ
  *   badges: Array<{label: string, tone: object}>
  * }}
  */
 export function buildCardSummary(doc, _hospitalMap) {
-  // structured_json は DB永続化された JSONB カラム（NULL の場合もある）
   const s = doc?.structured_json ?? null;
 
   // ---- title ----
-  // patient_name > original_filename > null（null の場合は上部セクションを非表示）
-  const title = s?.patient_name || doc?.original_filename || null;
+  // 常に「original_filename → file_key末尾 → "untitled"」で確定（ブレなし）
+  const fileKeyTail = doc?.file_key
+    ? (doc.file_key.split("/").pop() || null)
+    : null;
+  const title = doc?.original_filename || fileKeyTail || "untitled";
 
   // ---- subtitle ----
-  // suspected_diagnosis（25文字以内）> chief_complaint（20文字で省略）> null
+  // structured_json がある場合のみ表示。なければ null（PDF以外・旧データも非表示）
+  // フォーマット: "患者名 / 疑い病名" または各単体
+  //   patient_name      … 最大12文字
+  //   suspected_diagnosis > chief_complaint … 最大18文字（どちらか一方）
   let subtitle = null;
   if (s) {
-    const diag = s.suspected_diagnosis;
-    const complaint = s.chief_complaint;
-    if (diag && String(diag).length <= 25) {
-      subtitle = diag;
-    } else if (complaint) {
-      subtitle = trunc(complaint, 20);
-    }
+    const parts = [
+      trunc(s.patient_name, 12),
+      trunc(s.suspected_diagnosis || s.chief_complaint, 18),
+    ].filter(Boolean);
+    subtitle = parts.length > 0 ? parts.join(" / ") : null;
   }
 
   // ---- badges（最大3個、優先度順） ----
