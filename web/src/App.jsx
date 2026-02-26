@@ -1,7 +1,8 @@
-// v3.2 変更点（SELECT フォールバック追加）:
-// 1. fetchDocs() を追加: 新列付き SELECT → 列不存在エラー時は旧 SELECT で再試行
-// 2. loadAll の Inbox / Sent クエリを fetchDocs に置き換え
-// ※ v3.1 以前の変更点はそのまま維持
+// v3.3 変更点（preview_file_key 対応 + プレビュー可否 UI）:
+// 1. utils/preview.js を追加: getPreviewKey / isPreviewable
+// 2. openPreview が preview_file_key を優先して presign。プレビュー不可形式はモーダルで DL 促進
+// 3. SELECT_EXT / SELECT_BASE に preview_file_key を追加
+// ※ v3.2 以前の変更点はそのまま維持
 
 console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
@@ -23,6 +24,7 @@ import {
 import SendTab from "./tabs/SendTab";
 import InboxTab from "./tabs/InboxTab";
 import SentTab from "./tabs/SentTab";
+import { getPreviewKey, isPreviewable } from "./utils/preview";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -57,12 +59,12 @@ function isLegacyKey(fileKey) {
 // SELECT_BASE: 従来列のみ。cardSummary は graceful に動作（新列は null 扱い）
 const SELECT_EXT =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
-  "original_filename, file_ext, structured_json, structured_updated_by";
+  "original_filename, file_ext, preview_file_key, structured_json, structured_updated_by";
 // SELECT_BASE: structured_* が未反映の環境向けフォールバック。
-// original_filename / file_ext は確実に存在するので含める（title・バッジ維持）
+// original_filename / file_ext / preview_file_key は確実に存在するので含める
 const SELECT_BASE =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
-  "original_filename, file_ext";
+  "original_filename, file_ext, preview_file_key";
 
 // PostgREST の列不存在エラーを判定（HTTP 400 / PGRST schema cache）
 function isColumnError(err) {
@@ -111,7 +113,8 @@ const ALLOWED_MIME_EXT = {
 };
 
 // ---- Preview Modal ----
-function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft }) {
+// previewable: true → iframe表示、false → ダウンロード促進UI
+function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, previewable }) {
   if (!isOpen) return null;
 
   return (
@@ -203,7 +206,38 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft })
               </div>
             </div>
           ) : url ? (
-            <iframe title="pdf-preview" src={url} style={{ width: "100%", height: "100%", border: "none" }} />
+            previewable ? (
+              /* PDF / 画像: そのまま iframe 表示 */
+              <iframe title="pdf-preview" src={url} style={{ width: "100%", height: "100%", border: "none" }} />
+            ) : (
+              /* Office等プレビュー未対応: ダウンロード促進 UI */
+              <div style={{
+                display: "grid", placeItems: "center",
+                height: "100%", padding: 24, textAlign: "center",
+              }}>
+                <div>
+                  <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}>📂</div>
+                  <div style={{ fontWeight: 900, fontSize: 16, color: THEME.text, marginBottom: 8 }}>
+                    この形式はアプリ内プレビュー未対応です
+                  </div>
+                  <div style={{ fontSize: 13, opacity: 0.65, color: THEME.text, marginBottom: 24, lineHeight: 1.6 }}>
+                    Word / Excel / PowerPoint 等はブラウザ内では表示できません。<br />
+                    「端末で開く」からダウンロードして確認してください。
+                  </div>
+                  <a href={url} target="_blank" rel="noreferrer noopener" style={{ textDecoration: "none" }}>
+                    <button style={{
+                      padding: "12px 28px", borderRadius: 12,
+                      border: "1px solid rgba(14,165,233,0.6)",
+                      background: THEME.primary, color: "#fff",
+                      fontWeight: 900, fontSize: 14, cursor: "pointer",
+                      boxShadow: "0 8px 20px rgba(14,165,233,0.25)",
+                    }}>
+                      端末で開く（ダウンロード）
+                    </button>
+                  </a>
+                </div>
+              </div>
+            )
           ) : (
             <div style={{ padding: 16, opacity: 0.75 }}>URL取得待ち</div>
           )}
@@ -245,6 +279,8 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  // プレビュー可能フラグ（pdf/画像 → true、Office等 → false でDL促進UIに切替）
+  const [previewable, setPreviewable] = useState(true);
 
   // OCR / upload state（v3.0: ocrLoading → uploadStatus に置換）
   // 'idle' | 'uploading' | 'ocr_running' | 'ready' | 'error'
@@ -640,12 +676,18 @@ export default function App() {
       if (doc.status === "CANCELLED") return alert("取り消し済みです");
       if (doc.status === "ARCHIVED") return alert("アーカイブ済みです");
 
+      // preview_file_key があればそちらを優先（変換済みPDF等）。なければ file_key。
+      const previewKey = getPreviewKey(doc);
+      const canPreview = isPreviewable(previewKey);
+
       setPreviewDoc(doc);
+      setPreviewable(canPreview);
       setPreviewLoading(true);
       setPreviewError("");
       setPreviewUrl("");
 
-      const { download_url } = await getPresignedDownload(doc.file_key);
+      // プレビュー可否に関わらず presign URL を取得（DL ボタンにも使うため）
+      const { download_url } = await getPresignedDownload(previewKey);
       if (!download_url) throw new Error("download_url が取得できませんでした");
       setPreviewUrl(download_url);
 
@@ -924,6 +966,7 @@ export default function App() {
         isOpen={!!previewDoc} onClose={closePreview}
         title={previewTitle} metaLeft={previewMetaLeft}
         url={previewUrl} loading={previewLoading} error={previewError}
+        previewable={previewable}
       />
     </Root>
   );
