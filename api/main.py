@@ -7,6 +7,10 @@
 # 1. _structure_referral_text: OCR済みテキストを gpt-4o で医療紹介状の構造化JSONへ変換
 # 2. /api/ocr のレスポンスに structured フィールドを追加（失敗時は null、OCR全体は落とさない）
 # 3. 既存のVision OCR処理・認証ロジックは一切変更なし
+#
+# 変更点（v2.1 presign-download の拡張子バリデーション修正）:
+# 1. _assert_download_access の file_key 検証を ".pdf" ハードコードから ALLOWED_MIME_EXT 値セットに変更
+#    → xlsx / docx / pptx / png / jpg など PDF 以外のファイルも presign-download できるように修正
 
 import base64
 import io
@@ -217,7 +221,9 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
     RLS でも弾かれるが、FastAPI 側でも明示チェック（二重防御）。
     """
     # パストラバーサル防止（基本バリデーション）
-    if not file_key.startswith("documents/") or not file_key.endswith(".pdf"):
+    # 許可拡張子は ALLOWED_MIME_EXT の値セットと一致させる
+    ext = file_key.rsplit(".", 1)[-1].lower() if "." in file_key else ""
+    if not file_key.startswith("documents/") or ext not in set(ALLOWED_MIME_EXT.values()):
         raise HTTPException(status_code=400, detail="無効な file_key です")
 
     key_encoded = urllib.parse.quote(file_key, safe="")
