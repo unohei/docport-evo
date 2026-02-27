@@ -149,6 +149,7 @@ export default function SendTab({
   const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
   const isPdfFile  = pdfFile?.type === "application/pdf";
   const isDocxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const isXlsxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
 
@@ -497,8 +498,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* PDF・DOCX 以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
-              {uploadStatus === "ready" && !isPdfFile && !isDocxFile && (
+              {/* PDF・DOCX・XLSX 以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
+              {uploadStatus === "ready" && !isPdfFile && !isDocxFile && !isXlsxFile && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "10px 14px", borderRadius: 10,
@@ -529,8 +530,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* チェックON + PDF or DOCX + 抽出結果あり */}
-              {uploadStatus === "ready" && checkMode && (isPdfFile || isDocxFile) && ocrResult && (
+              {/* チェックON + PDF / DOCX / XLSX + 抽出結果あり */}
+              {uploadStatus === "ready" && checkMode && (isPdfFile || isDocxFile || isXlsxFile) && ocrResult && (
                 <div>
                   {/* 1. warnings */}
                   {ocrResult.warnings?.length > 0 && (
@@ -557,6 +558,7 @@ export default function SendTab({
                     {ocrResult.meta?.page_count != null && `ページ数: ${ocrResult.meta.page_count} ／ `}
                     文字数: {ocrResult.meta?.char_count}
                     {ocrResult.meta?.source_type === "docx" && " ／ DOCX抽出"}
+                    {ocrResult.meta?.source_type === "xlsx" && " ／ XLSX抽出"}
                   </div>
 
                   {/* 3. alerts（要配慮注意喚起） */}

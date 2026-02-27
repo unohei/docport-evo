@@ -18,6 +18,12 @@
 # 3. meta に source_type: "pdf"|"docx" を追加
 # 4. structured / alerts は PDF OCR と同じ後段処理を流用
 # 5. DOCX 抽出失敗時は graceful degradation（text="" + warnings に理由を追加、500 にしない）
+#
+# 変更点（v2.3 XLSX テキスト抽出を /api/ocr に統合）:
+# 1. _extract_xlsx_text: openpyxl で全シートを走査しテキスト化（"Sheet:<名>" + "A:値|B:値..." 形式）
+# 2. 連続空行 _XLSX_MAX_EMPTY_ROWS 超でシート打ち切り、全体 _XLSX_MAX_CHARS 超で切り詰め+警告
+# 3. _ocr_impl: .xlsx 拡張子を許可し XLSX 抽出ルートへ分岐
+# 4. source_type: "xlsx" を meta に追加、structured/alerts は既存後段処理を流用
 
 import base64
 import io
@@ -389,9 +395,12 @@ def presign_download_compat(
 # ----------------------------
 # OCR 設定
 # ----------------------------
-_MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024   # 10MB
-_MAX_OCR_PAGES = 3                        # ページ上限
+_MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024   # 10MB（PDF / DOCX / XLSX 共通上限）
+_MAX_OCR_PAGES = 3                        # PDF ページ上限
 _OCR_TIMEOUT_SECS = 30                    # 処理全体のタイムアウト（秒）
+
+_XLSX_MAX_CHARS = 20_000      # XLSX 全体テキスト上限文字数
+_XLSX_MAX_EMPTY_ROWS = 30     # 連続空行がこれ以上続いたらシート打ち切り
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -489,6 +498,71 @@ def _extract_docx_text(docx_bytes: bytes) -> tuple[str, list[str]]:
         return "\n".join(paragraphs), []
     except Exception as e:
         return "", [f"DOCX抽出失敗: {e}。内容を確認の上、送信可否を判断してください。"]
+
+
+def _extract_xlsx_text(xlsx_bytes: bytes) -> tuple[str, list[str]]:
+    """
+    openpyxl で XLSX の全シートをテキスト化する。
+    - 各シートの先頭に "Sheet: <name>" を出力
+    - 各行は空でないセルのみ "A:値 | B:値 | ..." 形式に整形
+    - 連続空行が _XLSX_MAX_EMPTY_ROWS 以上続いたらそのシートを打ち切る
+    - 全体テキストが _XLSX_MAX_CHARS を超えたら切り詰め、warnings に追記
+    - 失敗時は空文字 + 警告を返す（graceful degradation: 500 にしない）
+    """
+    try:
+        import openpyxl  # noqa: PLC0415
+        from openpyxl.utils import get_column_letter  # noqa: PLC0415
+        wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), read_only=True, data_only=True)
+    except Exception as e:
+        return "", [f"XLSX読み込み失敗: {e}。内容を確認の上、送信可否を判断してください。"]
+
+    lines: list[str] = []
+    truncated = False
+
+    try:
+        for sheet in wb.worksheets:
+            lines.append(f"Sheet: {sheet.title}")
+            empty_row_count = 0
+
+            for row in sheet.iter_rows(values_only=True):
+                # 行が全空かチェック
+                if all(cell is None or str(cell).strip() == "" for cell in row):
+                    empty_row_count += 1
+                    if empty_row_count >= _XLSX_MAX_EMPTY_ROWS:
+                        break   # このシートはここで打ち切り
+                    continue
+                empty_row_count = 0
+
+                # 非空セルのみ "列名:値" にして連結
+                cells = []
+                for col_idx, cell in enumerate(row):
+                    if cell is None or str(cell).strip() == "":
+                        continue
+                    cells.append(f"{get_column_letter(col_idx + 1)}:{str(cell).strip()}")
+                if cells:
+                    lines.append(" | ".join(cells))
+
+            # シートを処理するたびに全体上限をチェック
+            if len("\n".join(lines)) >= _XLSX_MAX_CHARS:
+                truncated = True
+                break
+
+        wb.close()
+    except Exception as e:
+        # 途中まで抽出できたぶんは返す
+        return "\n".join(lines), [
+            f"XLSX抽出中にエラーが発生しました: {e}。抽出できた部分のみ表示しています。"
+        ]
+
+    text = "\n".join(lines)
+    warnings: list[str] = []
+    if truncated:
+        text = text[:_XLSX_MAX_CHARS]
+        warnings.append(
+            f"XLSXのテキストが長すぎるため {_XLSX_MAX_CHARS:,} 文字で省略しました。"
+            "全内容を確認の上、送信可否を判断してください。"
+        )
+    return text, warnings
 
 
 def _call_gemini_ocr(png_list: list[bytes], timeout: float) -> str:
@@ -701,12 +775,13 @@ def _ocr_impl(
     user: dict,
 ) -> dict:
     """
-    PDF画像OCR / DOCXテキスト抽出の共通実装。
-    1. file_key バリデーション（.pdf / .docx のみ受け付ける）
+    PDF画像OCR / DOCX・XLSXテキスト抽出の共通実装。
+    1. file_key バリデーション（.pdf / .docx / .xlsx のみ受け付ける）
     2. JWT + hospital_id 確認（送信前ファイル＝まだ documents 未登録のため DB照合はしない）
     3. R2 からファイル取得（Presigned GET）+ サイズチェック
-    4a. PDF: pypdfium2 でページ画像化 → Gemini/OpenAI Vision OCR
+    4a. PDF:  pypdfium2 でページ画像化 → Gemini/OpenAI Vision OCR
     4b. DOCX: python-docx でテキスト抽出（Vision API 不使用。失敗は graceful degradation）
+    4c. XLSX: openpyxl で全シートをテキスト化（Vision API 不使用。失敗は graceful degradation）
     5. OpenAI gpt-4o で構造化JSON生成（失敗時は structured=null）
     6. 結果テキスト + メタ（source_type 含む）+ 警告 + 構造化JSON + アラート を返す
     """
@@ -724,8 +799,8 @@ def _ocr_impl(
     # 対応拡張子: pdf / docx
     fkey = body.file_key
     ext = fkey.rsplit(".", 1)[-1].lower() if "." in fkey else ""
-    if not fkey.startswith("documents/") or ext not in {"pdf", "docx"}:
-        raise HTTPException(status_code=400, detail="無効な file_key です（対応: .pdf / .docx）")
+    if not fkey.startswith("documents/") or ext not in {"pdf", "docx", "xlsx"}:
+        raise HTTPException(status_code=400, detail="無効な file_key です（対応: .pdf / .docx / .xlsx）")
 
     # ---- JWT + hospital_id 確認 ----
     # OCR は「送信前」専用のため documents テーブルにまだレコードが存在しない。
@@ -775,6 +850,11 @@ def _ocr_impl(
         text, extract_warnings = _extract_docx_text(file_bytes)
         source_type = "docx"
 
+    elif ext == "xlsx":
+        # XLSX: openpyxl で全シートをテキスト化（Vision API 不要）
+        text, extract_warnings = _extract_xlsx_text(file_bytes)
+        source_type = "xlsx"
+
     else:
         # PDF: pypdfium2 でページ画像化 → Vision OCR
         try:
@@ -805,11 +885,11 @@ def _ocr_impl(
 
     # ---- メタ情報（source_type を追加） ----
     meta = {
-        "page_count": total_pages,   # DOCX の場合は None（ページ概念なし）
+        "page_count": total_pages,   # DOCX / XLSX の場合は None（ページ概念なし）
         "char_count": len(stripped),
         "file_key": fkey,
         "elapsed_ms": elapsed_ms,
-        "source_type": source_type,  # "pdf" | "docx"
+        "source_type": source_type,  # "pdf" | "docx" | "xlsx"
     }
 
     # ---- 警告生成 ----
@@ -817,7 +897,7 @@ def _ocr_impl(
     warnings: list[str] = list(extract_warnings)
     if not stripped:
         if not warnings:
-            label = "画像OCRでも" if ext == "pdf" else "DOCXから"
+            label = "画像OCRでも" if ext == "pdf" else f"{ext.upper()}から"
             warnings.append(
                 f"{label}テキストを抽出できませんでした。"
                 "内容をご確認の上、送信可否を判断してください。"

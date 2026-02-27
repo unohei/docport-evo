@@ -523,6 +523,7 @@ export default function App() {
 
     const isPdf  = file.type === "application/pdf";
     const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const isXlsx = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     try {
       // R2 アップロード（content_type を渡して正しい拡張子・MIME で presign）
@@ -530,8 +531,8 @@ export default function App() {
       await putFile(upload_url, file);
       setPendingFileKey(file_key);
 
-      // PDF・DOCX 以外: テキスト抽出をスキップして即 ready（チェックモード問わず）
-      if (!isPdf && !isDocx) {
+      // PDF・DOCX・XLSX 以外: テキスト抽出をスキップして即 ready（チェックモード問わず）
+      if (!isPdf && !isDocx && !isXlsx) {
         setUploadStatus("ready");
         return;
       }
@@ -542,7 +543,7 @@ export default function App() {
         return;
       }
 
-      // チェックON + PDF or DOCX: 抽出実行
+      // チェックON + PDF / DOCX / XLSX: 抽出実行
       setUploadStatus("ocr_running");
       const token = session?.access_token;
       const res = await fetch(`${API_BASE}/ocr`, {
