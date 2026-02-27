@@ -153,6 +153,9 @@ export default function SendTab({
   const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
 
+  // ---- 抽出テキスト表示切替（raw / normalized） ----
+  const [showNormalized, setShowNormalized] = useState(false);
+
   // ---- structured 編集state ----
   // structured_raw は ocrResult.structured のまま（変更しない）
   // structured_edit は人が編集する確定値（初期値は raw と同じ）
@@ -622,13 +625,44 @@ export default function SendTab({
                     </div>
                   )}
 
-                  {/* 4. 抽出テキスト（ハイライトあり） */}
-                  <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
-                    抽出テキスト
+                  {/* 4. 抽出テキスト（raw / normalized 切替） */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: THEME.text }}>
+                      抽出テキスト
+                    </span>
+                    {/* normalized が存在するときのみトグルを表示 */}
+                    {ocrResult.text_normalized != null && (
+                      <div style={{ display: "flex", gap: 3 }}>
+                        <button
+                          onClick={() => setShowNormalized(false)}
+                          style={{
+                            padding: "2px 9px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                            border: `1px solid ${!showNormalized ? "rgba(14,165,233,0.50)" : "rgba(15,23,42,0.12)"}`,
+                            background: !showNormalized ? "rgba(14,165,233,0.12)" : "rgba(255,255,255,0.75)",
+                            color: !showNormalized ? "#0369a1" : THEME.text,
+                            cursor: "pointer",
+                          }}
+                        >
+                          表示用
+                        </button>
+                        <button
+                          onClick={() => setShowNormalized(true)}
+                          style={{
+                            padding: "2px 9px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                            border: `1px solid ${showNormalized ? "rgba(14,165,233,0.50)" : "rgba(15,23,42,0.12)"}`,
+                            background: showNormalized ? "rgba(14,165,233,0.12)" : "rgba(255,255,255,0.75)",
+                            color: showNormalized ? "#0369a1" : THEME.text,
+                            cursor: "pointer",
+                          }}
+                        >
+                          AI投入用
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div style={{
                     background: "rgba(248,250,252,0.9)",
-                    border: "1px solid rgba(15,23,42,0.10)",
+                    border: `1px solid ${showNormalized ? "rgba(14,165,233,0.18)" : "rgba(15,23,42,0.10)"}`,
                     borderRadius: 8, padding: "10px 12px",
                     fontSize: 13,
                     overflowY: "auto", maxHeight: 200,
@@ -636,6 +670,12 @@ export default function SendTab({
                     whiteSpace: "pre-wrap", wordBreak: "break-all",
                   }}>
                     {(() => {
+                      if (showNormalized) {
+                        // normalized 表示（ハイライトなし・整形済みテキストをそのまま表示）
+                        const norm = ocrResult.text_normalized || "";
+                        return norm || "（整形済みテキストがありません）";
+                      }
+                      // raw 表示（既存ロジック: アラートキーワードをハイライト）
                       const text = ocrResult.text || "";
                       if (!text) return "（テキストを抽出できませんでした）";
                       const segments = buildHighlightedSegments(text, ocrResult.alerts || []);
