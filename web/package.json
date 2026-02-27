@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "mkdir -p public/vendor && curl -fsSL 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js' -o public/vendor/opencv.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
