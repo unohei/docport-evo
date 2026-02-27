@@ -20,6 +20,7 @@ export default function ScanCapture({
   onCancel,
   filenameBase = "scan",
   preferRearCamera = true,
+  autoStart = false,
 }) {
   const videoRef = useRef(null);
   const rawCanvasRef = useRef(null); // キャプチャ/解析用（元画像）
@@ -31,6 +32,7 @@ export default function ScanCapture({
   const rafRef = useRef(null);
   const lastGuideAtRef = useRef(0);
   const lastQuadNormRef = useRef(null); // { pts: [{x,y}...], ok: bool }
+  const didAutoStartRef = useRef(false);
 
   const [camOn, setCamOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -67,6 +69,13 @@ export default function ScanCapture({
     check();
     return () => t && clearTimeout(t);
   }, []);
+
+  // ---- autoStart: mount直後にカメラを起動 ----
+  useEffect(() => {
+    if (!autoStart || !canUseMedia || didAutoStartRef.current) return;
+    didAutoStartRef.current = true;
+    startCamera();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- helpers (OpenCV) ----
   const cv = useMemo(

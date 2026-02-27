@@ -34,4 +34,5 @@ venv/
 .venv/
 api/venv/
 api/.venv/
-EOF
+# Large vendor files (self-hosted, not committed)
+web/public/vendor/opencv.js

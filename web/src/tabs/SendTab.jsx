@@ -150,8 +150,8 @@ export default function SendTab({
   const isPdfFile  = pdfFile?.type === "application/pdf";
   const isDocxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const isXlsxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
+  const [scanOpen, setScanOpen] = useState(false);
 
   // ---- 抽出テキスト表示切替（raw / normalized） ----
   const [showNormalized, setShowNormalized] = useState(false);
@@ -347,34 +347,27 @@ export default function SendTab({
               background: "rgba(255,255,255,0.65)",
             }}>
               <SegButton
-                active={inputMode === "drop"} hovered={hoverMode === "drop"}
+                active={true} hovered={hoverMode === "drop"}
                 onMouseEnter={() => setHoverMode("drop")} onMouseLeave={() => setHoverMode(null)}
-                onClick={() => setInputMode("drop")} icon="📎"
+                onClick={() => {}} icon="📎"
               >
                 ドラッグで置く
               </SegButton>
               <SegButton
-                active={inputMode === "scan"} hovered={hoverMode === "scan"}
+                active={false} hovered={hoverMode === "scan"}
                 onMouseEnter={() => setHoverMode("scan")} onMouseLeave={() => setHoverMode(null)}
-                onClick={() => setInputMode("scan")} icon="📷"
+                onClick={() => setScanOpen(true)} icon="📷"
               >
                 スキャンで置く
               </SegButton>
             </div>
             <div style={{ marginTop: 12 }}>
-              {inputMode === "drop" ? (
-                <FileDrop
-                  onFile={(file) => onFileDrop(file)}
-                  allowedTypes={allowedTypes}
-                  title="ここに置く"
-                  hint="PDF / 画像 / Word / Excel / PowerPoint"
-                />
-              ) : (
-                <ScanCapture
-                  filenameBase="紹介状" preferRearCamera={true}
-                  onDone={(file) => onFileDrop(file)} onCancel={() => {}}
-                />
-              )}
+              <FileDrop
+                onFile={(file) => onFileDrop(file)}
+                allowedTypes={allowedTypes}
+                title="ここに置く"
+                hint="PDF / 画像 / Word / Excel / PowerPoint"
+              />
             </div>
           </Card>
         </>
@@ -878,6 +871,26 @@ export default function SendTab({
             </div>
           </div>
         </Card>
+      )}
+
+      {/* ===== スキャンモーダル（全画面オーバーレイ） ===== */}
+      {scanOpen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", alignItems: "flex-start", justifyContent: "center",
+          overflowY: "auto", padding: "16px",
+        }}>
+          <div style={{ width: "100%", maxWidth: 600, marginTop: 20 }}>
+            <ScanCapture
+              filenameBase="紹介状"
+              preferRearCamera={true}
+              autoStart={true}
+              onDone={(file) => { onFileDrop(file); setScanOpen(false); }}
+              onCancel={() => setScanOpen(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
