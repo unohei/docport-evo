@@ -31,6 +31,10 @@
 #    (D) 残存セル接頭辞除去  (E) 連続空行整理  (F) 8000文字上限
 # 2. _ocr_impl: structured / alerts / 要配慮キーワードを text_normalized を入力に変更
 # 3. レスポンスに text_normalized を追加（text=raw は維持）
+#
+# 変更点（v2.4.1 _normalize_text ルールC の安全ガード追加）:
+# 1. 次行が _HEADING_KEYWORDS に含まれる場合は結合しない（別見出しへの誤結合を防止）
+# 2. 変更は _normalize_text の条件1行のみ（他ルール・認証・RLS は無変更）
 
 import base64
 import io
@@ -697,7 +701,9 @@ def _normalize_text(raw: str) -> str:
         条件: パイプ区切り かつ 各パートが列名プレフィクス（A:, BC: 等）で始まる
         変換: 偶数インデックス=キー, 奇数インデックス=値 のペアにまとめる
     (C) 対象見出し単独行 + 次行の結合 "主訴\n右下腹部痛" → "主訴: 右下腹部痛"
-        対象: _HEADING_KEYWORDS に含まれる行のみ
+        条件: 見出し行が _HEADING_KEYWORDS に完全一致
+              かつ 次行が空でなく、かつ次行が _HEADING_KEYWORDS に含まれない
+        → 次行のみ結合してスキップ（過剰結合禁止、空行/別見出しは結合しない）
     (D) 残存セル接頭辞除去（行頭の "A:" "BC:" 等を除去）
     (E) 連続空行を最大2行まで
     (F) 最大 _NORMALIZED_MAX_CHARS 文字で切り詰め + "...(truncated)"
@@ -739,10 +745,11 @@ def _normalize_text(raw: str) -> str:
                 continue
 
         # (C) 見出し単独行 + 次行の結合
+        # 安全ガード: 次行が別の見出しである場合は結合しない（過剰結合防止）
         stripped_line = line.strip()
         if stripped_line in _HEADING_KEYWORDS and i + 1 < len(lines):
             next_line = lines[i + 1].strip()
-            if next_line:
+            if next_line and next_line not in _HEADING_KEYWORDS:
                 out.append(f"{stripped_line}: {next_line}")
                 i += 2
                 continue
