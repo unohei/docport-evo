@@ -11,6 +11,13 @@
 # 変更点（v2.1 presign-download の拡張子バリデーション修正）:
 # 1. _assert_download_access の file_key 検証を ".pdf" ハードコードから ALLOWED_MIME_EXT 値セットに変更
 #    → xlsx / docx / pptx / png / jpg など PDF 以外のファイルも presign-download できるように修正
+#
+# 変更点（v2.2 DOCX テキスト抽出を /api/ocr に統合）:
+# 1. _extract_docx_text: python-docx でバイト列から本文テキストを抽出（Vision OCR 不使用）
+# 2. _ocr_impl: file_key の拡張子が .docx の場合は DOCX 抽出ルートへ分岐
+# 3. meta に source_type: "pdf"|"docx" を追加
+# 4. structured / alerts は PDF OCR と同じ後段処理を流用
+# 5. DOCX 抽出失敗時は graceful degradation（text="" + warnings に理由を追加、500 にしない）
 
 import base64
 import io
@@ -469,6 +476,21 @@ def _render_pdf_to_png_list(pdf_bytes: bytes) -> tuple[list[bytes], int]:
     return png_list, total_pages
 
 
+def _extract_docx_text(docx_bytes: bytes) -> tuple[str, list[str]]:
+    """
+    python-docx で DOCX 本文テキストを抽出する。
+    - 段落テキストを順に連結（表・ヘッダー・フッターは含まない）
+    - 失敗時は空文字 + 警告を返す（graceful degradation: 500 にしない）
+    """
+    try:
+        from docx import Document as DocxDocument  # noqa: PLC0415
+        doc = DocxDocument(io.BytesIO(docx_bytes))
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        return "\n".join(paragraphs), []
+    except Exception as e:
+        return "", [f"DOCX抽出失敗: {e}。内容を確認の上、送信可否を判断してください。"]
+
+
 def _call_gemini_ocr(png_list: list[bytes], timeout: float) -> str:
     """
     Gemini Vision API でページ画像をまとめてOCRする。
@@ -679,14 +701,14 @@ def _ocr_impl(
     user: dict,
 ) -> dict:
     """
-    画像OCR実装。
-    1. file_key バリデーション
-    2. JWT + hospital_id 確認（送信前PDF＝まだ documents 未登録のため DB照合はしない）
-    3. R2 から PDF 取得（Presigned GET）+ サイズチェック
-    4. pypdfium2 でページ画像化（最大3ページ）
-    5. Gemini or OpenAI Vision API で OCR
-    6. OpenAI gpt-4o で構造化JSON生成（失敗時は structured=null）
-    7. 結果テキスト + メタ + 警告 + 構造化JSON を返す
+    PDF画像OCR / DOCXテキスト抽出の共通実装。
+    1. file_key バリデーション（.pdf / .docx のみ受け付ける）
+    2. JWT + hospital_id 確認（送信前ファイル＝まだ documents 未登録のため DB照合はしない）
+    3. R2 からファイル取得（Presigned GET）+ サイズチェック
+    4a. PDF: pypdfium2 でページ画像化 → Gemini/OpenAI Vision OCR
+    4b. DOCX: python-docx でテキスト抽出（Vision API 不使用。失敗は graceful degradation）
+    5. OpenAI gpt-4o で構造化JSON生成（失敗時は structured=null）
+    6. 結果テキスト + メタ（source_type 含む）+ 警告 + 構造化JSON + アラート を返す
     """
     start_time = time.time()
 
@@ -699,8 +721,11 @@ def _ocr_impl(
         return remaining
 
     # ---- file_key バリデーション（パストラバーサル防止） ----
-    if not body.file_key.startswith("documents/") or not body.file_key.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="無効な file_key です")
+    # 対応拡張子: pdf / docx
+    fkey = body.file_key
+    ext = fkey.rsplit(".", 1)[-1].lower() if "." in fkey else ""
+    if not fkey.startswith("documents/") or ext not in {"pdf", "docx"}:
+        raise HTTPException(status_code=400, detail="無効な file_key です（対応: .pdf / .docx）")
 
     # ---- JWT + hospital_id 確認 ----
     # OCR は「送信前」専用のため documents テーブルにまだレコードが存在しない。
@@ -712,7 +737,7 @@ def _ocr_impl(
 
     _remaining()
 
-    # ---- R2 から PDF を取得（Presigned GET、有効期限60秒） ----
+    # ---- R2 からファイルを取得（Presigned GET、有効期限60秒） ----
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
@@ -721,71 +746,82 @@ def _ocr_impl(
 
     presigned_url = s3.generate_presigned_url(
         ClientMethod="get_object",
-        Params={"Bucket": bucket, "Key": body.file_key},
+        Params={"Bucket": bucket, "Key": fkey},
         ExpiresIn=60,
     )
 
     try:
         with urllib.request.urlopen(presigned_url, timeout=10) as resp:
-            pdf_bytes = resp.read()
+            file_bytes = resp.read()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"PDF取得失敗: {e}")
+        raise HTTPException(status_code=400, detail=f"ファイル取得失敗: {e}")
 
-    # ---- サイズチェック ----
-    if len(pdf_bytes) > _MAX_PDF_SIZE_BYTES:
-        mb = len(pdf_bytes) / 1024 / 1024
+    # ---- サイズチェック（PDF / DOCX 共通） ----
+    if len(file_bytes) > _MAX_PDF_SIZE_BYTES:
+        mb = len(file_bytes) / 1024 / 1024
         raise HTTPException(
             status_code=400,
-            detail=f"PDFサイズが上限（10MB）を超えています（{mb:.1f}MB）",
+            detail=f"ファイルサイズが上限（10MB）を超えています（{mb:.1f}MB）",
         )
 
     _remaining()
 
-    # ---- pypdfium2 でページ画像化 ----
-    try:
-        png_list, total_pages = _render_pdf_to_png_list(pdf_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF画像化失敗: {e}")
+    # ---- ファイル種別ごとのテキスト抽出 ----
+    total_pages: int | None = None
+    extract_warnings: list[str] = []
 
-    if not png_list:
-        raise HTTPException(status_code=400, detail="PDFにページが含まれていません")
+    if ext == "docx":
+        # DOCX: ローカル抽出（Vision API 不要・高速）
+        text, extract_warnings = _extract_docx_text(file_bytes)
+        source_type = "docx"
 
-    # ---- APIキー確認 ----
-    if not GEMINI_API_KEY and not OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="APIキーが未設定です（GEMINI_API_KEY または OPENAI_API_KEY を設定してください）",
-        )
-
-    remaining = _remaining()
-
-    # ---- OCR 実行（Gemini 優先、なければ OpenAI） ----
-    if GEMINI_API_KEY:
-        text = _call_gemini_ocr(png_list, timeout=remaining)
     else:
-        text = _call_openai_ocr(png_list, timeout=remaining)
+        # PDF: pypdfium2 でページ画像化 → Vision OCR
+        try:
+            png_list, total_pages = _render_pdf_to_png_list(file_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PDF画像化失敗: {e}")
 
-    # ---- テキスト正規化（コードフェンス除去） ----
-    text = _strip_code_fences(text)
+        if not png_list:
+            raise HTTPException(status_code=400, detail="PDFにページが含まれていません")
+
+        if not GEMINI_API_KEY and not OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="APIキーが未設定です（GEMINI_API_KEY または OPENAI_API_KEY を設定してください）",
+            )
+
+        remaining = _remaining()
+        if GEMINI_API_KEY:
+            text = _call_gemini_ocr(png_list, timeout=remaining)
+        else:
+            text = _call_openai_ocr(png_list, timeout=remaining)
+
+        text = _strip_code_fences(text)
+        source_type = "pdf"
 
     elapsed_ms = int((time.time() - start_time) * 1000)
+    stripped = text.strip()
 
-    # ---- メタ情報 ----
+    # ---- メタ情報（source_type を追加） ----
     meta = {
-        "page_count": total_pages,
-        "char_count": len(text.strip()),
-        "file_key": body.file_key,
+        "page_count": total_pages,   # DOCX の場合は None（ページ概念なし）
+        "char_count": len(stripped),
+        "file_key": fkey,
         "elapsed_ms": elapsed_ms,
+        "source_type": source_type,  # "pdf" | "docx"
     }
 
     # ---- 警告生成 ----
-    warnings: list[str] = []
-    stripped = text.strip()
+    # extract_warnings: DOCX 抽出失敗メッセージがあればそのまま引き継ぐ
+    warnings: list[str] = list(extract_warnings)
     if not stripped:
-        warnings.append(
-            "画像OCRでもテキストを抽出できませんでした。"
-            "内容をご確認の上、送信可否を判断してください。"
-        )
+        if not warnings:
+            label = "画像OCRでも" if ext == "pdf" else "DOCXから"
+            warnings.append(
+                f"{label}テキストを抽出できませんでした。"
+                "内容をご確認の上、送信可否を判断してください。"
+            )
     else:
         found = [kw for kw in _SENSITIVE_KEYWORDS if kw in stripped]
         if found:

@@ -13,6 +13,7 @@ Pillow
 pydantic==2.12.5
 pydantic_core==2.41.5
 pypdfium2
+python-docx
 python-jose[cryptography]==3.3.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1

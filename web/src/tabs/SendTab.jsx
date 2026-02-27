@@ -147,7 +147,8 @@ export default function SendTab({
 }) {
   // FileDrop に渡す許可 MIME リスト（allowedMimeExt が未渡しなら PDF のみ）
   const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
-  const isPdfFile = pdfFile?.type === "application/pdf";
+  const isPdfFile  = pdfFile?.type === "application/pdf";
+  const isDocxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const [inputMode, setInputMode] = useState("drop");
   const [hoverMode, setHoverMode] = useState(null);
 
@@ -496,8 +497,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* PDF以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
-              {uploadStatus === "ready" && !isPdfFile && (
+              {/* PDF・DOCX 以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
+              {uploadStatus === "ready" && !isPdfFile && !isDocxFile && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "10px 14px", borderRadius: 10,
@@ -528,8 +529,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* チェックON + PDF + OCR結果あり */}
-              {uploadStatus === "ready" && checkMode && isPdfFile && ocrResult && (
+              {/* チェックON + PDF or DOCX + 抽出結果あり */}
+              {uploadStatus === "ready" && checkMode && (isPdfFile || isDocxFile) && ocrResult && (
                 <div>
                   {/* 1. warnings */}
                   {ocrResult.warnings?.length > 0 && (
@@ -553,7 +554,9 @@ export default function SendTab({
 
                   {/* 2. meta */}
                   <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 8, color: THEME.text }}>
-                    ページ数: {ocrResult.meta?.page_count} ／ 文字数: {ocrResult.meta?.char_count}
+                    {ocrResult.meta?.page_count != null && `ページ数: ${ocrResult.meta.page_count} ／ `}
+                    文字数: {ocrResult.meta?.char_count}
+                    {ocrResult.meta?.source_type === "docx" && " ／ DOCX抽出"}
                   </div>
 
                   {/* 3. alerts（要配慮注意喚起） */}

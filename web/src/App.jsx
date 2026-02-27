@@ -521,7 +521,8 @@ export default function App() {
     setPendingFileKey(null);
     setUploadStatus("uploading");
 
-    const isPdf = file.type === "application/pdf";
+    const isPdf  = file.type === "application/pdf";
+    const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     try {
       // R2 アップロード（content_type を渡して正しい拡張子・MIME で presign）
@@ -529,19 +530,19 @@ export default function App() {
       await putFile(upload_url, file);
       setPendingFileKey(file_key);
 
-      // PDF以外: OCRをスキップして即 ready（チェックモード問わず）
-      if (!isPdf) {
+      // PDF・DOCX 以外: テキスト抽出をスキップして即 ready（チェックモード問わず）
+      if (!isPdf && !isDocx) {
         setUploadStatus("ready");
         return;
       }
 
-      // チェックOFF: OCR呼ばない
+      // チェックOFF: 抽出しない
       if (!checkMode) {
         setUploadStatus("ready");
         return;
       }
 
-      // チェックON + PDF: OCR実行
+      // チェックON + PDF or DOCX: 抽出実行
       setUploadStatus("ocr_running");
       const token = session?.access_token;
       const res = await fetch(`${API_BASE}/ocr`, {
