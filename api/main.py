@@ -40,6 +40,12 @@
 # 1. 見出し判定: 全角/半角スペース除去後に _HEADING_KEYWORDS 完全一致、行長<15、":" "：" なし
 # 2. 次行判定: 非空・長さ>1・":" "：" なし・見出しでない の4条件に強化
 # 3. 既に "主訴:" 形式の行は ":" チェックにより自動スキップ（二重処理なし）
+#
+# 変更点（v2.5 見出し正規化キーを NFKC+ゼロ幅文字除去で強化 + debug モード追加）:
+# 1. _norm_heading_key: NFKC正規化→strip→空白/ゼロ幅文字除去で文字コード揺れを吸収
+# 2. _HEADINGS_NORM: _norm_heading_key で正規化済みのキー集合（判定に使用）
+# 3. _normalize_text: debug=True のとき heading_matches/joined_pairs を返す（本番影響なし）
+# 4. OcrRequest mode="debug": full と同等処理 + debug_normalize をレスポンスに追加
 
 import base64
 import io
@@ -47,6 +53,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -678,6 +685,23 @@ def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
 # ----------------------------
 # テキスト正規化ヘルパー
 # ----------------------------
+def _norm_heading_key(s: str) -> str:
+    """
+    見出し判定用の正規化キーを生成する。
+    NFKC 正規化 → strip → 全角/半角スペース・ゼロ幅文字を除去。
+    文字コードの揺れ（半角カナ、結合文字、不可視文字等）を吸収する。
+    """
+    s = unicodedata.normalize("NFKC", s)
+    s = s.strip()
+    for ch in ("\u0020", "\u3000", "\u200b", "\u200c", "\u200d", "\ufeff"):
+        s = s.replace(ch, "")
+    return s
+
+
+# NFKC 正規化済みの見出しキー集合（_norm_heading_key と同じ変換で生成）
+_HEADINGS_NORM: frozenset[str] = frozenset(_norm_heading_key(h) for h in _HEADING_KEYWORDS)
+
+
 def _strip_code_fences(text: str) -> str:
     """
     OCR結果がコードフェンス（```...```）で全体を囲まれている場合に本文のみを返す。
@@ -697,7 +721,11 @@ def _strip_code_fences(text: str) -> str:
     return inner.strip()
 
 
-def _normalize_text(raw: str) -> str:
+def _normalize_text(
+    raw: str,
+    *,
+    debug: bool = False,
+) -> tuple[str, dict | None]:
     """
     AI投入用テキストの正規化。表示用の raw は変更しない（呼び出し元で使い分ける）。
 
@@ -706,14 +734,21 @@ def _normalize_text(raw: str) -> str:
         条件: パイプ区切り かつ 各パートが列名プレフィクス（A:, BC: 等）で始まる
         変換: 偶数インデックス=キー, 奇数インデックス=値 のペアにまとめる
     (C) 対象見出し単独行 + 次行の結合 "主訴\n右下腹部痛" → "主訴: 右下腹部痛"
-        見出し判定: 全角/半角スペース除去後に _HEADING_KEYWORDS 完全一致
+        見出し判定: _norm_heading_key で正規化後 _HEADINGS_NORM に完全一致
                     かつ 行長 < 15、":" "：" を含まない
-        次行判定:   非空、長さ > 1、":" "：" を含まない、_HEADING_KEYWORDS に含まれない
+        次行判定:   非空、長さ > 1、":" "：" を含まない、_HEADINGS_NORM に含まれない
         既に "主訴:" 形式の行は ":" チェックで自動スキップ（二重処理なし）
     (D) 残存セル接頭辞除去（行頭の "A:" "BC:" 等を除去）
     (E) 連続空行を最大2行まで
     (F) 最大 _NORMALIZED_MAX_CHARS 文字で切り詰め + "...(truncated)"
+
+    戻り値: (normalized_text, debug_info)
+            debug=True のとき debug_info に heading_matches / joined_pairs を格納。
+            debug=False のとき debug_info は None（本番影響なし）。
     """
+    dbg_matches: list[dict] = []
+    dbg_pairs:   list[dict] = []
+
     # (A)
     text = _strip_code_fences(raw)
 
@@ -727,9 +762,7 @@ def _normalize_text(raw: str) -> str:
         if "|" in line:
             parts = [p.strip() for p in line.split("|")]
             if len(parts) >= 2 and all(_CELL_PREFIX_RE.match(p) for p in parts if p):
-                # 列名プレフィクスを除去して値リストを作成
                 vals = [_CELL_PREFIX_RE.sub("", p).strip() for p in parts if p]
-                # 偶数=キー / 奇数=値 のペアで "キー: 値" を生成
                 pairs: list[str] = []
                 j = 0
                 while j < len(vals):
@@ -751,28 +784,47 @@ def _normalize_text(raw: str) -> str:
                 continue
 
         # (C) 見出し単独行 + 次行の結合（強化版）
-        # 見出し判定: スペース除去後 _HEADING_KEYWORDS 完全一致、行長<15、":" "：" なし
-        # 次行判定:   非空、長さ>1、":" "：" なし、見出しでない
+        # 見出し判定: _norm_heading_key（NFKC + ゼロ幅文字除去）で正規化後 _HEADINGS_NORM に完全一致
+        # 次行判定:   非空・長さ>1・":" "：" なし・_HEADINGS_NORM に含まれない
         # 既に "主訴:" 形式の行は ":" チェックで自動スキップ
         stripped_line = line.strip()
-        candidate = stripped_line.replace(" ", "").replace("\u3000", "")
+        candidate = _norm_heading_key(stripped_line)
+        matched = candidate in _HEADINGS_NORM
+
+        # debug: 見出し候補行（短く ":" なし）の一致結果を記録（不可視文字の特定に使用）
+        if debug and len(stripped_line) < 15 and ":" not in stripped_line and "：" not in stripped_line:
+            dbg_matches.append({
+                "raw_line":   line,
+                "stripped":   stripped_line,
+                "candidate":  candidate,
+                "matched":    matched,
+                "codepoints": [ord(c) for c in stripped_line],
+            })
+
         if (
-            candidate in _HEADING_KEYWORDS
+            matched
             and len(stripped_line) < 15
             and ":" not in stripped_line
             and "：" not in stripped_line
             and i + 1 < len(lines)
         ):
             next_line = lines[i + 1].strip()
-            next_cand = next_line.replace(" ", "").replace("\u3000", "")
+            next_cand = _norm_heading_key(next_line)
             if (
                 next_line
                 and len(next_line) > 1
                 and ":" not in next_line
                 and "：" not in next_line
-                and next_cand not in _HEADING_KEYWORDS
+                and next_cand not in _HEADINGS_NORM
             ):
-                out.append(f"{candidate}: {next_line}")
+                result_line = f"{candidate}: {next_line}"
+                if debug:
+                    dbg_pairs.append({
+                        "heading":     candidate,
+                        "body":        next_line,
+                        "result_line": result_line,
+                    })
+                out.append(result_line)
                 i += 2
                 continue
 
@@ -793,7 +845,11 @@ def _normalize_text(raw: str) -> str:
     if len(text) > _NORMALIZED_MAX_CHARS:
         text = text[:_NORMALIZED_MAX_CHARS] + "...(truncated)"
 
-    return text
+    debug_info = (
+        {"heading_matches": dbg_matches, "joined_pairs": dbg_pairs}
+        if debug else None
+    )
+    return text, debug_info
 
 
 # ----------------------------
@@ -892,7 +948,10 @@ def _structure_referral_text(
 # ----------------------------
 class OcrRequest(BaseModel):
     file_key: str
-    mode: str = "full"  # "full" | "text_only"（text_only は structured をスキップ）
+    mode: str = "full"
+    # "full"      : structured + alerts を実行（通常）
+    # "text_only" : structured をスキップ
+    # "debug"     : full と同等 + debug_normalize をレスポンスに追加（本番以外で使用）
 
 
 def _ocr_impl(
@@ -1010,7 +1069,8 @@ def _ocr_impl(
     stripped = text.strip()
 
     # ---- AI投入用テキストの正規化（raw は stripped で保持） ----
-    normalized = _normalize_text(stripped)
+    _debug_mode = body.mode == "debug"
+    normalized, _debug_norm = _normalize_text(stripped, debug=_debug_mode)
 
     # ---- メタ情報（source_type を追加） ----
     meta = {
@@ -1047,7 +1107,7 @@ def _ocr_impl(
     # ---- アラート生成（normalized を入力。キーワードマッチ方式、断定禁止） ----
     alerts = _generate_alerts(normalized) if normalized else []
 
-    return {
+    result: dict = {
         "text": stripped,
         "text_normalized": normalized,
         "meta": meta,
@@ -1055,6 +1115,10 @@ def _ocr_impl(
         "structured": structured,
         "alerts": alerts,
     }
+    # debug モードのときのみ debug_normalize を追加（本番レスポンスには含めない）
+    if _debug_norm is not None:
+        result["debug_normalize"] = _debug_norm
+    return result
 
 
 # ----------------------------
