@@ -46,6 +46,12 @@
 # 2. _HEADINGS_NORM: _norm_heading_key で正規化済みのキー集合（判定に使用）
 # 3. _normalize_text: debug=True のとき heading_matches/joined_pairs を返す（本番影響なし）
 # 4. OcrRequest mode="debug": full と同等処理 + debug_normalize をレスポンスに追加
+#
+# 変更点（v2.5.1 ルールCのバグ修正: "A:主訴" 形式でも見出し結合が発動するよう修正）:
+# 根本原因: (B)セル整形→(C)見出し結合→(D)接頭辞除去 の順で実行するため、
+#           (C) 時点では "A:主訴" のまま → ":" を含む → 見出し判定が常にスキップされていた。
+# 修正: ルールC内で _CELL_PREFIX_RE を先に適用した heading_text / next_body で判定・出力する。
+#       処理順（B→C→D）・他ルール・認証・RLS は変更なし。
 
 import base64
 import io
@@ -784,44 +790,48 @@ def _normalize_text(
                 continue
 
         # (C) 見出し単独行 + 次行の結合（強化版）
-        # 見出し判定: _norm_heading_key（NFKC + ゼロ幅文字除去）で正規化後 _HEADINGS_NORM に完全一致
-        # 次行判定:   非空・長さ>1・":" "：" なし・_HEADINGS_NORM に含まれない
-        # 既に "主訴:" 形式の行は ":" チェックで自動スキップ
+        # 【重要】XLSX では "(B)セル整形" を通過しなかった単独セル行が "A:主訴" の形で残る。
+        # (D)の接頭辞除去はこの後なので、ここで _CELL_PREFIX_RE を先に剥がして判定する。
+        # → "A:主訴" → heading_text="主訴" → _HEADINGS_NORM に一致 → 結合発動
+        # → PDF/DOCX には "A:" 接頭辞がないため heading_text == stripped_line となり既存動作を維持
         stripped_line = line.strip()
-        candidate = _norm_heading_key(stripped_line)
+        heading_text = _CELL_PREFIX_RE.sub("", stripped_line).strip()   # 接頭辞を先に除去
+        candidate = _norm_heading_key(heading_text)
         matched = candidate in _HEADINGS_NORM
 
         # debug: 見出し候補行（短く ":" なし）の一致結果を記録（不可視文字の特定に使用）
-        if debug and len(stripped_line) < 15 and ":" not in stripped_line and "：" not in stripped_line:
+        if debug and len(heading_text) < 15 and ":" not in heading_text and "：" not in heading_text:
             dbg_matches.append({
-                "raw_line":   line,
-                "stripped":   stripped_line,
-                "candidate":  candidate,
-                "matched":    matched,
-                "codepoints": [ord(c) for c in stripped_line],
+                "raw_line":    line,
+                "stripped":    stripped_line,
+                "heading_text": heading_text,
+                "candidate":   candidate,
+                "matched":     matched,
+                "codepoints":  [ord(c) for c in heading_text],
             })
 
         if (
             matched
-            and len(stripped_line) < 15
-            and ":" not in stripped_line
-            and "：" not in stripped_line
+            and len(heading_text) < 15
+            and ":" not in heading_text
+            and "：" not in heading_text
             and i + 1 < len(lines)
         ):
             next_line = lines[i + 1].strip()
-            next_cand = _norm_heading_key(next_line)
+            next_body = _CELL_PREFIX_RE.sub("", next_line).strip()    # 次行も接頭辞を先に除去
+            next_cand = _norm_heading_key(next_body)
             if (
-                next_line
-                and len(next_line) > 1
-                and ":" not in next_line
-                and "：" not in next_line
+                next_body
+                and len(next_body) > 1
+                and ":" not in next_body
+                and "：" not in next_body
                 and next_cand not in _HEADINGS_NORM
             ):
-                result_line = f"{candidate}: {next_line}"
+                result_line = f"{candidate}: {next_body}"
                 if debug:
                     dbg_pairs.append({
                         "heading":     candidate,
-                        "body":        next_line,
+                        "body":        next_body,
                         "result_line": result_line,
                     })
                 out.append(result_line)
