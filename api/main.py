@@ -24,11 +24,19 @@
 # 2. 連続空行 _XLSX_MAX_EMPTY_ROWS 超でシート打ち切り、全体 _XLSX_MAX_CHARS 超で切り詰め+警告
 # 3. _ocr_impl: .xlsx 拡張子を許可し XLSX 抽出ルートへ分岐
 # 4. source_type: "xlsx" を meta に追加、structured/alerts は既存後段処理を流用
+#
+# 変更点（v2.4 text_normalized（AI投入用正規化テキスト）を追加）:
+# 1. _normalize_text: raw から AI 投入用テキストを生成（表示用 raw は変更しない）
+#    (A) コードフェンス除去  (B) セル形式整形  (C) 見出し+次行結合
+#    (D) 残存セル接頭辞除去  (E) 連続空行整理  (F) 8000文字上限
+# 2. _ocr_impl: structured / alerts / 要配慮キーワードを text_normalized を入力に変更
+# 3. レスポンスに text_normalized を追加（text=raw は維持）
 
 import base64
 import io
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -402,6 +410,16 @@ _OCR_TIMEOUT_SECS = 30                    # 処理全体のタイムアウト（
 _XLSX_MAX_CHARS = 20_000      # XLSX 全体テキスト上限文字数
 _XLSX_MAX_EMPTY_ROWS = 30     # 連続空行がこれ以上続いたらシート打ち切り
 
+_NORMALIZED_MAX_CHARS = 8_000   # text_normalized の最大文字数（AI投入用）
+
+# 見出し+次行結合の対象キーワード（ルールC）
+_HEADING_KEYWORDS = frozenset([
+    "主訴", "現病歴", "既往歴", "内服薬", "アレルギー", "検査所見", "紹介目的",
+])
+
+# セル接頭辞パターン（行頭の "A:", "AB:", "ABC:" など）
+_CELL_PREFIX_RE = re.compile(r"^[A-Z]{1,3}:")
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
@@ -670,6 +688,85 @@ def _strip_code_fences(text: str) -> str:
     return inner.strip()
 
 
+def _normalize_text(raw: str) -> str:
+    """
+    AI投入用テキストの正規化。表示用の raw は変更しない（呼び出し元で使い分ける）。
+
+    (A) コードフェンス除去（_strip_code_fences 流用）
+    (B) XLSX セル形式 "A:ラベル | B:値 | ..." → "ラベル: 値 / ..."
+        条件: パイプ区切り かつ 各パートが列名プレフィクス（A:, BC: 等）で始まる
+        変換: 偶数インデックス=キー, 奇数インデックス=値 のペアにまとめる
+    (C) 対象見出し単独行 + 次行の結合 "主訴\n右下腹部痛" → "主訴: 右下腹部痛"
+        対象: _HEADING_KEYWORDS に含まれる行のみ
+    (D) 残存セル接頭辞除去（行頭の "A:" "BC:" 等を除去）
+    (E) 連続空行を最大2行まで
+    (F) 最大 _NORMALIZED_MAX_CHARS 文字で切り詰め + "...(truncated)"
+    """
+    # (A)
+    text = _strip_code_fences(raw)
+
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # (B) セル形式行の変換
+        if "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 2 and all(_CELL_PREFIX_RE.match(p) for p in parts if p):
+                # 列名プレフィクスを除去して値リストを作成
+                vals = [_CELL_PREFIX_RE.sub("", p).strip() for p in parts if p]
+                # 偶数=キー / 奇数=値 のペアで "キー: 値" を生成
+                pairs: list[str] = []
+                j = 0
+                while j < len(vals):
+                    if j + 1 < len(vals):
+                        k, v = vals[j], vals[j + 1]
+                        if k and v:
+                            pairs.append(f"{k}: {v}")
+                        elif k:
+                            pairs.append(k)
+                        elif v:
+                            pairs.append(v)
+                        j += 2
+                    else:
+                        if vals[j]:
+                            pairs.append(vals[j])
+                        j += 1
+                out.append(" / ".join(pairs))
+                i += 1
+                continue
+
+        # (C) 見出し単独行 + 次行の結合
+        stripped_line = line.strip()
+        if stripped_line in _HEADING_KEYWORDS and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            if next_line:
+                out.append(f"{stripped_line}: {next_line}")
+                i += 2
+                continue
+
+        out.append(line)
+        i += 1
+
+    text = "\n".join(out)
+
+    # (D) 残存セル接頭辞除去（行頭の "A:", "BC:" 等）
+    text = re.sub(r"(?m)^[A-Z]{1,3}:", "", text)
+
+    # (E) 連続空行を最大2行まで
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    text = text.strip()
+
+    # (F) 最大文字数制限
+    if len(text) > _NORMALIZED_MAX_CHARS:
+        text = text[:_NORMALIZED_MAX_CHARS] + "...(truncated)"
+
+    return text
+
+
 # ----------------------------
 # アラート生成ヘルパー
 # ----------------------------
@@ -883,6 +980,9 @@ def _ocr_impl(
     elapsed_ms = int((time.time() - start_time) * 1000)
     stripped = text.strip()
 
+    # ---- AI投入用テキストの正規化（raw は stripped で保持） ----
+    normalized = _normalize_text(stripped)
+
     # ---- メタ情報（source_type を追加） ----
     meta = {
         "page_count": total_pages,   # DOCX / XLSX の場合は None（ページ概念なし）
@@ -892,10 +992,10 @@ def _ocr_impl(
         "source_type": source_type,  # "pdf" | "docx" | "xlsx"
     }
 
-    # ---- 警告生成 ----
-    # extract_warnings: DOCX 抽出失敗メッセージがあればそのまま引き継ぐ
+    # ---- 警告生成（要配慮キーワード検索は normalized を使用） ----
+    # extract_warnings: DOCX/XLSX 抽出失敗メッセージがあればそのまま引き継ぐ
     warnings: list[str] = list(extract_warnings)
-    if not stripped:
+    if not normalized:
         if not warnings:
             label = "画像OCRでも" if ext == "pdf" else f"{ext.upper()}から"
             warnings.append(
@@ -903,22 +1003,29 @@ def _ocr_impl(
                 "内容をご確認の上、送信可否を判断してください。"
             )
     else:
-        found = [kw for kw in _SENSITIVE_KEYWORDS if kw in stripped]
+        found = [kw for kw in _SENSITIVE_KEYWORDS if kw in normalized]
         if found:
             warnings.append(
                 f"要配慮情報の可能性があります：{', '.join(found)} 等のキーワードが含まれています。"
                 "送信前に内容をご確認ください。"
             )
 
-    # ---- 構造化JSON生成（mode=full のみ実行。text_only はスキップして null） ----
+    # ---- 構造化JSON生成（normalized を入力。mode=full のみ実行） ----
     structured = (
-        None if body.mode == "text_only" else _structure_referral_text(stripped)
+        None if body.mode == "text_only" else _structure_referral_text(normalized)
     )
 
-    # ---- アラート生成（キーワードマッチ方式、断定禁止） ----
-    alerts = _generate_alerts(stripped) if stripped else []
+    # ---- アラート生成（normalized を入力。キーワードマッチ方式、断定禁止） ----
+    alerts = _generate_alerts(normalized) if normalized else []
 
-    return {"text": stripped, "meta": meta, "warnings": warnings, "structured": structured, "alerts": alerts}
+    return {
+        "text": stripped,
+        "text_normalized": normalized,
+        "meta": meta,
+        "warnings": warnings,
+        "structured": structured,
+        "alerts": alerts,
+    }
 
 
 # ----------------------------
