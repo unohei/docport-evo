@@ -1163,3 +1163,216 @@ def ocr_compat(
 ):
     """compat: Vite proxy 経由のローカル開発用（/api/ocr と同じ処理）"""
     return _ocr_impl(body, credentials, user)
+
+
+# ----------------------------
+# 港モデル: Supabase PATCH / POST ヘルパー（user JWT 使用）
+# ----------------------------
+def _supabase_patch(path: str, data: dict, jwt_token: str) -> list:
+    """
+    user JWT を使って Supabase REST API を PATCH する（RLS が有効に機能する）。
+    Prefer: return=representation → 更新後の行リストを返す。
+    0件更新（RLS 拒否 or 条件不一致）の場合は空リストを返す。
+    """
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_ANON_KEY が未設定です",
+        )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="PATCH",
+        headers={
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {jwt_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body_bytes = resp.read()
+            return json.loads(body_bytes) if body_bytes else []
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Supabase PATCH エラー: {e.code}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Supabase PATCH 接続エラー: {e}")
+
+
+def _supabase_post_db(path: str, data: dict, jwt_token: str) -> list:
+    """
+    user JWT を使って Supabase REST API に POST する（INSERT）。
+    RLS INSERT ポリシーが必要。失敗は呼び出し元で try/except すること。
+    """
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_ANON_KEY が未設定です",
+        )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {jwt_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body_bytes = resp.read()
+            return json.loads(body_bytes) if body_bytes else []
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Supabase POST エラー: {e.code}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Supabase POST 接続エラー: {e}")
+
+
+# ----------------------------
+# 港モデル: アサイン API
+# ----------------------------
+class AssignRequest(BaseModel):
+    assigned_department: str
+    owner_user_id: str                # 担当者の user ID (UUID)
+    to_status: str | None = None      # 省略時: 現状維持。"IN_PROGRESS" 推奨
+
+
+_ASSIGN_VALID_STATUSES = frozenset(
+    {"UPLOADED", "IN_PROGRESS", "DOWNLOADED", "ARCHIVED", "CANCELLED"}
+)
+
+
+def _assign_impl(
+    doc_id: str,
+    body: AssignRequest,
+    credentials: HTTPAuthorizationCredentials,
+    user: dict,
+) -> dict:
+    """
+    港モデル アサイン処理の共通実装。
+    1. JWT → hospital_id 取得
+    2. documents GET → to_hospital_id で自院チェック
+    3. documents PATCH（owner_user_id / assigned_department / assigned_at / status）
+    4. document_logs INSERT（best-effort: 失敗しても 500 にしない）
+    """
+    jwt_token = credentials.credentials
+    user_id = user.get("sub", "")
+    hospital_id = _get_hospital_id(user_id, jwt_token)
+
+    # ---- doc_id バリデーション（UUID 形式のみ許可） ----
+    doc_id_stripped = doc_id.strip()
+    try:
+        # UUID 形式チェック（簡易）
+        uuid.UUID(doc_id_stripped)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="無効なドキュメントIDです")
+
+    doc_id_enc = urllib.parse.quote(doc_id_stripped, safe="")
+
+    # ---- 対象ドキュメント取得（RLS: to_hospital_id=自院のみ返る） ----
+    rows = _supabase_get(
+        f"documents?id=eq.{doc_id_enc}&select=id,status,to_hospital_id,owner_user_id",
+        jwt_token,
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail="ドキュメントが見つかりません（権限なし）"
+        )
+
+    doc = rows[0]
+    if doc.get("to_hospital_id") != hospital_id:
+        raise HTTPException(
+            status_code=403, detail="自院宛のドキュメントのみアサインできます"
+        )
+
+    old_status = doc.get("status", "UPLOADED")
+    new_status = body.to_status if body.to_status else old_status
+    if new_status not in _ASSIGN_VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"無効なステータス: {new_status}")
+
+    # ---- assigned_at をサーバー時刻で生成 ----
+    assigned_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    update_data: dict = {
+        "owner_user_id": body.owner_user_id,
+        "assigned_department": body.assigned_department,
+        "assigned_at": assigned_at,
+        "status": new_status,
+    }
+
+    # ---- PATCH: 自院ドキュメントのみ（to_hospital_id=自院 を URL に追加して二重防御） ----
+    hospital_id_enc = urllib.parse.quote(hospital_id, safe="")
+    updated = _supabase_patch(
+        f"documents?id=eq.{doc_id_enc}&to_hospital_id=eq.{hospital_id_enc}",
+        update_data,
+        jwt_token,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=403,
+            detail="アサインできませんでした（RLS により更新が拒否されました）",
+        )
+
+    # ---- document_logs INSERT（best-effort） ----
+    try:
+        _supabase_post_db(
+            "document_logs",
+            {
+                "document_id": doc_id_stripped,
+                "action": "ASSIGN",
+                "from_status": old_status,
+                "to_status": new_status,
+                "changed_by": user_id,
+            },
+            jwt_token,
+        )
+    except Exception:
+        pass  # best-effort: ログ失敗でも本体処理を継続
+
+    return {
+        "ok": True,
+        "document_id": doc_id_stripped,
+        "assigned_at": assigned_at,
+        "owner_user_id": body.owner_user_id,
+        "assigned_department": body.assigned_department,
+        "status": new_status,
+    }
+
+
+@app.post("/api/documents/{doc_id}/assign")
+def assign_document_api(
+    doc_id: str,
+    body: AssignRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """
+    POST /api/documents/{doc_id}/assign
+    港モデル: ドキュメントに担当者・部署をアサインする。
+
+    - JWT 必須（自院メンバーのみ）
+    - 自院 to_hospital_id チェック（FastAPI + RLS 二重防御）
+    - documents: owner_user_id / assigned_department / assigned_at / status を更新
+    - document_logs: ASSIGN イベントを記録（best-effort）
+    """
+    return _assign_impl(doc_id, body, credentials, user)
+
+
+@app.post("/documents/{doc_id}/assign")
+def assign_document_compat(
+    doc_id: str,
+    body: AssignRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """compat: Vite proxy 経由のローカル開発用（/api/documents/{id}/assign と同じ処理）"""
+    return _assign_impl(doc_id, body, credentials, user)

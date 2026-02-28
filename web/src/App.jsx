@@ -3,6 +3,13 @@
 // 2. DOC_CREATED（documents INSERT 後）/ OCR_RUN（OCR 実行時）/ STRUCTURED_EDIT（人が修正時）を追加
 // 3. 既存の DOWNLOAD / ARCHIVE / CANCEL も logEvent に移行（失敗しても本体処理を継続）
 // ※ v3.3 以前の変更点はそのまま維持
+//
+// v3.5 変更点（港モデル対応）:
+// 1. SELECT_EXT に assigned_department / owner_user_id / assigned_at を追加
+// 2. hospitalMembers state と fetchMembers() を loadAll() に追加（同院メンバー一覧）
+// 3. assignDocument(docId, dept, ownerId, toStatus?) を追加（FastAPI 経由）
+// 4. statusLabel に "IN_PROGRESS" → "対応中" を追加
+// 5. InboxTab に hospitalMembers / assignDocument / myUserId を追加渡し
 
 console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
@@ -43,6 +50,7 @@ function statusLabel(status) {
   if (status === "DOWNLOADED") return "既読";
   if (status === "CANCELLED") return "取消";
   if (status === "ARCHIVED") return "アーカイブ";
+  if (status === "IN_PROGRESS") return "対応中";
   return status || "-";
 }
 
@@ -56,12 +64,13 @@ function isLegacyKey(fileKey) {
 }
 
 // ---- documents SELECT フィールド定義 ----
-// SELECT_EXT: 新列あり（structured_json 等）。DB未反映環境ではフォールバックへ
-// SELECT_BASE: 従来列のみ。cardSummary は graceful に動作（新列は null 扱い）
+// SELECT_EXT: 新列あり（structured_json + 港モデル列）。DB未反映環境ではフォールバックへ
+// SELECT_BASE: 従来列のみ。cardSummary / 港モデルは graceful に動作（新列は null 扱い）
 const SELECT_EXT =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
-  "original_filename, file_ext, preview_file_key, structured_json, structured_updated_by";
-// SELECT_BASE: structured_* が未反映の環境向けフォールバック。
+  "original_filename, file_ext, preview_file_key, structured_json, structured_updated_by, " +
+  "assigned_department, owner_user_id, assigned_at";
+// SELECT_BASE: 新列が未反映の環境向けフォールバック。
 // original_filename / file_ext / preview_file_key は確実に存在するので含める
 const SELECT_BASE =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
@@ -259,6 +268,7 @@ export default function App() {
   const [hospitals, setHospitals] = useState([]);
   const [inboxDocs, setInboxDocs] = useState([]);
   const [sentDocs, setSentDocs] = useState([]);
+  const [hospitalMembers, setHospitalMembers] = useState([]); // 同院メンバー一覧（港モデル用）
 
   // send form
   const [toHospitalId, setToHospitalId] = useState("");
@@ -417,6 +427,14 @@ export default function App() {
     const { data: sent, error: sentErr } = await fetchDocs("from_hospital_id", prof.hospital_id);
     if (sentErr) return alert(`sent取得に失敗: ${sentErr.message}`);
     setSentDocs(sent ?? []);
+
+    // 同院メンバー一覧（港モデル: 担当者選択用）
+    // RLS に "profiles_select_same_hospital" ポリシーが必要（SQLマイグレーション参照）
+    const { data: members, error: membersErr } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .eq("hospital_id", prof.hospital_id);
+    if (!membersErr) setHospitalMembers(members ?? []);
   };
 
   useEffect(() => {
@@ -452,6 +470,7 @@ export default function App() {
     setPreviewUrl("");
     setPreviewError("");
     setPreviewLoading(false);
+    setHospitalMembers([]);
     // OCR / upload reset
     setUploadStatus("idle");
     setOcrResult(null);
@@ -742,14 +761,36 @@ export default function App() {
     }
   };
 
+  // ---- 港モデル: アサイン ----
+  // toStatus: 省略で現状維持、"IN_PROGRESS" 推奨（部署BOXへ移動）
+  const assignDocument = async (docId, dept, ownerId, toStatus = "IN_PROGRESS") => {
+    const token = session?.access_token;
+    const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/assign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        assigned_department: dept,
+        owner_user_id: ownerId,
+        to_status: toStatus,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await loadAll();
+    return res.json();
+  };
+
   const statusTone = (doc) => {
     const expired = isExpired(doc.expires_at);
     if (expired) return { bg: "rgba(239,68,68,0.12)", text: "#991b1b", border: "rgba(153,27,27,0.22)" };
     switch (doc.status) {
-      case "UPLOADED":   return { bg: "rgba(59,130,246,0.12)", text: "#1d4ed8", border: "rgba(29,78,216,0.22)" };
-      case "DOWNLOADED": return { bg: "rgba(16,185,129,0.12)", text: "#047857", border: "rgba(4,120,87,0.22)" };
-      case "CANCELLED":  return { bg: "rgba(100,116,139,0.14)", text: "#334155", border: "rgba(51,65,85,0.22)" };
-      case "ARCHIVED":   return { bg: "rgba(168,85,247,0.12)", text: "#6d28d9", border: "rgba(109,40,217,0.22)" };
+      case "UPLOADED":     return { bg: "rgba(59,130,246,0.12)", text: "#1d4ed8", border: "rgba(29,78,216,0.22)" };
+      case "DOWNLOADED":   return { bg: "rgba(16,185,129,0.12)", text: "#047857", border: "rgba(4,120,87,0.22)" };
+      case "CANCELLED":    return { bg: "rgba(100,116,139,0.14)", text: "#334155", border: "rgba(51,65,85,0.22)" };
+      case "ARCHIVED":     return { bg: "rgba(168,85,247,0.12)", text: "#6d28d9", border: "rgba(109,40,217,0.22)" };
+      case "IN_PROGRESS":  return { bg: "rgba(245,158,11,0.12)", text: "#92400e", border: "rgba(146,64,14,0.22)" };
       default:           return { bg: "rgba(15,23,42,0.08)", text: "#0f172a", border: "rgba(15,23,42,0.18)" };
     }
   };
@@ -945,6 +986,9 @@ export default function App() {
               nameOf={nameOf} fmt={fmt} isExpired={isExpired}
               openPreview={openInboxPreview} archiveDocument={archiveDocument}
               statusLabel={statusLabel} isLegacyKey={isLegacyKey} statusTone={statusTone}
+              assignDocument={assignDocument}
+              hospitalMembers={hospitalMembers}
+              myUserId={session?.user?.id ?? null}
             />
           )}
           {tab === "sent" && (
