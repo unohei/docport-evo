@@ -4,6 +4,10 @@
 // 3. 既存の DOWNLOAD / ARCHIVE / CANCEL も logEvent に移行（失敗しても本体処理を継続）
 // ※ v3.3 以前の変更点はそのまま維持
 //
+// v3.6 変更点（受け取るUI改善）:
+// 1. filteredInboxDocs から ARCHIVED フィルタを除去（InboxTab のタブ分岐で制御）
+// 2. openInboxPreview の markDownloaded を false に変更（プレビュー閲覧のみ化）
+//
 // v3.5 変更点（港モデル対応）:
 // 1. SELECT_EXT に assigned_department / owner_user_id / assigned_at を追加
 // 2. hospitalMembers state と fetchMembers() を loadAll() に追加（同院メンバー一覧）
@@ -378,7 +382,7 @@ export default function App() {
   const filteredInboxDocs = useMemo(() => {
     let list = inboxDocs;
     if (!showExpired) list = list.filter((d) => !isExpired(d.expires_at));
-    list = list.filter((d) => d.status !== "ARCHIVED");
+    // ARCHIVED フィルタはここでは行わない。InboxTab のタブ分岐で制御する。
     if (showUnreadOnly) list = list.filter((d) => d.status === "UPLOADED");
     const q = (qInbox || "").trim().toLowerCase();
     if (q) {
@@ -733,7 +737,8 @@ export default function App() {
     }
   };
 
-  const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: true });
+  // プレビューは閲覧のみ。status / owner_user_id は変更しない。
+  const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: false });
   const openSentPreview = (doc) => openPreview(doc, { markDownloaded: false });
 
   const archiveDocument = async (doc) => {
