@@ -1,8 +1,12 @@
 // SendTab.jsx
-// 変更点（hospitalMatch.js 切り出し）:
-// 1. normalizeForMatch / findHospitalCandidates を utils/hospitalMatch.js に移動
-//    → スコアリング追加（完全一致100 / 短縮名70 / 前方一致50）・上位3件に制限
-// ※ 以前の変更点（structured 永続化対応）はそのまま維持
+// v2.0 変更点（チェックモードUI刷新）:
+// 1. ToggleBtn（ON/OFFボタン対）を廃止し、iOS風トグルスイッチ（IOSToggle）に置き換え
+// 2. チェック強度（高速/詳細）UIを廃止し、内部処理を "full"（詳細・構造化あり）に固定
+//    → checkIntensity / setCheckIntensity props も削除
+// 3. トグル右に AI ON / AI OFF バッジを追加
+//    トグル下に補足文（AIを使用します / AIを使用しません）を追加
+// 4. checkIntensity === "full" の条件分岐を削除（常に構造化表示）
+// ※ v1.x 以前の変更点（hospitalMatch.js 切り出し、structured 永続化）はそのまま維持
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -30,23 +34,19 @@ const STRUCTURED_LABELS = [
   ["medications",          "処方薬"],
 ];
 
-// ラベルルックアップ（差分サマリー表示用）
 const LABEL_MAP = Object.fromEntries(STRUCTURED_LABELS);
 
-// 差分比較の正規化（trim + 連続スペース圧縮）
 function normalizeVal(val) {
   if (val == null) return "";
   return String(val).trim().replace(/\s+/g, " ");
 }
 
-// アラートキーワードのハイライト背景色
 function getHighlightBg(severity) {
   if (severity === "high")   return "rgba(239,68,68,0.18)";
   if (severity === "medium") return "rgba(234,179,8,0.28)";
   return "rgba(234,179,8,0.14)";
 }
 
-// アラートパネルの配色
 function alertStyle(severity) {
   if (severity === "high")
     return { bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.28)", labelColor: "#991b1b", badge: "rgba(239,68,68,0.15)", badgeLabel: "要注意" };
@@ -55,7 +55,6 @@ function alertStyle(severity) {
   return { bg: "rgba(234,179,8,0.05)", border: "rgba(234,179,8,0.20)", labelColor: "#a16207", badge: "rgba(234,179,8,0.12)", badgeLabel: "参考" };
 }
 
-// OCRテキストをアラートキーワードでハイライトセグメントに分割
 function buildHighlightedSegments(text, alerts) {
   if (!text || !alerts?.length) return [{ text, highlight: false }];
 
@@ -83,9 +82,7 @@ function buildHighlightedSegments(text, alerts) {
     if (merged.length && r.start < merged[merged.length - 1].end) {
       const last = merged[merged.length - 1];
       last.end = Math.max(last.end, r.end);
-      if ((priority[r.severity] || 0) > (priority[last.severity] || 0)) {
-        last.severity = r.severity;
-      }
+      if ((priority[r.severity] || 0) > (priority[last.severity] || 0)) last.severity = r.severity;
     } else {
       merged.push({ ...r });
     }
@@ -99,11 +96,10 @@ function buildHighlightedSegments(text, alerts) {
     cursor = end;
   }
   if (cursor < text.length) segments.push({ text: text.slice(cursor), highlight: false });
-
   return segments;
 }
 
-// インラインスピナー
+// ---- インラインスピナー ----
 function Spinner() {
   return (
     <span
@@ -117,6 +113,69 @@ function Spinner() {
         flexShrink: 0,
       }}
     />
+  );
+}
+
+// ---- iOS風トグルスイッチ ----
+// サイズ: 幅46 × 高さ26。つまみ: 径20px
+function IOSToggle({ checked, onChange }) {
+  return (
+    <div
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 46,
+        height: 26,
+        borderRadius: 13,
+        background: checked ? THEME.primary : "rgba(15,23,42,0.20)",
+        position: "relative",
+        cursor: "pointer",
+        flexShrink: 0,
+        transition: "background 180ms ease",
+        WebkitTapHighlightColor: "transparent",
+        userSelect: "none",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: checked ? 23 : 3,
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: "#fff",
+          boxShadow: "0 1px 5px rgba(0,0,0,0.22)",
+          transition: "left 180ms ease",
+          display: "block",
+        }}
+      />
+    </div>
+  );
+}
+
+// ---- AI バッジ（インライン pill）----
+function AiBadge({ on }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "3px 10px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: 0.3,
+        border: `1px solid ${on ? "rgba(14,165,233,0.38)" : "rgba(15,23,42,0.18)"}`,
+        background: on ? "rgba(14,165,233,0.11)" : "rgba(15,23,42,0.06)",
+        color: on ? "#0369a1" : "rgba(15,23,42,0.42)",
+        transition: "all 180ms ease",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {on ? "AI ON" : "AI OFF"}
+    </span>
   );
 }
 
@@ -139,13 +198,11 @@ export default function SendTab({
   ocrError,
   checkMode,        // boolean
   setCheckMode,
-  checkIntensity,   // 'full' | 'text_only'
-  setCheckIntensity,
+  // checkIntensity / setCheckIntensity は廃止（常に "full" 固定）
   finalizeDocument, // (structuredPayload: object|null) => void
   userId,           // Supabase auth user id（差分ログ用）
   allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
 }) {
-  // FileDrop に渡す許可 MIME リスト（allowedMimeExt が未渡しなら PDF のみ）
   const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
   const isPdfFile  = pdfFile?.type === "application/pdf";
   const isDocxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -153,16 +210,13 @@ export default function SendTab({
   const [hoverMode, setHoverMode] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
 
-  // ---- 抽出テキスト表示切替（raw / normalized） ----
+  // 抽出テキスト表示切替（raw / normalized）
   const [showNormalized, setShowNormalized] = useState(false);
 
-  // ---- structured 編集state ----
-  // structured_raw は ocrResult.structured のまま（変更しない）
-  // structured_edit は人が編集する確定値（初期値は raw と同じ）
+  // structured 編集state
   const [structuredEdit, setStructuredEdit] = useState(null);
   const [editedAt, setEditedAt] = useState(null);
 
-  // ocrResult が変わるたびに編集stateをリセット
   useEffect(() => {
     const raw = ocrResult?.structured ?? null;
     setStructuredEdit(raw ? { ...raw } : null);
@@ -171,7 +225,6 @@ export default function SendTab({
 
   const structuredRaw = ocrResult?.structured ?? null;
 
-  // 差分キー（正規化比較）
   const changedKeys = useMemo(() => {
     if (!structuredRaw || !structuredEdit) return [];
     return STRUCTURED_LABELS
@@ -188,22 +241,17 @@ export default function SendTab({
     setStructuredEdit((prev) => ({ ...prev, [key]: structuredRaw?.[key] ?? null }));
   };
 
-  // ---- 置くボタンのラッパー ----
-  // structuredPayload を組み立てて finalizeDocument に渡す
   const handleFinalize = () => {
-    // structured があれば payload を作る、なければ null（DB は NULL のまま）
     const structuredPayload = structuredRaw
       ? {
           structured_json: structuredEdit ?? structuredRaw,
           structured_version: "v1",
           structured_updated_at: new Date().toISOString(),
-          // 人が編集した項目がある場合は 'human'、AI抽出のみなら 'ai'
           structured_updated_by: changedKeys.length > 0 ? "human" : "ai",
           structured_source: "openai",
         }
       : null;
 
-    // 監査ログ（console）
     if (structuredRaw && structuredEdit) {
       console.log("[DocPort] structured audit trail:", {
         structured_raw: structuredRaw,
@@ -225,13 +273,12 @@ export default function SendTab({
       .map((h) => ({ id: h.id, name: h.name }));
   }, [hospitals, myHospitalId]);
 
-  // 宛先病院AI候補
   const hospitalCandidates = useMemo(() => {
     const targetName = ocrResult?.structured?.referral_to_hospital;
     return findHospitalCandidates(targetName, hospitals, myHospitalId);
   }, [ocrResult, hospitals, myHospitalId]);
 
-  // ---- SegButton ----
+  // ---- SegButton（置く方法セレクタ用） ----
   const SegButton = ({ active, hovered, icon, children, ...props }) => {
     const isHot = !!active || !!hovered;
     return (
@@ -268,26 +315,6 @@ export default function SendTab({
     );
   };
 
-  // ---- ToggleBtn ----
-  const ToggleBtn = ({ active, onClick, children, small = false }) => (
-    <button
-      onClick={onClick}
-      style={{
-        padding: small ? "5px 12px" : "6px 16px",
-        borderRadius: 10,
-        border: `1px solid ${active ? "rgba(14,165,233,0.50)" : "rgba(15,23,42,0.12)"}`,
-        background: active ? "rgba(14,165,233,0.12)" : "rgba(255,255,255,0.75)",
-        color: active ? "#0369a1" : THEME.text,
-        fontWeight: 800,
-        fontSize: small ? 12 : 13,
-        cursor: "pointer",
-        transition: "background 120ms, border-color 120ms, color 120ms",
-      }}
-    >
-      {children}
-    </button>
-  );
-
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div>
@@ -297,49 +324,52 @@ export default function SendTab({
       {/* ========== ファイル未選択: チェック設定 + モード選択 ========== */}
       {!pdfFile && (
         <>
+          {/* ---- チェックモード（iOS風トグル + AIバッジ + 補足文） ---- */}
           <Card>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: THEME.text, minWidth: 100 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* トグル行 */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: THEME.text,
+                    minWidth: 100,
+                  }}
+                >
                   チェックモード
                 </span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <ToggleBtn active={checkMode === true}  onClick={() => setCheckMode(true)}>ON</ToggleBtn>
-                  <ToggleBtn active={checkMode === false} onClick={() => setCheckMode(false)}>OFF</ToggleBtn>
-                </div>
-                {!checkMode && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#b45309", opacity: 0.9 }}>
-                    ⚠️ OCR・要配慮チェックをスキップします
-                  </span>
-                )}
+
+                <IOSToggle checked={checkMode} onChange={setCheckMode} />
+
+                <AiBadge on={checkMode} />
               </div>
 
-              {checkMode && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: THEME.text, minWidth: 100 }}>
-                    チェック強度
-                  </span>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <ToggleBtn
-                      active={checkIntensity === "text_only"}
-                      onClick={() => setCheckIntensity("text_only")}
-                      small
-                    >
-                      高速（OCRのみ）
-                    </ToggleBtn>
-                    <ToggleBtn
-                      active={checkIntensity === "full"}
-                      onClick={() => setCheckIntensity("full")}
-                      small
-                    >
-                      詳細（構造化あり）
-                    </ToggleBtn>
-                  </div>
-                </div>
-              )}
+              {/* 補足文 */}
+              <div
+                style={{
+                  fontSize: 12,
+                  color: checkMode ? "rgba(3,105,161,0.75)" : "rgba(15,23,42,0.45)",
+                  paddingLeft: 1,
+                  lineHeight: 1.5,
+                  transition: "color 180ms ease",
+                }}
+              >
+                {checkMode
+                  ? "AIを使用します（OCR＋構造化）"
+                  : "AIを使用しません（アップロードのみ）"}
+              </div>
             </div>
           </Card>
 
+          {/* ---- 置く方法セレクタ + FileDrop ---- */}
           <Card>
             <div style={{
               display: "flex", gap: 10, padding: 10,
@@ -377,18 +407,16 @@ export default function SendTab({
       {pdfFile && (
         <Card>
           <div style={{ display: "grid", gap: 10 }}>
-            {/* チェックモード表示 */}
+            {/* チェックモード状態表示（コンパクト） */}
             <div style={{
               display: "flex", alignItems: "center", gap: 6,
               fontSize: 11, opacity: 0.6, color: THEME.text,
             }}>
               <span>チェック:</span>
-              {!checkMode ? (
-                <span style={{ fontWeight: 700, color: "#b45309" }}>OFF（スキップ）</span>
-              ) : checkIntensity === "full" ? (
-                <span style={{ fontWeight: 700, color: "#0369a1" }}>ON（詳細）</span>
+              {checkMode ? (
+                <span style={{ fontWeight: 700, color: "#0369a1" }}>ON（AI使用）</span>
               ) : (
-                <span style={{ fontWeight: 700, color: "#0369a1" }}>ON（高速）</span>
+                <span style={{ fontWeight: 700, color: "#b45309" }}>OFF</span>
               )}
             </div>
 
@@ -494,7 +522,7 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* PDF・DOCX・XLSX 以外のファイル: OCR対象外（チェックモードON/OFF問わず） */}
+              {/* PDF・DOCX・XLSX 以外のファイル: OCR対象外 */}
               {uploadStatus === "ready" && !isPdfFile && !isDocxFile && !isXlsxFile && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
@@ -574,9 +602,7 @@ export default function SendTab({
                                 background: s.bg, border: `1px solid ${s.border}`,
                               }}
                             >
-                              <div style={{
-                                display: "flex", alignItems: "center", gap: 6, marginBottom: 4,
-                              }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                                 <span style={{
                                   fontSize: 10, fontWeight: 800, padding: "2px 6px",
                                   borderRadius: 4, background: s.badge, color: s.labelColor,
@@ -606,9 +632,7 @@ export default function SendTab({
                                   {ev.snippet}
                                 </div>
                               ))}
-                              <div style={{
-                                fontSize: 10, color: s.labelColor, opacity: 0.6, marginTop: 4,
-                              }}>
+                              <div style={{ fontSize: 10, color: s.labelColor, opacity: 0.6, marginTop: 4 }}>
                                 ※ 送信前に内容をご確認ください（AIによる検出のため断定できません）
                               </div>
                             </div>
@@ -623,7 +647,6 @@ export default function SendTab({
                     <span style={{ fontWeight: 800, fontSize: 13, color: THEME.text }}>
                       抽出テキスト
                     </span>
-                    {/* normalized が存在するときのみトグルを表示 */}
                     {ocrResult.text_normalized != null && (
                       <div style={{ display: "flex", gap: 3 }}>
                         <button
@@ -664,11 +687,9 @@ export default function SendTab({
                   }}>
                     {(() => {
                       if (showNormalized) {
-                        // normalized 表示（ハイライトなし・整形済みテキストをそのまま表示）
                         const norm = ocrResult.text_normalized || "";
                         return norm || "（整形済みテキストがありません）";
                       }
-                      // raw 表示（既存ロジック: アラートキーワードをハイライト）
                       const text = ocrResult.text || "";
                       if (!text) return "（テキストを抽出できませんでした）";
                       const segments = buildHighlightedSegments(text, ocrResult.alerts || []);
@@ -693,14 +714,13 @@ export default function SendTab({
                     })()}
                   </div>
 
-                  {/* 5. 構造化情報（編集可能フォーム）— full モード時のみ */}
-                  {structuredEdit && checkIntensity === "full" && (
+                  {/* 5. 構造化情報（編集可能フォーム）— structured がある場合に表示 */}
+                  {structuredEdit && (
                     <div style={{ marginTop: 10 }}>
                       <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: THEME.text }}>
                         構造化情報
                       </div>
 
-                      {/* 注意文言（固定） */}
                       <div style={{
                         fontSize: 11, color: "#6b7280",
                         padding: "7px 10px", marginBottom: 6,
@@ -712,7 +732,6 @@ export default function SendTab({
                         編集した項目は "人が修正" として記録されます。
                       </div>
 
-                      {/* 編集サマリー（変更がある場合のみ） */}
                       {changedKeys.length > 0 && (
                         <div style={{
                           fontSize: 11, fontWeight: 700,
@@ -726,19 +745,14 @@ export default function SendTab({
                             編集箇所: {changedKeys.length}件（{changedKeys.map((k) => LABEL_MAP[k] || k).join("、")}）
                           </div>
                           {userId && (
-                            <div style={{ opacity: 0.8 }}>
-                              編集者: {userId}
-                            </div>
+                            <div style={{ opacity: 0.8 }}>編集者: {userId}</div>
                           )}
                           {editedAt && (
-                            <div style={{ opacity: 0.8 }}>
-                              編集日時: {new Date(editedAt).toLocaleString()}
-                            </div>
+                            <div style={{ opacity: 0.8 }}>編集日時: {new Date(editedAt).toLocaleString()}</div>
                           )}
                         </div>
                       )}
 
-                      {/* 各フィールド（入力フォーム） */}
                       <div style={{
                         border: "1px solid rgba(15,23,42,0.10)",
                         borderRadius: 8, overflow: "hidden", fontSize: 12,
@@ -762,7 +776,6 @@ export default function SendTab({
                                 transition: "background 200ms ease",
                               }}
                             >
-                              {/* ラベル */}
                               <span style={{
                                 width: 88, flexShrink: 0,
                                 fontWeight: 700, opacity: 0.55, color: THEME.text,
@@ -770,7 +783,6 @@ export default function SendTab({
                                 {label}
                               </span>
 
-                              {/* 入力フィールド */}
                               <input
                                 type="text"
                                 value={structuredEdit[key] ?? ""}
@@ -793,7 +805,6 @@ export default function SendTab({
                                 }}
                               />
 
-                              {/* 変更あり: バッジ + 元に戻すボタン */}
                               {isChanged && (
                                 <>
                                   <span style={{
@@ -813,8 +824,7 @@ export default function SendTab({
                                       background: "rgba(255,255,255,0.85)",
                                       fontSize: 10, fontWeight: 700,
                                       color: THEME.text, cursor: "pointer",
-                                      whiteSpace: "nowrap",
-                                      opacity: 0.75,
+                                      whiteSpace: "nowrap", opacity: 0.75,
                                     }}
                                   >
                                     元に戻す

@@ -4,6 +4,11 @@
 // 3. 既存の DOWNLOAD / ARCHIVE / CANCEL も logEvent に移行（失敗しても本体処理を継続）
 // ※ v3.3 以前の変更点はそのまま維持
 //
+// v3.7 変更点（置く画面チェックモードUI改善）:
+// 1. checkMode を localStorage から初期化・変更時に保存（次回訪問時復元）
+// 2. checkIntensity state を廃止し、OCR呼び出しを "full" 固定
+// 3. SendTab への checkIntensity / setCheckIntensity props を削除
+//
 // v3.6 変更点（受け取るUI改善）:
 // 1. filteredInboxDocs から ARCHIVED フィルタを除去（InboxTab のタブ分岐で制御）
 // 2. openInboxPreview の markDownloaded を false に変更（プレビュー閲覧のみ化）
@@ -304,9 +309,14 @@ export default function App() {
   const [ocrError, setOcrError] = useState(null);
   const [pendingFileKey, setPendingFileKey] = useState(null);
 
-  // チェックモード設定（v3.0 追加）
-  const [checkMode, setCheckMode] = useState(true);       // ON=true / OFF=false
-  const [checkIntensity, setCheckIntensity] = useState("full"); // 'full' | 'text_only'
+  // チェックモード設定（v3.7: localStorage で次回訪問時復元。checkIntensity は "full" 固定）
+  const [checkMode, setCheckMode] = useState(
+    () => localStorage.getItem("docport_check_mode") !== "false"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("docport_check_mode", String(checkMode));
+  }, [checkMode]);
 
   // breakpoints
   const isMobile = useMediaQuery("(max-width: 820px)");
@@ -484,7 +494,6 @@ export default function App() {
     setPendingFileKey(null);
     // チェックモードはデフォルトに戻す
     setCheckMode(true);
-    setCheckIntensity("full");
   };
 
   // ---- R2 presign helpers ----
@@ -577,7 +586,7 @@ export default function App() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ file_key, mode: checkIntensity }),
+        body: JSON.stringify({ file_key, mode: "full" }), // checkIntensity は "full" 固定
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
@@ -976,8 +985,6 @@ export default function App() {
               ocrError={ocrError}
               checkMode={checkMode}
               setCheckMode={setCheckMode}
-              checkIntensity={checkIntensity}
-              setCheckIntensity={setCheckIntensity}
               finalizeDocument={finalizeDocument}
               userId={session?.user?.id ?? null}
               allowedMimeExt={ALLOWED_MIME_EXT}
