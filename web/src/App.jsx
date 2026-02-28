@@ -32,7 +32,7 @@ import SendTab from "./tabs/SendTab";
 import InboxTab from "./tabs/InboxTab";
 import SentTab from "./tabs/SentTab";
 import { getPreviewKey, isPreviewable } from "./utils/preview";
-import { logEvent } from "./utils/audit";
+import { logEvent, setAuditHospitalId } from "./utils/audit";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -413,6 +413,7 @@ export default function App() {
       return;
     }
     setProfile(prof);
+    setAuditHospitalId(prof.hospital_id); // 監査ログ用キャッシュをセット
 
     const { data: hs, error: hsErr } = await supabase
       .from("hospitals").select("id, name, code, icon_url").order("name", { ascending: true });
@@ -471,6 +472,7 @@ export default function App() {
     setPreviewError("");
     setPreviewLoading(false);
     setHospitalMembers([]);
+    setAuditHospitalId(null); // 監査ログキャッシュをクリア
     // OCR / upload reset
     setUploadStatus("idle");
     setOcrResult(null);
