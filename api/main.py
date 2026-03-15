@@ -56,6 +56,7 @@
 import base64
 import io
 import json
+import logging
 import os
 import re
 import time
@@ -69,7 +70,7 @@ import pypdfium2 as pdfium
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -110,6 +111,12 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 _bearer = HTTPBearer()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 
 # ----------------------------
 # JWKS キャッシュ（TTL: 1時間）
@@ -133,9 +140,11 @@ def _refresh_jwks() -> None:
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"JWKS 取得失敗: {e.code}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"JWKS 取得エラー: {e}")
+        logger.error("JWKS 取得失敗 (%d)", e.code)
+        raise HTTPException(status_code=500, detail="認証サービスへの接続に失敗しました")
+    except Exception:
+        logger.exception("JWKS 取得エラー")
+        raise HTTPException(status_code=500, detail="認証サービスへの接続に失敗しました")
 
     _jwks_keys = {k["kid"]: k for k in data.get("keys", []) if "kid" in k}
     _jwks_fetched_at = time.time()
@@ -205,8 +214,8 @@ def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> 
         return payload
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="トークンの有効期限が切れています")
-    except JWTClaimsError as e:
-        raise HTTPException(status_code=401, detail=f"トークンのクレームが無効です: {e}")
+    except JWTClaimsError:
+        raise HTTPException(status_code=401, detail="トークンのクレームが無効です")
     except JWTError:
         raise HTTPException(status_code=401, detail="無効なトークンです")
 
@@ -237,9 +246,11 @@ def _supabase_get(path: str, jwt_token: str) -> list:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Supabase API エラー: {e.code}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Supabase 接続エラー: {e}")
+        logger.error("Supabase user GET エラー (%d): path=%s", e.code, path)
+        raise HTTPException(status_code=502, detail="データベース接続エラーが発生しました")
+    except Exception:
+        logger.exception("Supabase user GET 接続エラー: path=%s", path)
+        raise HTTPException(status_code=502, detail="データベース接続エラーが発生しました")
 
 
 def _get_hospital_id(user_id: str, jwt_token: str) -> str:
@@ -337,8 +348,9 @@ def _presign_upload(content_type: str = "application/pdf") -> dict:
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("R2クライアント初期化失敗 (upload)")
+        raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
 
     key = f"documents/{uuid.uuid4()}.{ext}"
     url = s3.generate_presigned_url(
@@ -357,8 +369,9 @@ def _presign_download(key: str):
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("R2クライアント初期化失敗 (download)")
+        raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
 
     url = s3.generate_presigned_url(
         ClientMethod="get_object",
@@ -442,7 +455,6 @@ _HEADING_KEYWORDS = frozenset([
 # セル接頭辞パターン（行頭の "A:", "AB:", "ABC:" など）
 _CELL_PREFIX_RE = re.compile(r"^[A-Z]{1,3}:")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # 要配慮情報の注意喚起キーワード（断定ではなく可能性の通知のみ）
@@ -605,46 +617,6 @@ def _extract_xlsx_text(xlsx_bytes: bytes) -> tuple[str, list[str]]:
     return text, warnings
 
 
-def _call_gemini_ocr(png_list: list[bytes], timeout: float) -> str:
-    """
-    Gemini Vision API でページ画像をまとめてOCRする。
-    全ページを1リクエストで送信してテキストを取得する。
-    """
-    parts: list[dict] = []
-    for png in png_list:
-        parts.append({
-            "inline_data": {
-                "mime_type": "image/png",
-                "data": base64.b64encode(png).decode(),
-            }
-        })
-    parts.append({"text": _OCR_PROMPT})
-
-    payload = json.dumps({"contents": [{"parts": parts}]}).encode()
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-    )
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=int(timeout)) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        raise HTTPException(status_code=502, detail=f"Gemini API エラー ({e.code}): {body}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini API 接続エラー: {e}")
-
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as e:
-        raise HTTPException(status_code=502, detail=f"Gemini レスポンス解析失敗: {e}")
-
-
 def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
     """
     OpenAI Vision API（gpt-4o）でページ画像をまとめてOCRする。
@@ -678,14 +650,17 @@ def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
-        raise HTTPException(status_code=502, detail=f"OpenAI API エラー ({e.code}): {body}")
+        logger.error("OpenAI API HTTPエラー (%d): %s", e.code, body)
+        raise HTTPException(status_code=502, detail="OCR処理でエラーが発生しました")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI API 接続エラー: {e}")
+        logger.exception("OpenAI API 接続エラー")
+        raise HTTPException(status_code=502, detail="OCR処理でエラーが発生しました")
 
     try:
         return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI レスポンス解析失敗: {e}")
+    except (KeyError, IndexError):
+        logger.error("OpenAI レスポンス解析失敗: %s", data)
+        raise HTTPException(status_code=502, detail="OCR処理でエラーが発生しました")
 
 
 # ----------------------------
@@ -711,7 +686,7 @@ _HEADINGS_NORM: frozenset[str] = frozenset(_norm_heading_key(h) for h in _HEADIN
 def _strip_code_fences(text: str) -> str:
     """
     OCR結果がコードフェンス（```...```）で全体を囲まれている場合に本文のみを返す。
-    Gemini / OpenAI が Markdown 形式で応答するケースへの対処。
+    OpenAI が Markdown 形式で応答するケースへの対処。
     例: ```plaintext\n本文\n``` → 本文
     部分的なフェンスや複数フェンスは除去しない（全体を囲む1ブロックのみ対象）。
     """
@@ -1011,8 +986,9 @@ def _ocr_impl(
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("R2クライアント初期化失敗 (OCR)")
+        raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
 
     presigned_url = s3.generate_presigned_url(
         ClientMethod="get_object",
@@ -1023,8 +999,9 @@ def _ocr_impl(
     try:
         with urllib.request.urlopen(presigned_url, timeout=10) as resp:
             file_bytes = resp.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"ファイル取得失敗: {e}")
+    except Exception:
+        logger.exception("R2からのファイル取得失敗: %s", fkey)
+        raise HTTPException(status_code=400, detail="ファイルの取得に失敗しました")
 
     # ---- サイズチェック（PDF / DOCX 共通） ----
     if len(file_bytes) > _MAX_PDF_SIZE_BYTES:
@@ -1054,23 +1031,21 @@ def _ocr_impl(
         # PDF: pypdfium2 でページ画像化 → Vision OCR
         try:
             png_list, total_pages = _render_pdf_to_png_list(file_bytes)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"PDF画像化失敗: {e}")
+        except Exception:
+            logger.exception("PDF画像化失敗: %s", fkey)
+            raise HTTPException(status_code=500, detail="PDF処理でエラーが発生しました")
 
         if not png_list:
             raise HTTPException(status_code=400, detail="PDFにページが含まれていません")
 
-        if not GEMINI_API_KEY and not OPENAI_API_KEY:
+        if not OPENAI_API_KEY:
             raise HTTPException(
                 status_code=500,
-                detail="APIキーが未設定です（GEMINI_API_KEY または OPENAI_API_KEY を設定してください）",
+                detail="APIキーが未設定です（OPENAI_API_KEY を設定してください）",
             )
 
         remaining = _remaining()
-        if GEMINI_API_KEY:
-            text = _call_gemini_ocr(png_list, timeout=remaining)
-        else:
-            text = _call_openai_ocr(png_list, timeout=remaining)
+        text = _call_openai_ocr(png_list, timeout=remaining)
 
         text = _strip_code_fences(text)
         source_type = "pdf"
@@ -1198,9 +1173,11 @@ def _supabase_patch(path: str, data: dict, jwt_token: str) -> list:
             body_bytes = resp.read()
             return json.loads(body_bytes) if body_bytes else []
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Supabase PATCH エラー: {e.code}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Supabase PATCH 接続エラー: {e}")
+        logger.error("Supabase user PATCH エラー (%d): path=%s", e.code, path)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+    except Exception:
+        logger.exception("Supabase user PATCH 接続エラー: path=%s", path)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
 
 
 def _supabase_post_db(path: str, data: dict, jwt_token: str) -> list:
@@ -1232,9 +1209,11 @@ def _supabase_post_db(path: str, data: dict, jwt_token: str) -> list:
             body_bytes = resp.read()
             return json.loads(body_bytes) if body_bytes else []
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Supabase POST エラー: {e.code}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Supabase POST 接続エラー: {e}")
+        logger.error("Supabase user POST エラー (%d): path=%s", e.code, path)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+    except Exception:
+        logger.exception("Supabase user POST 接続エラー: path=%s", path)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
 
 
 # ----------------------------
@@ -1376,3 +1355,313 @@ def assign_document_compat(
 ):
     """compat: Vite proxy 経由のローカル開発用（/api/documents/{id}/assign と同じ処理）"""
     return _assign_impl(doc_id, body, credentials, user)
+
+
+# ===========================================================================
+# 変更点（v2.6 CLOUD-FAX-API Webhook統合）:
+# 1. POST /api/webhook/cloudfax/inbound: Webhook受信→PDF取得→R2保存→documents INSERT
+# 2. fax_inbounds テーブルで冪等性を保証（UNIQUE provider+provider_message_id）
+# 3. service_role 使用理由: Webhook は外部システムからの呼び出しのため user JWT が存在しない
+#    使用範囲: fax_inbounds / documents の INSERT/PATCH のみ
+#
+# 変更点（v2.6.1 documents INSERT NOT NULL 対応）:
+# 1. to_hospital_id: payload or FAX_DEFAULT_HOSPITAL_ID、どちらも無い場合は 400
+# 2. from_hospital_id: MVP では to_hospital_id と同値で入港（NOT NULL を満たす暫定措置）
+#    将来: 外部FAX送信元専用の hospital レコードを用意して差し替える
+# 3. documents INSERT にメタ情報追加: original_filename / content_type / file_ext / file_size
+#
+# 変更点（v2.6.2 fax_inbounds に hospital_id を追加）:
+# 1. fax_inbounds INSERT に hospital_id = to_hospital_id を追加（病院別受信一覧クエリ対応）
+# ===========================================================================
+
+# ----------------------------
+# CloudFax 環境変数
+# ----------------------------
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+CLOUDFAX_WEBHOOK_SECRET   = os.getenv("CLOUDFAX_WEBHOOK_SECRET", "")   # Webhook認証シークレット
+FAX_DEFAULT_HOSPITAL_ID   = os.getenv("FAX_DEFAULT_HOSPITAL_ID", "")   # FAX受信先デフォルト病院ID
+
+
+# ----------------------------
+# service_role 用 Supabase ヘルパー（Webhook処理専用）
+# service_role は fax_inbounds / documents の INSERT/PATCH のみに限定して使用する
+# ----------------------------
+def _supabase_service_post(path: str, data: dict, prefer: str = "return=representation") -> list:
+    """service_role で Supabase REST API に POST する（Webhook処理専用）"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が未設定です",
+        )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={
+            "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "Prefer":        prefer,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body_bytes = resp.read()
+            return json.loads(body_bytes) if body_bytes else []
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode(errors="replace")
+        logger.error("Supabase service POST エラー (%d): %s", e.code, body_text)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+    except Exception:
+        logger.exception("Supabase service POST 接続エラー")
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+
+
+def _supabase_service_patch(path: str, data: dict) -> list:
+    """service_role で Supabase REST API を PATCH する（Webhook処理専用）"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が未設定です",
+        )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="PATCH",
+        headers={
+            "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "Prefer":        "return=representation",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body_bytes = resp.read()
+            return json.loads(body_bytes) if body_bytes else []
+    except urllib.error.HTTPError as e:
+        logger.error("Supabase service PATCH エラー (%d)", e.code)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+    except Exception:
+        logger.exception("Supabase service PATCH 接続エラー")
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+
+
+# ----------------------------
+# R2 直接アップロードヘルパー（Webhook→PDF保存専用）
+# ----------------------------
+def _r2_put_object(file_key: str, data: bytes, content_type: str = "application/pdf") -> None:
+    """R2 に直接 PUT する（Presigned URL 不使用。Webhook処理でのみ使用）"""
+    try:
+        bucket = get_bucket_name()
+        s3 = get_s3_client()
+    except Exception:
+        logger.exception("R2クライアント初期化失敗 (put_object)")
+        raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
+    s3.put_object(Bucket=bucket, Key=file_key, Body=data, ContentType=content_type)
+
+
+# ----------------------------
+# CloudFax PDF 取得（MVP: モック実装）
+# 本番化時は CLOUDFAX_API_KEY で認証した GET リクエストに差し替える
+# ----------------------------
+async def fetch_pdf_from_cloudfax(provider_message_id: str) -> bytes:
+    """
+    CloudFax API から PDF バイト列を取得する。
+    MVP: ダミー PDF バイト列を返す。
+
+    本番実装例:
+        CLOUDFAX_API_KEY = os.getenv("CLOUDFAX_API_KEY", "")
+        url = f"https://api.cloudfax.example.com/faxes/{provider_message_id}/pdf"
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {CLOUDFAX_API_KEY}"}
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read()
+    """
+    print(f"[cloudfax] fetch_pdf mock: provider_message_id={provider_message_id}")
+    # 最小限の有効 PDF バイト列（モック）
+    return b"%PDF-1.4 1 0 obj<</Type/Catalog>>endobj"
+
+
+# ----------------------------
+# CloudFax Webhook Pydantic モデル（最小限）
+# ----------------------------
+class CloudFaxPayload(BaseModel):
+    """CloudFax Inbound Webhook payload の既知フィールド定義"""
+    id:             str | None = None   # CloudFax が送ってくる場合
+    fax_id:         str | None = None   # 別プロバイダが fax_id を使う場合
+    to_hospital_id: str | None = None   # 受信先病院ID（省略時は FAX_DEFAULT_HOSPITAL_ID）
+    model_config = {"extra": "allow"}   # 未知フィールドは raw として保存
+
+
+# ----------------------------
+# CloudFax Webhook 処理実装
+# ----------------------------
+async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
+    """
+    CloudFax Inbound Webhook の共通処理。
+
+    フロー:
+      1. provider_message_id 取得（id / fax_id の優先順）
+      2. fax_inbounds に UPSERT（ignore-duplicates）→ 重複なら冪等レスポンスを即返却
+      3. PDF 取得（モック） → R2 保存
+      4. documents INSERT（status=ARRIVED, owner_user_id=NULL）
+      5. fax_inbounds.status を DOC_CREATED に更新
+      例外時: fax_inbounds.status を FAILED に更新
+    """
+    # provider_message_id を id または fax_id から取得（両対応）
+    provider_message_id = str(
+        payload_raw.get("id") or payload_raw.get("fax_id") or ""
+    ).strip()
+    if not provider_message_id:
+        raise HTTPException(status_code=400, detail="payload に id または fax_id が必要です")
+
+    # to_hospital_id: payload → 環境変数 → 400 の優先順
+    to_hospital_id = (payload_raw.get("to_hospital_id") or FAX_DEFAULT_HOSPITAL_ID or "").strip()
+    if not to_hospital_id:
+        raise HTTPException(
+            status_code=400,
+            detail="to_hospital_id required: payload に to_hospital_id を含めるか FAX_DEFAULT_HOSPITAL_ID を設定してください",
+        )
+
+    # ---- fax_inbounds UPSERT（冪等チェック）----
+    # on_conflict=provider,provider_message_id + ignore-duplicates
+    #   → 新規: 挿入行を返す / 重複: 空リストを返す
+    inserted = _supabase_service_post(
+        "fax_inbounds?on_conflict=provider,provider_message_id",
+        {
+            "provider":            "cloudfax",
+            "provider_message_id": provider_message_id,
+            "direction":           "inbound",
+            "status":              "RECEIVED",
+            "hospital_id":         to_hospital_id,   # 病院別受信一覧のためのインデックスキー
+            "raw":                 payload_raw,
+        },
+        prefer="resolution=ignore-duplicates,return=representation",
+    )
+
+    # 既に処理済み → 冪等レスポンス（何もしない）
+    if not inserted:
+        print(f"[cloudfax] 冪等: provider_message_id={provider_message_id} は処理済み")
+        # TODO(v2.7): status='FAILED' の行は再処理したい場合の改善案:
+        #   1. ignore-duplicates を外して既存行を SELECT する
+        #   2. existing_row["status"] == "FAILED" なら fax_inbounds を RECEIVED にリセットして続行
+        #   3. DOC_CREATED / RECEIVED はスキップ（今と同じ idempotent: true）
+        return {"ok": True, "idempotent": True, "provider_message_id": provider_message_id}
+
+    fax_inbound_id = inserted[0]["id"]
+    print(f"[cloudfax] 新規受信: fax_inbound_id={fax_inbound_id}, msg_id={provider_message_id}")
+
+    try:
+        # ---- PDF 取得 ----
+        pdf_bytes = await fetch_pdf_from_cloudfax(provider_message_id)
+
+        # ---- R2 保存 ----
+        file_key = f"documents/{uuid.uuid4()}.pdf"
+        _r2_put_object(file_key, pdf_bytes)
+        print(f"[cloudfax] R2 保存完了: file_key={file_key}")
+
+        # ---- documents INSERT ----
+        # status=ARRIVED: 港モデルの「未担当BOX」に入港する
+        # owner_user_id=NULL: 担当者未割り当て（アサイン機能で後から設定）
+        # from_hospital_id=to_hospital_id: FAX送信元病院は不明のため受信先と同値（NOT NULL 暫定措置）
+        #   将来: 外部FAX送信元専用の hospital レコードを作成し、そちらの hospital_id を設定する
+        doc_rows = _supabase_service_post(
+            "documents",
+            {
+                "file_key":          file_key,
+                "status":            "ARRIVED",
+                "owner_user_id":     None,
+                "from_hospital_id":  to_hospital_id,   # 暫定: 送信元不明のため受信先で代替
+                "to_hospital_id":    to_hospital_id,
+                "original_filename": f"fax_{provider_message_id}.pdf",
+                "content_type":      "application/pdf",
+                "file_ext":          "pdf",
+                "file_size":         len(pdf_bytes),
+            },
+        )
+        if not doc_rows:
+            raise RuntimeError("documents INSERT に失敗しました（レスポンスが空）")
+        doc_id = doc_rows[0]["id"]
+        print(f"[cloudfax] documents INSERT 完了: doc_id={doc_id}")
+
+        # ---- fax_inbounds を DOC_CREATED に更新 ----
+        fax_enc = urllib.parse.quote(fax_inbound_id, safe="")
+        _supabase_service_patch(
+            f"fax_inbounds?id=eq.{fax_enc}",
+            {"status": "DOC_CREATED", "document_id": doc_id, "file_key": file_key},
+        )
+
+        return {
+            "ok":             True,
+            "fax_inbound_id": fax_inbound_id,
+            "document_id":    doc_id,
+            "file_key":       file_key,
+        }
+
+    except HTTPException:
+        raise  # FastAPI エラーはそのまま伝播
+    except Exception as e:
+        # ---- エラー時: fax_inbounds を FAILED に更新 ----
+        print(f"[cloudfax] エラー: fax_inbound_id={fax_inbound_id}, error={e}")
+        try:
+            fax_enc = urllib.parse.quote(fax_inbound_id, safe="")
+            _supabase_service_patch(
+                f"fax_inbounds?id=eq.{fax_enc}",
+                {"status": "FAILED", "error": str(e)[:500]},
+            )
+        except Exception:
+            logger.exception("[cloudfax] FAILED ステータス更新にも失敗")
+        logger.exception("CloudFax Webhook 処理エラー")
+        raise HTTPException(status_code=500, detail="Webhook 処理でエラーが発生しました")
+
+
+# ----------------------------
+# CloudFax Webhook エンドポイント
+# ----------------------------
+@app.post("/api/webhook/cloudfax/inbound")
+async def cloudfax_inbound_api(request: Request):
+    """
+    POST /api/webhook/cloudfax/inbound
+    CloudFax からの Inbound FAX Webhook を受信する。
+
+    - 認証: X-CloudFax-Webhook-Secret ヘッダー（CLOUDFAX_WEBHOOK_SECRET 環境変数と一致確認）
+    - 冪等性: fax_inbounds の UNIQUE(provider, provider_message_id) で保証
+    - service_role 使用: user JWT が存在しない外部Webhook処理のため（最小範囲）
+    """
+    if not CLOUDFAX_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook は設定されていません")
+    secret = request.headers.get("X-CloudFax-Webhook-Secret", "")
+    if secret != CLOUDFAX_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Webhook シークレットが無効です")
+
+    try:
+        payload_raw: dict = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    return await _cloudfax_inbound_impl(payload_raw)
+
+
+@app.post("/webhook/cloudfax/inbound")
+async def cloudfax_inbound_compat(request: Request):
+    """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/inbound と同じ処理）"""
+    if not CLOUDFAX_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook は設定されていません")
+    secret = request.headers.get("X-CloudFax-Webhook-Secret", "")
+    if secret != CLOUDFAX_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Webhook シークレットが無効です")
+
+    try:
+        payload_raw: dict = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    return await _cloudfax_inbound_impl(payload_raw)
