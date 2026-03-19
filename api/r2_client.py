@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from typing import Optional
 
 import boto3
 
@@ -26,7 +27,7 @@ def _maybe_load_dotenv():
 _maybe_load_dotenv()
 
 
-def _get_env(name: str, *, fallback: str | None = None) -> str | None:
+def _get_env(name: str, *, fallback: Optional[str] = None) -> Optional[str]:
     v = os.getenv(name)
     if v is not None and v.strip() != "":
         return v.strip()

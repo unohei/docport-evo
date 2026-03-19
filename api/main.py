@@ -1,7 +1,9 @@
 # 変更点（v1.9 OCR を画像OCR専用に刷新）:
 # 1. pypdf を撤廃し pypdfium2 でPDFをページ画像化（最大3ページ、10MB上限）
-# 2. OCR は Gemini（優先）または OpenAI Vision API を使用（どちらも未設定なら500）
-# 3. /api/ocr も presign-download 同様に documents テーブルで hospital_id アクセス権チェックを実施
+# 2. OCR は OpenAI Vision API（gpt-4o）を使用（未設定なら500）
+#    ※ Gemini は後続バージョンで削除済み
+# 3. /api/ocr の認証: JWT + profiles テーブルで hospital_id 確認
+#    ※ 送信前ファイル専用のため documents テーブル照合は行わない（v1.9 当初の実装意図と異なる）
 #
 # 変更点（v2.0 OCRテキストの構造化JSON生成を追加）:
 # 1. _structure_referral_text: OCR済みテキストを gpt-4o で医療紹介状の構造化JSONへ変換
@@ -76,6 +78,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from r2_client import get_bucket_name, get_s3_client
+
+from typing import Optional, List, Dict, Tuple
 
 app = FastAPI()
 
@@ -386,7 +390,7 @@ def _presign_download(key: str):
 # ----------------------------
 @app.post("/api/presign-upload")
 def presign_upload_api(
-    body: PresignUploadRequest | None = Body(default=None),
+    body: Optional[PresignUploadRequest] = Body(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
@@ -412,7 +416,7 @@ def presign_download_api(
 
 @app.post("/presign-upload")
 def presign_upload_compat(
-    body: PresignUploadRequest | None = Body(default=None),
+    body: Optional[PresignUploadRequest] = Body(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
@@ -706,7 +710,7 @@ def _normalize_text(
     raw: str,
     *,
     debug: bool = False,
-) -> tuple[str, dict | None]:
+) -> Tuple[str, Optional[Dict]]:
     """
     AI投入用テキストの正規化。表示用の raw は変更しない（呼び出し元で使い分ける）。
 
@@ -885,7 +889,7 @@ def _generate_alerts(text: str) -> list[dict]:
 def _structure_referral_text(
     text: str,
     timeout: float = _STRUCTURE_TIMEOUT_SECS,
-) -> dict | None:
+) -> Optional[Dict]:
     """
     OCRで抽出したテキストを OpenAI gpt-4o で医療紹介状の構造化JSONに変換する。
     - OPENAI_API_KEY 未設定、text が空、API エラーの場合はすべて None を返す
@@ -1014,7 +1018,7 @@ def _ocr_impl(
     _remaining()
 
     # ---- ファイル種別ごとのテキスト抽出 ----
-    total_pages: int | None = None
+    total_pages: Optional[int] = None
     extract_warnings: list[str] = []
 
     if ext == "docx":
@@ -1120,12 +1124,12 @@ def ocr_pdf(
     送信前PDFの画像OCR API。AIの判断で送信確定はしない。
 
     - JWT検証済みユーザーのみ利用可
-    - documents テーブルで hospital_id アクセス権チェック（RLS + FastAPI 二重防御）
+    - JWT + profiles テーブルで hospital_id 確認（送信前ファイル専用のため documents テーブル照合なし）
     - R2 から Presigned GET でPDF取得（10MB上限）
     - pypdfium2 でページ画像化（最大3ページ）
-    - Gemini / OpenAI Vision API で画像OCR
+    - OpenAI Vision API（gpt-4o）で画像OCR
     - OpenAI gpt-4o で構造化JSON生成（OPENAI_API_KEY 未設定時は structured=null）
-    - 返却: { text, meta, warnings, structured }
+    - 返却: { text, text_normalized, meta, warnings, structured, alerts }
     """
     return _ocr_impl(body, credentials, user)
 
@@ -1222,7 +1226,7 @@ def _supabase_post_db(path: str, data: dict, jwt_token: str) -> list:
 class AssignRequest(BaseModel):
     assigned_department: str
     owner_user_id: str                # 担当者の user ID (UUID)
-    to_status: str | None = None      # 省略時: 現状維持。"IN_PROGRESS" 推奨
+    to_status: Optional[str] = None     # 省略時: 現状維持。"IN_PROGRESS" 推奨
 
 
 _ASSIGN_VALID_STATUSES = frozenset(
@@ -1372,6 +1376,14 @@ def assign_document_compat(
 #
 # 変更点（v2.6.2 fax_inbounds に hospital_id を追加）:
 # 1. fax_inbounds INSERT に hospital_id = to_hospital_id を追加（病院別受信一覧クエリ対応）
+#
+# 変更点（v2.7 outbound webhook 追加・PoC モード対応・logger 統一）:
+# 1. POST /api/webhook/cloudfax/outbound: FAX送信ステータス通知を受信・保存
+#    PDF取得/R2保存/documents INSERT は不要。fax_inbounds に direction=outbound で記録のみ
+# 2. _verify_webhook_secret: 共通認証ヘルパー
+#    secret 未設定 → PoC モード（起動時警告・処理続行）
+#    secret 設定済み → ヘッダー不一致で 401
+# 3. print() → logger に統一
 # ===========================================================================
 
 # ----------------------------
@@ -1380,6 +1392,38 @@ def assign_document_compat(
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 CLOUDFAX_WEBHOOK_SECRET   = os.getenv("CLOUDFAX_WEBHOOK_SECRET", "")   # Webhook認証シークレット
 FAX_DEFAULT_HOSPITAL_ID   = os.getenv("FAX_DEFAULT_HOSPITAL_ID", "")   # FAX受信先デフォルト病院ID
+
+# ----------------------------
+# 起動時セキュリティ警告（F: per-request ではなく起動時1回のみ）
+# ----------------------------
+# TODO(security): 本番デプロイ前に CLOUDFAX_WEBHOOK_SECRET を必ず設定すること。
+#   未設定のまま本番稼働させると、任意のリクエストが Webhook として受理される危険がある。
+if not CLOUDFAX_WEBHOOK_SECRET:
+    logger.warning(
+        "⚠️  [SECURITY / PoC MODE] CLOUDFAX_WEBHOOK_SECRET が未設定です。"
+        "CloudFAX Webhook は認証なしで受け付けます。"
+        "開発・PoC 環境専用です — 本番デプロイ前に必ず環境変数を設定してください。"
+    )
+
+
+# ----------------------------
+# Webhook 共通認証ヘルパー
+# ----------------------------
+def _verify_webhook_secret(request: Request) -> None:
+    """
+    CloudFax Webhook の X-CloudFax-Webhook-Secret ヘッダーを検証する。
+
+    - CLOUDFAX_WEBHOOK_SECRET 未設定: PoC モード（起動時に警告済み・処理続行）
+    - CLOUDFAX_WEBHOOK_SECRET 設定済み: ヘッダーと一致しない場合 401 を返す
+    """
+    if not CLOUDFAX_WEBHOOK_SECRET:
+        # 起動時に警告済み。PoC モードのため認証スキップ。
+        return
+    secret = request.headers.get("X-CloudFax-Webhook-Secret", "")
+    if secret != CLOUDFAX_WEBHOOK_SECRET:
+        client_host = request.client.host if request.client else "unknown"
+        logger.warning("[cloudfax] Webhook シークレット不一致: remote=%s", client_host)
+        raise HTTPException(status_code=401, detail="Webhook シークレットが無効です")
 
 
 # ----------------------------
@@ -1453,6 +1497,36 @@ def _supabase_service_patch(path: str, data: dict) -> list:
         raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
 
 
+def _supabase_service_get(path: str) -> list:
+    """service_role で Supabase REST API を GET する（Webhook処理専用）"""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が未設定です",
+        )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "apikey":        SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Accept":        "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body_bytes = resp.read()
+            return json.loads(body_bytes) if body_bytes else []
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode(errors="replace")
+        logger.error("Supabase service GET エラー (%d): %s", e.code, body_text)
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+    except Exception:
+        logger.exception("Supabase service GET 接続エラー")
+        raise HTTPException(status_code=502, detail="データベース操作でエラーが発生しました")
+
+
 # ----------------------------
 # R2 直接アップロードヘルパー（Webhook→PDF保存専用）
 # ----------------------------
@@ -1468,26 +1542,88 @@ def _r2_put_object(file_key: str, data: bytes, content_type: str = "application/
 
 
 # ----------------------------
-# CloudFax PDF 取得（MVP: モック実装）
-# 本番化時は CLOUDFAX_API_KEY で認証した GET リクエストに差し替える
+# A. 最小有効 PDF 生成（モック専用）
+# ----------------------------
+def _generate_minimal_valid_pdf() -> bytes:
+    """
+    xref オフセットを自動計算した RFC 準拠の最小有効 PDF を生成する。
+    pypdfium2 / 一般 PDF ビューアで開ける 1 ページ空白ドキュメント。
+    モック・PoC 専用。本番では fetch_pdf_from_cloudfax() を実 API 実装に差し替える。
+    """
+    objs: list[bytes] = [
+        b"1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n",
+        b"2 0 obj\n<</Type /Pages /Kids [3 0 R] /Count 1>>\nendobj\n",
+        b"3 0 obj\n<</Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]>>\nendobj\n",
+    ]
+    header = b"%PDF-1.4\n"
+    offsets: list[int] = []
+    pos = len(header)
+    for obj in objs:
+        offsets.append(pos)
+        pos += len(obj)
+
+    xref_offset = pos
+    xref = b"xref\n0 4\n0000000000 65535 f \n"
+    for off in offsets:
+        xref += f"{off:010d} 00000 n \n".encode()
+    trailer  = b"trailer\n<</Size 4 /Root 1 0 R>>\n"
+    startxref = f"startxref\n{xref_offset}\n%%EOF\n".encode()
+
+    return header + b"".join(objs) + xref + trailer + startxref
+
+
+# ----------------------------
+# A. PDF 妥当性確認ヘルパー
+# ----------------------------
+def _validate_pdf_bytes(data: bytes, source: str = "") -> None:
+    """
+    PDF バイト列が有効かを確認する（R2 保存前チェック）。
+    - %PDF ヘッダ確認
+    - pypdfium2 で開けるか確認
+    - ページ数 >= 1 確認
+    - 先頭ページへのアクセス確認（ページオブジェクトが壊れていないか）
+    壊れていた場合は ValueError を raise する。
+    呼び出し元で ValueError を捕捉して error_stage=PDF_VALIDATE として記録すること。
+    """
+    if not data.startswith(b"%PDF"):
+        raise ValueError(f"不正な PDF: %PDF ヘッダがありません (source={source!r})")
+    try:
+        doc = pdfium.PdfDocument(data)
+        page_count = len(doc)
+        if page_count < 1:
+            raise ValueError(f"PDF にページがありません (source={source!r})")
+        _ = doc[0]  # 先頭ページオブジェクトへのアクセス確認（重いレンダリングは不要）
+        logger.debug("[pdf_validate] OK: pages=%d source=%s", page_count, source)
+    except ValueError:
+        raise  # 上で raise した ValueError はそのまま伝播
+    except Exception as e:
+        raise ValueError(f"pypdfium2 で PDF を開けません: {e} (source={source!r})")
+
+
+# ----------------------------
+# A. CloudFax PDF 取得（PoC: モック / 本番: 実 API に差し替える）
 # ----------------------------
 async def fetch_pdf_from_cloudfax(provider_message_id: str) -> bytes:
     """
     CloudFax API から PDF バイト列を取得する。
-    MVP: ダミー PDF バイト列を返す。
 
-    本番実装例:
-        CLOUDFAX_API_KEY = os.getenv("CLOUDFAX_API_KEY", "")
+    【PoC モック】: pypdfium2 で開ける最小有効 PDF を返す（_generate_minimal_valid_pdf() 参照）。
+
+    【本番実装への差し替え手順】:
+        1. CLOUDFAX_API_KEY = os.getenv("CLOUDFAX_API_KEY", "") を追加
+        2. 以下のコードで差し替える（エンドポイント・認証方式は CloudFAX 仕様書で確認）:
+
+        # TODO(cloudfax-spec): 実際の PDF 取得エンドポイント・認証ヘッダ名を確認すること
         url = f"https://api.cloudfax.example.com/faxes/{provider_message_id}/pdf"
         req = urllib.request.Request(
             url, headers={"Authorization": f"Bearer {CLOUDFAX_API_KEY}"}
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.read()
+        # 取得後は呼び出し元の _cloudfax_inbound_impl() で _validate_pdf_bytes() が実行される
     """
-    print(f"[cloudfax] fetch_pdf mock: provider_message_id={provider_message_id}")
-    # 最小限の有効 PDF バイト列（モック）
-    return b"%PDF-1.4 1 0 obj<</Type/Catalog>>endobj"
+    logger.debug("[cloudfax] fetch_pdf mock: provider_message_id=%s", provider_message_id)
+    return _generate_minimal_valid_pdf()
 
 
 # ----------------------------
@@ -1495,14 +1631,25 @@ async def fetch_pdf_from_cloudfax(provider_message_id: str) -> bytes:
 # ----------------------------
 class CloudFaxPayload(BaseModel):
     """CloudFax Inbound Webhook payload の既知フィールド定義"""
-    id:             str | None = None   # CloudFax が送ってくる場合
-    fax_id:         str | None = None   # 別プロバイダが fax_id を使う場合
-    to_hospital_id: str | None = None   # 受信先病院ID（省略時は FAX_DEFAULT_HOSPITAL_ID）
+    id: Optional[str] = None   # CloudFax が送ってくる場合
+    fax_id: Optional[str] = None   # 別プロバイダが fax_id を使う場合
+    to_hospital_id: Optional[str] = None   # 受信先病院ID（省略時は FAX_DEFAULT_HOSPITAL_ID）
     model_config = {"extra": "allow"}   # 未知フィールドは raw として保存
 
 
 # ----------------------------
-# CloudFax Webhook 処理実装
+# C. エラーステージ定数（fax_inbounds.error_stage に保存する値）
+# ----------------------------
+_STAGE_VALIDATION      = "VALIDATION"
+_STAGE_PDF_FETCH       = "PDF_FETCH"
+_STAGE_PDF_VALIDATE    = "PDF_VALIDATE"
+_STAGE_R2_UPLOAD       = "R2_UPLOAD"
+_STAGE_DOCUMENT_INSERT = "DOCUMENT_INSERT"
+_STAGE_STATUS_UPDATE   = "STATUS_UPDATE"
+
+
+# ----------------------------
+# CloudFax Inbound Webhook 処理実装
 # ----------------------------
 async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
     """
@@ -1511,10 +1658,11 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
     フロー:
       1. provider_message_id 取得（id / fax_id の優先順）
       2. fax_inbounds に UPSERT（ignore-duplicates）→ 重複なら冪等レスポンスを即返却
-      3. PDF 取得（モック） → R2 保存
-      4. documents INSERT（status=ARRIVED, owner_user_id=NULL）
-      5. fax_inbounds.status を DOC_CREATED に更新
-      例外時: fax_inbounds.status を FAILED に更新
+      3. PDF 取得 → PDF 妥当性確認（%PDF ヘッダ + pypdfium2 open チェック）
+      4. R2 保存
+      5. documents INSERT（status=ARRIVED, owner_user_id=NULL）
+      6. fax_inbounds.status を DOC_CREATED に更新
+      例外時: fax_inbounds.status を FAILED + error_stage に更新
     """
     # provider_message_id を id または fax_id から取得（両対応）
     provider_message_id = str(
@@ -1531,48 +1679,77 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
             detail="to_hospital_id required: payload に to_hospital_id を含めるか FAX_DEFAULT_HOSPITAL_ID を設定してください",
         )
 
-    # ---- fax_inbounds UPSERT（冪等チェック）----
-    # on_conflict=provider,provider_message_id + ignore-duplicates
-    #   → 新規: 挿入行を返す / 重複: 空リストを返す
-    inserted = _supabase_service_post(
-        "fax_inbounds?on_conflict=provider,provider_message_id",
-        {
-            "provider":            "cloudfax",
-            "provider_message_id": provider_message_id,
-            "direction":           "inbound",
-            "status":              "RECEIVED",
-            "hospital_id":         to_hospital_id,   # 病院別受信一覧のためのインデックスキー
-            "raw":                 payload_raw,
-        },
-        prefer="resolution=ignore-duplicates,return=representation",
+    # ---- 既存行チェック（FAILED 再処理対応）----
+    # GET で既存行を先に確認し、ステータスに応じて分岐する。
+    # FAILED 行は PATCH でリセットして再処理続行、それ以外は冪等返却。
+    msg_enc  = urllib.parse.quote(provider_message_id, safe="")
+    existing = _supabase_service_get(
+        f"fax_inbounds?provider=eq.cloudfax&provider_message_id=eq.{msg_enc}&select=id,status"
     )
 
-    # 既に処理済み → 冪等レスポンス（何もしない）
-    if not inserted:
-        print(f"[cloudfax] 冪等: provider_message_id={provider_message_id} は処理済み")
-        # TODO(v2.7): status='FAILED' の行は再処理したい場合の改善案:
-        #   1. ignore-duplicates を外して既存行を SELECT する
-        #   2. existing_row["status"] == "FAILED" なら fax_inbounds を RECEIVED にリセットして続行
-        #   3. DOC_CREATED / RECEIVED はスキップ（今と同じ idempotent: true）
-        return {"ok": True, "idempotent": True, "provider_message_id": provider_message_id}
+    if existing:
+        existing_row    = existing[0]
+        existing_status = existing_row.get("status", "")
+        fax_inbound_id  = existing_row["id"]
 
-    fax_inbound_id = inserted[0]["id"]
-    print(f"[cloudfax] 新規受信: fax_inbound_id={fax_inbound_id}, msg_id={provider_message_id}")
+        if existing_status == "FAILED":
+            # FAILED → error をリセットして再処理続行
+            fax_enc = urllib.parse.quote(fax_inbound_id, safe="")
+            _supabase_service_patch(
+                f"fax_inbounds?id=eq.{fax_enc}",
+                {"status": "RECEIVED", "error": None, "error_stage": None},
+            )
+            logger.info(
+                "[cloudfax] FAILED再処理 (retry): fax_inbound_id=%s, msg_id=%s",
+                fax_inbound_id, provider_message_id,
+            )
+        else:
+            # DOC_CREATED / RECEIVED / その他の未知ステータス → 冪等返却（安全側）
+            logger.info(
+                "[cloudfax] 冪等(status=%s): provider_message_id=%s は処理済み",
+                existing_status, provider_message_id,
+            )
+            return {"ok": True, "idempotent": True, "provider_message_id": provider_message_id}
 
+    else:
+        # 既存行なし → 新規 INSERT
+        inserted = _supabase_service_post(
+            "fax_inbounds",
+            {
+                "provider":            "cloudfax",
+                "provider_message_id": provider_message_id,
+                "direction":           "inbound",
+                "status":              "RECEIVED",
+                "hospital_id":         to_hospital_id,   # 病院別受信一覧のためのインデックスキー
+                "raw":                 payload_raw,
+            },
+        )
+        if not inserted:
+            raise RuntimeError("fax_inbounds INSERT に失敗しました（レスポンスが空）")
+        fax_inbound_id = inserted[0]["id"]
+        logger.info("[cloudfax] 新規受信: fax_inbound_id=%s, msg_id=%s", fax_inbound_id, provider_message_id)
+
+    error_stage = _STAGE_PDF_FETCH  # C: 失敗時にどの段階か追跡する
     try:
         # ---- PDF 取得 ----
         pdf_bytes = await fetch_pdf_from_cloudfax(provider_message_id)
 
+        # ---- A. PDF 妥当性確認（R2 保存前に壊れた PDF を検出する）----
+        error_stage = _STAGE_PDF_VALIDATE
+        _validate_pdf_bytes(pdf_bytes, source=provider_message_id)
+
         # ---- R2 保存 ----
+        error_stage = _STAGE_R2_UPLOAD
         file_key = f"documents/{uuid.uuid4()}.pdf"
         _r2_put_object(file_key, pdf_bytes)
-        print(f"[cloudfax] R2 保存完了: file_key={file_key}")
+        logger.info("[cloudfax] R2 保存完了: file_key=%s", file_key)
 
         # ---- documents INSERT ----
         # status=ARRIVED: 港モデルの「未担当BOX」に入港する
         # owner_user_id=NULL: 担当者未割り当て（アサイン機能で後から設定）
         # from_hospital_id=to_hospital_id: FAX送信元病院は不明のため受信先と同値（NOT NULL 暫定措置）
         #   将来: 外部FAX送信元専用の hospital レコードを作成し、そちらの hospital_id を設定する
+        error_stage = _STAGE_DOCUMENT_INSERT
         doc_rows = _supabase_service_post(
             "documents",
             {
@@ -1590,9 +1767,10 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
         if not doc_rows:
             raise RuntimeError("documents INSERT に失敗しました（レスポンスが空）")
         doc_id = doc_rows[0]["id"]
-        print(f"[cloudfax] documents INSERT 完了: doc_id={doc_id}")
+        logger.info("[cloudfax] documents INSERT 完了: doc_id=%s", doc_id)
 
         # ---- fax_inbounds を DOC_CREATED に更新 ----
+        error_stage = _STAGE_STATUS_UPDATE
         fax_enc = urllib.parse.quote(fax_inbound_id, safe="")
         _supabase_service_patch(
             f"fax_inbounds?id=eq.{fax_enc}",
@@ -1609,13 +1787,16 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
     except HTTPException:
         raise  # FastAPI エラーはそのまま伝播
     except Exception as e:
-        # ---- エラー時: fax_inbounds を FAILED に更新 ----
-        print(f"[cloudfax] エラー: fax_inbound_id={fax_inbound_id}, error={e}")
+        # ---- エラー時: fax_inbounds を FAILED + error_stage に更新 ----
+        logger.error(
+            "[cloudfax] エラー stage=%s fax_inbound_id=%s: %s",
+            error_stage, fax_inbound_id, e,
+        )
         try:
             fax_enc = urllib.parse.quote(fax_inbound_id, safe="")
             _supabase_service_patch(
                 f"fax_inbounds?id=eq.{fax_enc}",
-                {"status": "FAILED", "error": str(e)[:500]},
+                {"status": "FAILED", "error": str(e)[:500], "error_stage": error_stage},
             )
         except Exception:
             logger.exception("[cloudfax] FAILED ステータス更新にも失敗")
@@ -1632,20 +1813,24 @@ async def cloudfax_inbound_api(request: Request):
     POST /api/webhook/cloudfax/inbound
     CloudFax からの Inbound FAX Webhook を受信する。
 
-    - 認証: X-CloudFax-Webhook-Secret ヘッダー（CLOUDFAX_WEBHOOK_SECRET 環境変数と一致確認）
+    - 認証: X-CloudFax-Webhook-Secret ヘッダー（_verify_webhook_secret 参照）
     - 冪等性: fax_inbounds の UNIQUE(provider, provider_message_id) で保証
     - service_role 使用: user JWT が存在しない外部Webhook処理のため（最小範囲）
     """
-    if not CLOUDFAX_WEBHOOK_SECRET:
-        raise HTTPException(status_code=503, detail="Webhook は設定されていません")
-    secret = request.headers.get("X-CloudFax-Webhook-Secret", "")
-    if secret != CLOUDFAX_WEBHOOK_SECRET:
-        raise HTTPException(status_code=401, detail="Webhook シークレットが無効です")
+    _verify_webhook_secret(request)
 
     try:
         payload_raw: dict = await request.json()
     except Exception:
+        logger.error("[cloudfax/inbound] JSON パース失敗")
         raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    # E: Pydantic モデルでフィールド型確認（extra="allow" で未知フィールドも通過）
+    try:
+        CloudFaxPayload.model_validate(payload_raw)
+    except Exception as e:
+        logger.error("[cloudfax/inbound] payload バリデーション失敗: %s", e)
+        raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
 
     return await _cloudfax_inbound_impl(payload_raw)
 
@@ -1653,15 +1838,163 @@ async def cloudfax_inbound_api(request: Request):
 @app.post("/webhook/cloudfax/inbound")
 async def cloudfax_inbound_compat(request: Request):
     """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/inbound と同じ処理）"""
-    if not CLOUDFAX_WEBHOOK_SECRET:
-        raise HTTPException(status_code=503, detail="Webhook は設定されていません")
-    secret = request.headers.get("X-CloudFax-Webhook-Secret", "")
-    if secret != CLOUDFAX_WEBHOOK_SECRET:
-        raise HTTPException(status_code=401, detail="Webhook シークレットが無効です")
+    _verify_webhook_secret(request)
 
     try:
         payload_raw: dict = await request.json()
     except Exception:
+        logger.error("[cloudfax/inbound] JSON パース失敗")
         raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
 
+    try:
+        CloudFaxPayload.model_validate(payload_raw)
+    except Exception as e:
+        logger.error("[cloudfax/inbound] payload バリデーション失敗: %s", e)
+        raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
+
     return await _cloudfax_inbound_impl(payload_raw)
+
+
+# ----------------------------
+# CloudFax Outbound Webhook モデル・実装
+# ----------------------------
+class CloudFaxOutboundPayload(BaseModel):
+    """
+    CloudFax Outbound Webhook payload（FAX送信ステータス通知）の既知フィールド定義。
+    # TODO(cloudfax-spec): CloudFAX の実際の outbound payload 仕様が確定したら
+    #   フィールド名・status 値を合わせて修正すること。
+    """
+    id: Optional[str] = None  # CloudFax が送ってくる場合
+    fax_id: Optional[str] = None   # 別プロバイダが fax_id を使う場合
+    status: Optional[str] = None   # SENT / FAILED / DELIVERING など（仕様未確定）
+    hospital_id: Optional[str] = None   # 送信元病院ID（省略時は FAX_DEFAULT_HOSPITAL_ID）
+    model_config = {"extra": "allow"}  # 未知フィールドは raw として保存
+
+
+async def _cloudfax_outbound_impl(payload_raw: dict) -> dict:
+    """
+    CloudFax Outbound Webhook（FAX送信ステータス通知）の共通処理。
+
+    【設計】B: outbound は同一 FAX に対して複数ステータス通知が来る
+    （例: QUEUED → SENDING → SENT / FAILED）。
+    fax_inbounds の (provider, provider_message_id) 単位では後続通知が潰れるため、
+    fax_webhook_events テーブルに (provider, provider_message_id, event_status) 単位で記録する。
+
+    フロー:
+      1. provider_message_id 取得（id / fax_id の優先順）
+      2. event_status を payload.status から取得（未定義なら UNKNOWN）
+      3. fax_webhook_events に INSERT（UNIQUE: provider + provider_message_id + event_status）
+         → 同一 FAX の別ステータスは別行として記録（status 遷移履歴が追える）
+         → 同一 FAX + 同一 status の重複通知は冪等（200 OK）
+
+    TODO(v2.8): 送信済みドキュメントのステータス連携が必要な場合は、
+      provider_message_id でドキュメントを特定して status を更新する処理を追加すること。
+      そのためには documents テーブルに provider_message_id カラムを追加し、
+      FAX 送信時に保存する仕組みが必要。
+    """
+    provider_message_id = str(
+        payload_raw.get("id") or payload_raw.get("fax_id") or ""
+    ).strip()
+    if not provider_message_id:
+        logger.error(
+            "[cloudfax/outbound] payload に id または fax_id がありません: keys=%s",
+            list(payload_raw.keys()),
+        )
+        raise HTTPException(status_code=400, detail="payload に id または fax_id が必要です")
+
+    # TODO(cloudfax-spec): status フィールド名は CloudFAX の実仕様書で確認すること
+    event_status = str(payload_raw.get("status") or "UNKNOWN").strip().upper()
+
+    # hospital_id は outbound では任意（省略時は FAX_DEFAULT_HOSPITAL_ID、それも無ければ NULL）
+    hospital_id: Optional[str] = (
+        payload_raw.get("hospital_id") or FAX_DEFAULT_HOSPITAL_ID or ""
+    ).strip() or None
+
+    # ---- fax_webhook_events INSERT（冪等: provider + provider_message_id + event_status 単位）----
+    # 同一 FAX への複数ステータス通知（QUEUED/SENDING/SENT 等）を個別に記録する。
+    inserted = _supabase_service_post(
+        "fax_webhook_events?on_conflict=provider,provider_message_id,event_status",
+        {
+            "provider":            "cloudfax",
+            "provider_message_id": provider_message_id,
+            "direction":           "outbound",
+            "event_status":        event_status,
+            "hospital_id":         hospital_id,
+            "raw":                 payload_raw,
+        },
+        prefer="resolution=ignore-duplicates,return=representation",
+    )
+
+    if not inserted:
+        logger.info(
+            "[cloudfax/outbound] 冪等: msg_id=%s status=%s は既録",
+            provider_message_id, event_status,
+        )
+        return {
+            "ok":                  True,
+            "idempotent":          True,
+            "provider_message_id": provider_message_id,
+            "event_status":        event_status,
+        }
+
+    event_id = inserted[0]["id"]
+    logger.info(
+        "[cloudfax/outbound] 新規イベント: event_id=%s msg_id=%s status=%s",
+        event_id, provider_message_id, event_status,
+    )
+
+    return {
+        "ok":                  True,
+        "fax_event_id":        event_id,
+        "provider_message_id": provider_message_id,
+        "event_status":        event_status,
+    }
+
+
+@app.post("/api/webhook/cloudfax/outbound")
+async def cloudfax_outbound_api(request: Request):
+    """
+    POST /api/webhook/cloudfax/outbound
+    CloudFax からの FAX送信ステータス通知 Webhook を受信する。
+
+    - 認証: X-CloudFax-Webhook-Secret ヘッダー（_verify_webhook_secret 参照）
+    - 冪等性: fax_webhook_events の UNIQUE(provider, provider_message_id, event_status) で保証
+      → 同一 FAX への複数 status 通知（QUEUED/SENDING/SENT 等）は個別に記録される
+    - PDF取得・R2保存・documents INSERT は行わない（ステータスイベント記録のみ）
+    """
+    _verify_webhook_secret(request)
+
+    try:
+        payload_raw: dict = await request.json()
+    except Exception:
+        logger.error("[cloudfax/outbound] JSON パース失敗")
+        raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    # E: Pydantic モデルでフィールド型確認（extra="allow" で未知フィールドも通過）
+    try:
+        CloudFaxOutboundPayload.model_validate(payload_raw)
+    except Exception as e:
+        logger.error("[cloudfax/outbound] payload バリデーション失敗: %s", e)
+        raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
+
+    return await _cloudfax_outbound_impl(payload_raw)
+
+
+@app.post("/webhook/cloudfax/outbound")
+async def cloudfax_outbound_compat(request: Request):
+    """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/outbound と同じ処理）"""
+    _verify_webhook_secret(request)
+
+    try:
+        payload_raw: dict = await request.json()
+    except Exception:
+        logger.error("[cloudfax/outbound] JSON パース失敗")
+        raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    try:
+        CloudFaxOutboundPayload.model_validate(payload_raw)
+    except Exception as e:
+        logger.error("[cloudfax/outbound] payload バリデーション失敗: %s", e)
+        raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
+
+    return await _cloudfax_outbound_impl(payload_raw)
