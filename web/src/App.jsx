@@ -40,6 +40,7 @@ import {
 import SendTab from "./tabs/SendTab";
 import InboxTab from "./tabs/InboxTab";
 import SentTab from "./tabs/SentTab";
+import FaxInboundList from "./tabs/FaxInboundList";
 import { getPreviewKey, isPreviewable } from "./utils/preview";
 import { logEvent, setAuditHospitalId } from "./utils/audit";
 
@@ -959,6 +960,7 @@ export default function App() {
                 badge={unreadCount ? `未読 ${unreadCount}` : null}
               >受け取る</SidebarButton>
               <SidebarButton active={tab === "sent"} onClick={() => setTab("sent")}>記録</SidebarButton>
+              <SidebarButton active={tab === "fax_inbound"} onClick={() => setTab("fax_inbound")}>FAX受信</SidebarButton>
             </div>
           </Card>
         </div>
@@ -1014,6 +1016,9 @@ export default function App() {
               cancelDocument={cancelDocument} statusLabel={statusLabel}
               statusTone={statusTone} openPreview={openSentPreview}
             />
+          )}
+          {tab === "fax_inbound" && (
+            <FaxInboundList session={session} />
           )}
         </div>
       </div>
