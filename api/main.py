@@ -1420,6 +1420,11 @@ def _verify_webhook_secret(request: Request) -> None:
 
     - CLOUDFAX_WEBHOOK_SECRET 未設定: PoC モード（起動時に警告済み・処理続行）
     - CLOUDFAX_WEBHOOK_SECRET 設定済み: ヘッダーと一致しない場合 401 を返す
+
+    【適用範囲】
+    CloudFAX の inbound webhook 仕様には secret ヘッダが存在しないため、
+    inbound エンドポイントではこの関数を呼ばない。
+    outbound webhook（送信ステータス通知）にのみ適用する。
     """
     if not CLOUDFAX_WEBHOOK_SECRET:
         # 起動時に警告済み。PoC モードのため認証スキップ。
@@ -1900,12 +1905,11 @@ async def cloudfax_inbound_api(request: Request):
     POST /api/webhook/cloudfax/inbound
     CloudFax からの Inbound FAX Webhook を受信する。
 
-    - 認証: X-CloudFax-Webhook-Secret ヘッダー（_verify_webhook_secret 参照）
+    - 認証: CloudFAX inbound webhook は secret ヘッダを送付しない仕様のため、
+            X-CloudFax-Webhook-Secret による検証は行わない
     - 冪等性: fax_inbounds の UNIQUE(provider, provider_message_id) で保証
     - service_role 使用: user JWT が存在しない外部Webhook処理のため（最小範囲）
     """
-    _verify_webhook_secret(request)
-
     try:
         payload_raw: dict = await request.json()
     except Exception:
@@ -1925,8 +1929,6 @@ async def cloudfax_inbound_api(request: Request):
 @app.post("/webhook/cloudfax/inbound")
 async def cloudfax_inbound_compat(request: Request):
     """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/inbound と同じ処理）"""
-    _verify_webhook_secret(request)
-
     try:
         payload_raw: dict = await request.json()
     except Exception:
