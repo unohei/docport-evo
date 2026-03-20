@@ -1392,6 +1392,11 @@ def assign_document_compat(
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 CLOUDFAX_WEBHOOK_SECRET   = os.getenv("CLOUDFAX_WEBHOOK_SECRET", "")   # Webhook認証シークレット
 FAX_DEFAULT_HOSPITAL_ID   = os.getenv("FAX_DEFAULT_HOSPITAL_ID", "")   # FAX受信先デフォルト病院ID
+# CloudFAX API 認証（実PDF取得に使用）
+# CLOUDFAX_BEARER_TOKEN にはトークン本体のみ（"Bearer " プレフィックスは含めない）
+CLOUDFAX_API_BASE     = os.getenv("CLOUDFAX_API_BASE", "").rstrip("/")
+CLOUDFAX_BEARER_TOKEN = os.getenv("CLOUDFAX_BEARER_TOKEN", "")
+CLOUDFAX_API_KEY      = os.getenv("CLOUDFAX_API_KEY", "")
 
 # ----------------------------
 # 起動時セキュリティ警告（F: per-request ではなく起動時1回のみ）
@@ -1542,34 +1547,94 @@ def _r2_put_object(file_key: str, data: bytes, content_type: str = "application/
 
 
 # ----------------------------
-# A. 最小有効 PDF 生成（モック専用）
+# CloudFax API ヘルパー（実API呼び出し専用）
 # ----------------------------
-def _generate_minimal_valid_pdf() -> bytes:
-    """
-    xref オフセットを自動計算した RFC 準拠の最小有効 PDF を生成する。
-    pypdfium2 / 一般 PDF ビューアで開ける 1 ページ空白ドキュメント。
-    モック・PoC 専用。本番では fetch_pdf_from_cloudfax() を実 API 実装に差し替える。
-    """
-    objs: list[bytes] = [
-        b"1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n",
-        b"2 0 obj\n<</Type /Pages /Kids [3 0 R] /Count 1>>\nendobj\n",
-        b"3 0 obj\n<</Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]>>\nendobj\n",
-    ]
-    header = b"%PDF-1.4\n"
-    offsets: list[int] = []
-    pos = len(header)
-    for obj in objs:
-        offsets.append(pos)
-        pos += len(obj)
 
-    xref_offset = pos
-    xref = b"xref\n0 4\n0000000000 65535 f \n"
-    for off in offsets:
-        xref += f"{off:010d} 00000 n \n".encode()
-    trailer  = b"trailer\n<</Size 4 /Root 1 0 R>>\n"
-    startxref = f"startxref\n{xref_offset}\n%%EOF\n".encode()
+def _cloudfax_auth_headers(accept: str = "application/json") -> dict:
+    """
+    CloudFax API 認証ヘッダを生成する。
+    環境変数 CLOUDFAX_API_BASE / CLOUDFAX_BEARER_TOKEN / CLOUDFAX_API_KEY が
+    未設定の場合は RuntimeError を raise する。
+    ※ CLOUDFAX_BEARER_TOKEN にはトークン本体のみ（"Bearer " プレフィックスは含めない）
+    """
+    if not CLOUDFAX_API_BASE or not CLOUDFAX_BEARER_TOKEN or not CLOUDFAX_API_KEY:
+        raise RuntimeError(
+            "CloudFAX API 設定が不足しています "
+            "(CLOUDFAX_API_BASE / CLOUDFAX_BEARER_TOKEN / CLOUDFAX_API_KEY)"
+        )
+    return {
+        "Accept":        accept,
+        "Authorization": f"Bearer {CLOUDFAX_BEARER_TOKEN}",
+        "x-api-key":     CLOUDFAX_API_KEY,
+    }
 
-    return header + b"".join(objs) + xref + trailer + startxref
+
+def _cloudfax_fetch_status(transmission_id: str) -> dict:
+    """
+    GET /v1/Faxes/{transmission_id} で FAX ステータス JSON を取得する。
+    media_url を含む CloudFAX のレスポンス dict を返す。
+    """
+    url = f"{CLOUDFAX_API_BASE}/Faxes/{urllib.parse.quote(transmission_id, safe='')}"
+    logger.info("[cloudfax] ステータス取得: transmission_id=%s", transmission_id)
+    req = urllib.request.Request(url, headers=_cloudfax_auth_headers("application/json"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode())
+            logger.debug("[cloudfax] ステータスレスポンス: status=%s", body.get("status"))
+            return body
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode(errors="replace")
+        logger.error("[cloudfax] ステータス取得 HTTP エラー (%d): %s", e.code, body_text)
+        raise RuntimeError(f"CloudFAX ステータス取得失敗 (HTTP {e.code})")
+    except RuntimeError:
+        raise
+    except Exception as e:
+        logger.exception("[cloudfax] ステータス取得 接続エラー")
+        raise RuntimeError(f"CloudFAX ステータス取得 接続エラー: {e}")
+
+
+def _cloudfax_fetch_media(media_url: str) -> bytes:
+    """
+    media_url から PDF bytes を取得する。
+    Accept: application/pdf,application/octet-stream,application/json
+    レスポンスが PDF ではなく JSON だった場合はログを出して RuntimeError を raise する。
+    """
+    safe_url = media_url.split("?")[0]
+    logger.info("[cloudfax] PDF取得開始: media_url=%s", safe_url)
+    req = urllib.request.Request(
+        media_url,
+        headers=_cloudfax_auth_headers(
+            "application/pdf,application/octet-stream,application/json"
+        ),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            data = resp.read()
+            # Content-Type が JSON かつ %PDF ヘッダが無い場合は仕様齟齬として失敗扱い
+            if not data.startswith(b"%PDF") and "json" in content_type.lower():
+                logger.error(
+                    "[cloudfax] media_url が JSON を返しました (Content-Type=%s 先頭=%s)",
+                    content_type, data[:120],
+                )
+                raise RuntimeError(
+                    f"media_url が PDF ではなく JSON を返しました "
+                    f"(Content-Type={content_type!r})"
+                )
+            logger.info(
+                "[cloudfax] PDF取得完了: size=%d bytes, Content-Type=%s",
+                len(data), content_type,
+            )
+            return data
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode(errors="replace")
+        logger.error("[cloudfax] PDF取得 HTTP エラー (%d): %s", e.code, body_text)
+        raise RuntimeError(f"CloudFAX PDF取得失敗 (HTTP {e.code})")
+    except RuntimeError:
+        raise
+    except Exception as e:
+        logger.exception("[cloudfax] PDF取得 接続エラー")
+        raise RuntimeError(f"CloudFAX PDF取得 接続エラー: {e}")
 
 
 # ----------------------------
@@ -1601,29 +1666,47 @@ def _validate_pdf_bytes(data: bytes, source: str = "") -> None:
 
 
 # ----------------------------
-# A. CloudFax PDF 取得（PoC: モック / 本番: 実 API に差し替える）
+# CloudFax PDF 取得（実API実装）
 # ----------------------------
-async def fetch_pdf_from_cloudfax(provider_message_id: str) -> bytes:
+async def fetch_pdf_from_cloudfax(
+    provider_message_id: str,
+    payload_raw: dict | None = None,
+) -> bytes:
     """
-    CloudFax API から PDF バイト列を取得する。
+    CloudFax API から PDF bytes を取得する。
 
-    【PoC モック】: pypdfium2 で開ける最小有効 PDF を返す（_generate_minimal_valid_pdf() 参照）。
+    取得優先順:
+      1. payload_raw["media_url"] が存在すればそのまま GET → PDF bytes
+      2. なければ payload_raw["transmission_id"] または provider_message_id を使って
+         GET /v1/Faxes/{TransmissionId} を叩き、レスポンスの media_url を取得してから GET
 
-    【本番実装への差し替え手順】:
-        1. CLOUDFAX_API_KEY = os.getenv("CLOUDFAX_API_KEY", "") を追加
-        2. 以下のコードで差し替える（エンドポイント・認証方式は CloudFAX 仕様書で確認）:
+    取得後は呼び出し元 _cloudfax_inbound_impl() で _validate_pdf_bytes() が実行される。
+    """
+    # 1. payload から media_url を優先取得
+    media_url: str = str((payload_raw or {}).get("media_url") or "").strip()
 
-        # TODO(cloudfax-spec): 実際の PDF 取得エンドポイント・認証ヘッダ名を確認すること
-        url = f"https://api.cloudfax.example.com/faxes/{provider_message_id}/pdf"
-        req = urllib.request.Request(
-            url, headers={"Authorization": f"Bearer {CLOUDFAX_API_KEY}"}
+    if not media_url:
+        # 2. transmission_id → GET /v1/Faxes/{id} → media_url を取得（フォールバック）
+        transmission_id = str(
+            (payload_raw or {}).get("transmission_id") or provider_message_id
+        ).strip()
+        if not transmission_id:
+            raise RuntimeError("transmission_id / provider_message_id が取得できません")
+
+        status_json = _cloudfax_fetch_status(transmission_id)
+        media_url   = str(status_json.get("media_url") or "").strip()
+        if not media_url:
+            raise RuntimeError(
+                f"CloudFAX ステータスレスポンスに media_url がありません "
+                f"(transmission_id={transmission_id!r})"
+            )
+        logger.info(
+            "[cloudfax] フォールバック: ステータスAPIから media_url を取得 "
+            "(transmission_id=%s)",
+            transmission_id,
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.read()
-        # 取得後は呼び出し元の _cloudfax_inbound_impl() で _validate_pdf_bytes() が実行される
-    """
-    logger.debug("[cloudfax] fetch_pdf mock: provider_message_id=%s", provider_message_id)
-    return _generate_minimal_valid_pdf()
+
+    return _cloudfax_fetch_media(media_url)
 
 
 # ----------------------------
@@ -1657,8 +1740,12 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
 
     フロー:
       1. provider_message_id 取得（id / fax_id の優先順）
-      2. fax_inbounds に UPSERT（ignore-duplicates）→ 重複なら冪等レスポンスを即返却
-      3. PDF 取得 → PDF 妥当性確認（%PDF ヘッダ + pypdfium2 open チェック）
+      2. fax_inbounds を GET で検索し、既存行の有無・ステータスで分岐する
+         - 既存行なし        → 新規 INSERT して処理続行
+         - status=FAILED     → PATCH でリセット（RECEIVED / error=NULL）して再処理続行（retry）
+         - status=DOC_CREATED / RECEIVED / その他 → 冪等スキップ（即返却）
+      3. PDF 取得（media_url 優先 / なければ GET /v1/Faxes/{id} でフォールバック）
+         → PDF 妥当性確認（%PDF ヘッダ + pypdfium2 open チェック）
       4. R2 保存
       5. documents INSERT（status=ARRIVED, owner_user_id=NULL）
       6. fax_inbounds.status を DOC_CREATED に更新
@@ -1731,8 +1818,8 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
 
     error_stage = _STAGE_PDF_FETCH  # C: 失敗時にどの段階か追跡する
     try:
-        # ---- PDF 取得 ----
-        pdf_bytes = await fetch_pdf_from_cloudfax(provider_message_id)
+        # ---- PDF 取得（payload_raw を渡し media_url を優先利用）----
+        pdf_bytes = await fetch_pdf_from_cloudfax(provider_message_id, payload_raw)
 
         # ---- A. PDF 妥当性確認（R2 保存前に壊れた PDF を検出する）----
         error_stage = _STAGE_PDF_VALIDATE
