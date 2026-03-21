@@ -1756,12 +1756,15 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
       6. fax_inbounds.status を DOC_CREATED に更新
       例外時: fax_inbounds.status を FAILED + error_stage に更新
     """
-    # provider_message_id を id または fax_id から取得（両対応）
+    # provider_message_id を id / fax_id / transmission_id から取得（優先順）
     provider_message_id = str(
-        payload_raw.get("id") or payload_raw.get("fax_id") or ""
+        payload_raw.get("id")
+        or payload_raw.get("fax_id")
+        or payload_raw.get("transmission_id")
+        or ""
     ).strip()
     if not provider_message_id:
-        raise HTTPException(status_code=400, detail="payload に id または fax_id が必要です")
+        raise HTTPException(status_code=400, detail="payload に id / fax_id / transmission_id が必要です")
 
     # to_hospital_id: payload → 環境変数 → 400 の優先順
     to_hospital_id = (payload_raw.get("to_hospital_id") or FAX_DEFAULT_HOSPITAL_ID or "").strip()
@@ -1915,6 +1918,16 @@ async def cloudfax_inbound_api(request: Request):
     except Exception:
         logger.error("[cloudfax/inbound] JSON パース失敗")
         raise HTTPException(status_code=400, detail="JSON パースに失敗しました")
+
+    # 切り分け用ログ: payload キー一覧と安全なフィールドのみ出力（秘密情報は含めない）
+    logger.info("[cloudfax/inbound] payload keys=%s", list(payload_raw.keys()))
+    logger.info(
+        "[cloudfax/inbound] transmission_id=%s status=%s direction=%s media_url_present=%s",
+        payload_raw.get("transmission_id"),
+        payload_raw.get("status"),
+        payload_raw.get("direction"),
+        bool(payload_raw.get("media_url")),
+    )
 
     # E: Pydantic モデルでフィールド型確認（extra="allow" で未知フィールドも通過）
     try:
