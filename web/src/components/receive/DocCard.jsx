@@ -1,0 +1,110 @@
+// DocCard.jsx
+// カード一覧の個々のカード
+
+import { buildCardSummary } from "../../utils/cardSummary";
+import { DP, elapsed, docStatusLabel, docStatusColor } from "./receiveConstants";
+
+export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
+  const summary     = buildCardSummary(doc);
+  const sc          = docStatusColor(doc, isExpired);
+  const sl          = docStatusLabel(doc, isExpired);
+  const isUnassigned = !doc.owner_user_id && doc.status !== "ARCHIVED";
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "11px 13px",
+        borderRadius: 10,
+        border: `1px solid ${selected ? DP.borderActive : DP.border}`,
+        background: selected ? DP.skyLight : DP.white,
+        cursor: "pointer",
+        display: "grid",
+        gap: 7,
+        boxShadow: selected
+          ? "0 0 0 2px rgba(21,101,192,0.15)"
+          : "0 1px 3px rgba(0,0,0,0.05)",
+        transition: "all 130ms ease",
+      }}
+    >
+      {/* Row 1: 病院名 + DocPort バッジ */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <span style={{
+          fontSize: 13,
+          fontWeight: 800,
+          color: DP.navy,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          flex: 1,
+        }}>
+          {nameOf(doc.from_hospital_id)}
+        </span>
+        <span style={{
+          flexShrink: 0,
+          fontSize: 10,
+          fontWeight: 800,
+          padding: "2px 7px",
+          borderRadius: 999,
+          border: `1px solid ${DP.borderActive}`,
+          color: DP.blue,
+          background: "rgba(21,101,192,0.08)",
+        }}>
+          DocPort
+        </span>
+      </div>
+
+      {/* Row 2: 書類種別 */}
+      <div style={{
+        fontSize: 12,
+        color: DP.text,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        opacity: 0.82,
+      }}>
+        {summary.title}
+        {summary.subtitle && (
+          <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 11 }}>
+            {summary.subtitle}
+          </span>
+        )}
+      </div>
+
+      {/* Row 3: ステータス + 経過時間 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{
+          fontSize: 11,
+          fontWeight: 800,
+          padding: "2px 8px",
+          borderRadius: 999,
+          color: sc.text,
+          background: sc.bg,
+        }}>
+          {sl}
+        </span>
+        <span style={{ fontSize: 11, color: DP.textSub }}>
+          {elapsed(doc.created_at)}
+        </span>
+      </div>
+
+      {/* 未担当インジケーター */}
+      {isUnassigned && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{
+            width: 6, height: 6,
+            borderRadius: 999,
+            background: "#EF4444",
+            display: "inline-block",
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: 10, color: "#991B1B", fontWeight: 800 }}>
+            未担当
+          </span>
+        </div>
+      )}
+    </button>
+  );
+}

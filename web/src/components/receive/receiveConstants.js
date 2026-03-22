@@ -1,0 +1,56 @@
+// receiveConstants.js
+// 受信画面コンポーネント群で共有する定数・ヘルパー
+
+// ---- カラーパレット（ロゴ配色準拠: navy / blue / skyLight の3トーン） ----
+export const DP = {
+  navy:        "#0E2A5C",
+  blue:        "#1565C0",
+  skyLight:    "#E8F4FD",
+  surface:     "#F0F6FF",
+  border:      "rgba(14, 42, 92, 0.12)",
+  borderActive:"rgba(21, 101, 192, 0.35)",
+  text:        "#0F172A",
+  textSub:     "rgba(15, 23, 42, 0.55)",
+  white:       "#FFFFFF",
+};
+
+// ---- 部署リスト ----
+export const DEPARTMENTS = [
+  "地域連携室",
+  "医事課",
+  "健診センター",
+  "薬剤科",
+  "検査課",
+  "総務",
+  "病棟看護師",
+  "外来看護師",
+];
+
+// ---- ヘルパー ----
+export function elapsed(createdAt) {
+  if (!createdAt) return "";
+  const ms = Date.now() - new Date(createdAt).getTime();
+  const h = Math.floor(ms / 3_600_000);
+  if (h < 1) return `${Math.max(0, Math.floor(ms / 60_000))}分前`;
+  if (h < 24) return `${h}時間前`;
+  return `${Math.floor(h / 24)}日前`;
+}
+
+export function docStatusLabel(doc, isExpired) {
+  if (isExpired(doc.expires_at)) return "期限切れ";
+  if (doc.status === "ARCHIVED")    return "完了";
+  if (doc.status === "UPLOADED")    return "未読";
+  if (doc.status === "IN_PROGRESS") return "対応中";
+  if (doc.status === "DOWNLOADED")  return "既読";
+  if (doc.status === "CANCELLED")   return "取消";
+  return doc.status || "-";
+}
+
+export function docStatusColor(doc, isExpired) {
+  if (isExpired(doc.expires_at))    return { text: "#991B1B", bg: "rgba(239,68,68,0.10)" };
+  if (doc.status === "ARCHIVED")    return { text: "#047857", bg: "rgba(4,120,87,0.10)" };
+  if (doc.status === "UPLOADED")    return { text: DP.blue,   bg: "rgba(21,101,192,0.10)" };
+  if (doc.status === "IN_PROGRESS") return { text: "#B45309", bg: "rgba(180,83,9,0.10)" };
+  if (doc.status === "DOWNLOADED")  return { text: "#047857", bg: "rgba(4,120,87,0.08)" };
+  return { text: DP.textSub, bg: "rgba(15,23,42,0.06)" };
+}

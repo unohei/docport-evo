@@ -41,6 +41,7 @@ import SendTab from "./tabs/SendTab";
 import InboxTab from "./tabs/InboxTab";
 import SentTab from "./tabs/SentTab";
 import FaxInboundList from "./tabs/FaxInboundList";
+import ReceiveScreen from "./screens/ReceiveScreen";
 import { getPreviewKey, isPreviewable } from "./utils/preview";
 import { logEvent, setAuditHospitalId } from "./utils/audit";
 
@@ -872,6 +873,39 @@ export default function App() {
   }
 
   // ------- APP -------
+
+  // 受信画面は4カラムの ReceiveScreen でフルスクリーン表示
+  if (tab === "inbox") {
+    return (
+      <Root>
+        <ReceiveScreen
+          activeTab={tab}
+          onTabChange={setTab}
+          onLogout={logout}
+          myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+          myHospitalName={myHospitalName}
+          unreadCount={unreadCount}
+          docs={filteredInboxDocs}
+          nameOf={nameOf}
+          fmt={fmt}
+          isExpired={isExpired}
+          openPreview={openInboxPreview}
+          archiveDocument={archiveDocument}
+          assignDocument={assignDocument}
+          hospitalMembers={hospitalMembers}
+          myUserId={session?.user?.id ?? null}
+        />
+        <PreviewModal
+          isOpen={!!previewDoc} onClose={closePreview}
+          title={previewDoc ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}` : ""}
+          metaLeft={previewDoc ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}` : ""}
+          url={previewUrl} loading={previewLoading} error={previewError}
+          previewable={previewable}
+        />
+      </Root>
+    );
+  }
+
   const headerTitle = { fontSize: 18, fontWeight: 800, color: THEME.text };
   const headerDesc = { fontSize: 12, opacity: 0.7, color: THEME.text };
 
