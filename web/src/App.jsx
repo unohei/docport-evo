@@ -24,7 +24,7 @@ console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
-import DocPortLogo from "./assets/logo/docport-logo.svg";
+import DocPortLogo from "./assets/logo/logo.png";
 
 import Root from "./components/Root";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -38,7 +38,7 @@ import {
 } from "./components/ui/primitives";
 
 import SendTab from "./tabs/SendTab";
-import InboxTab from "./tabs/InboxTab";
+// import InboxTab from "./tabs/InboxTab"; // ReceiveScreen に統合（ロールバック用に残す）
 import SentTab from "./tabs/SentTab";
 import FaxInboundList from "./tabs/FaxInboundList";
 import ReceiveScreen from "./screens/ReceiveScreen";
@@ -270,7 +270,7 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [tab, setTab] = useState("send");
+  const [tab, setTab] = useState("inbox"); // 初期表示を ReceiveScreen（受信）に変更
   const [loading, setLoading] = useState(true);
   const [authReturn, setAuthReturn] = useState(false);
 
@@ -1026,21 +1026,7 @@ export default function App() {
               allowedMimeExt={ALLOWED_MIME_EXT}
             />
           )}
-          {tab === "inbox" && (
-            <InboxTab
-              headerTitle={headerTitle} headerDesc={headerDesc} isMobile={isMobile}
-              showUnreadOnly={showUnreadOnly} setShowUnreadOnly={setShowUnreadOnly}
-              showExpired={showExpired} setShowExpired={setShowExpired}
-              qInbox={qInbox} setQInbox={setQInbox}
-              filteredInboxDocs={filteredInboxDocs}
-              nameOf={nameOf} fmt={fmt} isExpired={isExpired}
-              openPreview={openInboxPreview} archiveDocument={archiveDocument}
-              statusLabel={statusLabel} isLegacyKey={isLegacyKey} statusTone={statusTone}
-              assignDocument={assignDocument}
-              hospitalMembers={hospitalMembers}
-              myUserId={session?.user?.id ?? null}
-            />
-          )}
+          {/* tab === "inbox" は ReceiveScreen で early return 済みのためここには到達しない */}
           {tab === "sent" && (
             <SentTab
               headerTitle={headerTitle} headerDesc={headerDesc} isMobile={isMobile}

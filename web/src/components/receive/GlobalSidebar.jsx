@@ -2,10 +2,11 @@
 // アプリ全体のナビゲーション（64px 固定幅）
 // 項目: ホーム(ロゴ) / 受信 / 送信 / 下書き / 設定
 
-import DocPortLogo from "../../assets/logo/docport-logo.svg";
+import DocPortLogo  from "../../assets/logo/logo.png";
+import ReceiveIcon  from "../../assets/logo/receive_box.svg";
 import { DP } from "./receiveConstants";
 
-function NavIcon({ emoji, label, active, badge, onClick, disabled = false }) {
+function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = false }) {
   return (
     <button
       onClick={disabled ? undefined : onClick}
@@ -26,7 +27,10 @@ function NavIcon({ emoji, label, active, badge, onClick, disabled = false }) {
         transition: "background 140ms ease",
       }}
     >
-      <span style={{ lineHeight: 1 }}>{emoji}</span>
+      {iconSrc
+        ? <img src={iconSrc} alt={label} style={{ width: 22, height: 22, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.65 }} />
+        : <span style={{ lineHeight: 1 }}>{emoji}</span>
+      }
       {badge > 0 && (
         <span style={{
           position: "absolute",
@@ -99,7 +103,7 @@ export default function GlobalSidebar({
       }}>
         {/* 受信 */}
         <NavIcon
-          emoji="📥"
+          iconSrc={ReceiveIcon}
           label="受信"
           active={activeTab === "inbox"}
           badge={unreadCount}
