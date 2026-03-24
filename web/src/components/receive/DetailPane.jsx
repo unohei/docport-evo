@@ -2,7 +2,7 @@
 // 書類詳細ペイン（flex-1）: OCR情報・コメント・テキスト・プレビュー + AssignModal
 
 import { useState, useEffect } from "react";
-import { DP, DEPARTMENTS } from "./receiveConstants";
+import { DP, DEPARTMENTS, senderDisplay, recipientDisplay } from "./receiveConstants";
 import { getPreviewKey, isPreviewable } from "../../utils/preview";
 
 // ---- 小コンポーネント ----
@@ -12,7 +12,7 @@ function InfoRow({ label, value }) {
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
       <span style={{
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 800,
         color: DP.textSub,
         minWidth: 72,
@@ -21,7 +21,7 @@ function InfoRow({ label, value }) {
       }}>
         {label}
       </span>
-      <span style={{ fontSize: 12, color: DP.text, fontWeight: 600, lineHeight: 1.5 }}>
+      <span style={{ fontSize: 13, color: DP.text, fontWeight: 600, lineHeight: 1.5 }}>
         {value}
       </span>
     </div>
@@ -31,7 +31,7 @@ function InfoRow({ label, value }) {
 function SectionTitle({ children }) {
   return (
     <div style={{
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 800,
       color: DP.textSub,
       textTransform: "uppercase",
@@ -55,9 +55,9 @@ function ActionButton({ children, variant = "ghost", disabled = false, onClick }
       onClick={onClick}
       disabled={disabled}
       style={{
-        padding: "8px 14px",
+        padding: "9px 16px",
         borderRadius: 9,
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 800,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.45 : 1,
@@ -186,7 +186,6 @@ export default function DetailPane({
   hospitalMembers,
   myUserId,
   fetchPreviewUrl,
-  myHospitalName,
 }) {
   const [copied,       setCopied]      = useState(false);
   const [assignOpen,   setAssignOpen]  = useState(false);
@@ -269,18 +268,17 @@ export default function DetailPane({
         gap: 8,
       }}>
         <div>
-          <div style={{ fontSize: 11, color: DP.textSub, fontWeight: 600, marginBottom: 3 }}>
-            {nameOf(doc.from_hospital_id)}
-            {myHospitalName && (
-              <span style={{ opacity: 0.6 }}> → {myHospitalName}</span>
-            )}
+          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3 }}>
+            {senderDisplay(doc, nameOf)}
+            <span style={{ color: DP.textSub, fontWeight: 400 }}> → </span>
+            {recipientDisplay(doc, nameOf)}
           </div>
-          <div style={{ fontSize: 12, color: DP.textSub }}>
+          <div style={{ fontSize: 13, color: DP.textSub }}>
             {doc.original_filename || doc.file_key?.split("/").pop() || "（ファイル名不明）"}
             {doc.page_count ? ` · ${doc.page_count}ページ` : ""}
           </div>
           {doc.expires_at && (
-            <div style={{ fontSize: 11, color: DP.textSub, marginTop: 1 }}>
+            <div style={{ fontSize: 12, color: DP.textSub, marginTop: 1 }}>
               期限: {fmt(doc.expires_at)}
             </div>
           )}

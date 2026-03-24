@@ -2,7 +2,7 @@
 // カード一覧の個々のカード
 
 import { buildCardSummary } from "../../utils/cardSummary";
-import { DP, elapsed, docStatusLabel, docStatusColor } from "./receiveConstants";
+import { DP, elapsed, docStatusLabel, docStatusColor, senderDisplay } from "./receiveConstants";
 
 export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
   const summary     = buildCardSummary(doc);
@@ -33,16 +33,16 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
       {/* Row 1: 送信元病院名 + ソースバッジ */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <div style={{ fontSize: 10, color: DP.textSub, fontWeight: 600, marginBottom: 1 }}>送信元</div>
+          <div style={{ fontSize: 11, color: DP.textSub, fontWeight: 600, marginBottom: 1 }}>送信元</div>
           <div style={{
-            fontSize: 13,
+            fontSize: 15,
             fontWeight: 800,
             color: DP.navy,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}>
-            {nameOf(doc.from_hospital_id)}
+            {senderDisplay(doc, nameOf)}
           </div>
         </div>
         {doc.source === "fax" ? (
@@ -76,7 +76,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
 
       {/* Row 2: 書類種別 */}
       <div style={{
-        fontSize: 12,
+        fontSize: 14,
         color: DP.text,
         overflow: "hidden",
         textOverflow: "ellipsis",
@@ -85,7 +85,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
       }}>
         {summary.title}
         {summary.subtitle && (
-          <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 11 }}>
+          <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 12 }}>
             {summary.subtitle}
           </span>
         )}
@@ -94,7 +94,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
       {/* Row 3: ステータス + 経過時間 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 800,
           padding: "2px 8px",
           borderRadius: 999,
@@ -103,7 +103,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
         }}>
           {sl}
         </span>
-        <span style={{ fontSize: 11, color: DP.textSub }}>
+        <span style={{ fontSize: 12, color: DP.textSub }}>
           {elapsed(doc.created_at)}
         </span>
       </div>
@@ -112,13 +112,13 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
       {isUnassigned && (
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{
-            width: 6, height: 6,
+            width: 7, height: 7,
             borderRadius: 999,
             background: "#EF4444",
             display: "inline-block",
             flexShrink: 0,
           }} />
-          <span style={{ fontSize: 10, color: "#991B1B", fontWeight: 800 }}>
+          <span style={{ fontSize: 11, color: "#991B1B", fontWeight: 800 }}>
             未担当
           </span>
         </div>

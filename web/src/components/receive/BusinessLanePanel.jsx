@@ -4,17 +4,54 @@
 import { useMemo } from "react";
 import { DP, DEPARTMENTS } from "./receiveConstants";
 
-function LaneItem({ label, count, active, urgent, onClick }) {
+// variant: "inbox" | "dept" | "done"
+function LaneItem({ label, count, active, urgent, variant = "dept", onClick }) {
+  const isInbox = variant === "inbox";
+  const isDone  = variant === "done";
+
+  const bg = active
+    ? DP.skyLight
+    : isInbox
+      ? "rgba(21,101,192,0.07)"
+      : "transparent";
+
+  const borderColor = active
+    ? DP.borderActive
+    : isInbox
+      ? "rgba(21,101,192,0.18)"
+      : "transparent";
+
+  const labelColor  = active ? DP.blue : isDone ? DP.textSub : DP.text;
+  const labelWeight = active ? 800 : isInbox ? 700 : 600;
+
+  const badgeBg = urgent
+    ? "rgba(239,68,68,0.12)"
+    : isInbox
+      ? "rgba(21,101,192,0.16)"
+      : active
+        ? "rgba(21,101,192,0.14)"
+        : isDone
+          ? "rgba(15,23,42,0.06)"
+          : "rgba(15,23,42,0.07)";
+
+  const badgeColor = urgent
+    ? "#991B1B"
+    : isInbox
+      ? DP.blue
+      : active
+        ? DP.blue
+        : DP.textSub;
+
   return (
     <button
       onClick={onClick}
       style={{
         width: "100%",
         textAlign: "left",
-        padding: "9px 12px",
+        padding: "10px 12px",
         borderRadius: 9,
-        border: `1px solid ${active ? DP.borderActive : "transparent"}`,
-        background: active ? DP.skyLight : "transparent",
+        border: `1px solid ${borderColor}`,
+        background: bg,
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
@@ -24,27 +61,24 @@ function LaneItem({ label, count, active, urgent, onClick }) {
       }}
     >
       <span style={{
-        fontSize: 13,
-        fontWeight: active ? 800 : 600,
-        color: active ? DP.blue : DP.text,
+        fontSize: 15,
+        fontWeight: labelWeight,
+        color: labelColor,
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
+        opacity: isDone && !active ? 0.7 : 1,
       }}>
         {label}
       </span>
       {count > 0 && (
         <span style={{
           flexShrink: 0,
-          padding: "1px 8px",
+          padding: "2px 8px",
           borderRadius: 999,
-          background: urgent
-            ? "rgba(239,68,68,0.12)"
-            : active
-              ? "rgba(21,101,192,0.14)"
-              : "rgba(15,23,42,0.07)",
-          color: urgent ? "#991B1B" : active ? DP.blue : DP.textSub,
-          fontSize: 11,
+          background: badgeBg,
+          color: badgeColor,
+          fontSize: 12,
           fontWeight: 800,
         }}>
           {count}
@@ -58,7 +92,7 @@ function SectionLabel({ children }) {
   return (
     <div style={{
       padding: "10px 12px 4px",
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 800,
       color: DP.textSub,
       letterSpacing: "0.06em",
@@ -104,7 +138,7 @@ export default function BusinessLanePanel({
         borderBottom: `1px solid ${DP.border}`,
       }}>
         <div style={{
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 800,
           color: DP.textSub,
           textTransform: "uppercase",
@@ -114,7 +148,7 @@ export default function BusinessLanePanel({
         </div>
         {myHospitalName && (
           <div style={{
-            fontSize: 13,
+            fontSize: 15,
             fontWeight: 800,
             color: DP.navy,
             marginTop: 4,
@@ -134,6 +168,7 @@ export default function BusinessLanePanel({
           count={newCount}
           active={activeLane === "new"}
           urgent={newCount > 0}
+          variant="inbox"
           onClick={() => onLaneChange("new")}
         />
 
@@ -158,7 +193,7 @@ export default function BusinessLanePanel({
           background: "transparent",
           color: DP.textSub,
           cursor: "pointer",
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: 600,
           textAlign: "left",
         }}>
@@ -171,6 +206,7 @@ export default function BusinessLanePanel({
           label="完了"
           count={doneCount}
           active={activeLane === "done"}
+          variant="done"
           onClick={() => onLaneChange("done")}
         />
       </div>

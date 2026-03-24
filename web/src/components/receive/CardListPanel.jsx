@@ -54,10 +54,10 @@ export default function CardListPanel({
           alignItems: "center",
           marginBottom: 8,
         }}>
-          <span style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: DP.navy }}>
             {laneLabel}
           </span>
-          <span style={{ fontSize: 11, color: DP.textSub, fontWeight: 600 }}>
+          <span style={{ fontSize: 13, color: DP.textSub, fontWeight: 600 }}>
             {filtered.length}件
           </span>
         </div>

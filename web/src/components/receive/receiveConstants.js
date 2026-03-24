@@ -54,3 +54,16 @@ export function docStatusColor(doc, isExpired) {
   if (doc.status === "DOWNLOADED")  return { text: "#047857", bg: "rgba(4,120,87,0.08)" };
   return { text: DP.textSub, bg: "rgba(15,23,42,0.06)" };
 }
+
+// ---- 送信元・宛先の表示ラベル ----
+// FAX受信では from_hospital_id = to_hospital_id（暫定値）のため、
+// source=fax の場合は from_fax_number / to_fax_number を優先する
+export function senderDisplay(doc, nameOf) {
+  if (doc.source === "fax") return doc.from_fax_number || "不明（FAX）";
+  return (nameOf && doc.from_hospital_id) ? nameOf(doc.from_hospital_id) || "不明" : "不明";
+}
+
+export function recipientDisplay(doc, nameOf) {
+  if (doc.source === "fax") return doc.to_fax_number || "不明";
+  return (nameOf && doc.to_hospital_id) ? nameOf(doc.to_hospital_id) || "不明" : "不明";
+}

@@ -28,7 +28,7 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
       }}
     >
       {iconSrc
-        ? <img src={iconSrc} alt={label} style={{ width: 22, height: 22, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.65 }} />
+        ? <img src={iconSrc} alt={label} style={{ width: 26, height: 26, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.65 }} />
         : <span style={{ lineHeight: 1 }}>{emoji}</span>
       }
       {badge > 0 && (
@@ -78,8 +78,8 @@ export default function GlobalSidebar({
         onClick={() => onTabChange("inbox")}
         title="ホーム"
         style={{
-          width: 42, height: 42,
-          borderRadius: 11,
+          width: 48, height: 48,
+          borderRadius: 13,
           border: "none",
           background: "rgba(255,255,255,0.10)",
           cursor: "pointer",
@@ -90,7 +90,7 @@ export default function GlobalSidebar({
           marginBottom: 10,
         }}
       >
-        <img src={DocPortLogo} alt="DocPort" style={{ width: 30, height: 30 }} />
+        <img src={DocPortLogo} alt="DocPort" style={{ width: 36, height: 36 }} />
       </button>
 
       {/* メインナビ */}
