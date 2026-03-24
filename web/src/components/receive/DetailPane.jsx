@@ -2,7 +2,7 @@
 // 書類詳細ペイン（flex-1）: OCR情報・コメント・テキスト・プレビュー + AssignModal
 
 import { useState, useEffect } from "react";
-import { DP, DEPARTMENTS, senderDisplay, recipientDisplay } from "./receiveConstants";
+import { DP, senderDisplay, recipientDisplay } from "./receiveConstants";
 import { getPreviewKey, isPreviewable } from "../../utils/preview";
 
 // ---- 小コンポーネント ----
@@ -72,8 +72,8 @@ function ActionButton({ children, variant = "ghost", disabled = false, onClick }
 
 // ---- AssignModal ----
 
-function AssignModal({ doc, hospitalMembers, myUserId, onAssign, onClose }) {
-  const [dept,      setDept]      = useState(DEPARTMENTS[0]);
+function AssignModal({ doc, departments, hospitalMembers, myUserId, onAssign, onClose }) {
+  const [dept,      setDept]      = useState(departments[0]?.name ?? "");
   const [ownerId,   setOwnerId]   = useState(myUserId || (hospitalMembers[0]?.id ?? ""));
   const [submitting, setSubmitting] = useState(false);
   const [err,       setErr]       = useState("");
@@ -136,9 +136,15 @@ function AssignModal({ doc, hospitalMembers, myUserId, onAssign, onClose }) {
           <label style={{ fontSize: 11, fontWeight: 800, color: DP.text, display: "block", marginBottom: 6 }}>
             部署
           </label>
-          <select value={dept} onChange={e => setDept(e.target.value)} style={selectSt}>
-            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+          {departments.length === 0 ? (
+            <div style={{ fontSize: 12, color: DP.textSub, padding: "8px 0" }}>
+              部署がありません。管理者に部署追加を依頼してください。
+            </div>
+          ) : (
+            <select value={dept} onChange={e => setDept(e.target.value)} style={selectSt}>
+              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          )}
         </div>
 
         <div>
@@ -186,6 +192,7 @@ export default function DetailPane({
   hospitalMembers,
   myUserId,
   fetchPreviewUrl,
+  departments = [],
 }) {
   const [copied,       setCopied]      = useState(false);
   const [assignOpen,   setAssignOpen]  = useState(false);
@@ -485,6 +492,7 @@ export default function DetailPane({
       {assignOpen && (
         <AssignModal
           doc={doc}
+          departments={departments}
           hospitalMembers={hospitalMembers}
           myUserId={myUserId}
           onAssign={onAssign}

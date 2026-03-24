@@ -97,6 +97,7 @@ export default function ReceiveScreen({
         hospitalMembers={hospitalMembers}
         myUserId={myUserId}
         fetchPreviewUrl={fetchPreviewUrl}
+        departments={departments}
       />
     </div>
   );
