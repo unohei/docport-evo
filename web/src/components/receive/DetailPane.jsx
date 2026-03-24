@@ -1,8 +1,9 @@
 // DetailPane.jsx
 // 書類詳細ペイン（flex-1）: OCR情報・コメント・テキスト・プレビュー + AssignModal
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DP, DEPARTMENTS } from "./receiveConstants";
+import { getPreviewKey, isPreviewable } from "../../utils/preview";
 
 // ---- 小コンポーネント ----
 
@@ -180,15 +181,32 @@ export default function DetailPane({
   doc,
   nameOf,
   fmt,
-  onPreview,
   onArchive,
   onAssign,
-  isExpired,
   hospitalMembers,
   myUserId,
+  fetchPreviewUrl,
+  myHospitalName,
 }) {
-  const [copied,     setCopied]    = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
+  const [copied,       setCopied]      = useState(false);
+  const [assignOpen,   setAssignOpen]  = useState(false);
+  const [inlineUrl,    setInlineUrl]   = useState("");
+  const [inlineLoading, setInlineLoading] = useState(false);
+
+  useEffect(() => {
+    if (!doc || !fetchPreviewUrl || doc.status === "CANCELLED") {
+      setInlineUrl("");
+      return;
+    }
+    let cancelled = false;
+    setInlineUrl("");
+    setInlineLoading(true);
+    fetchPreviewUrl(doc)
+      .then(url  => { if (!cancelled) setInlineUrl(url); })
+      .catch(()  => { if (!cancelled) setInlineUrl(""); })
+      .finally(() => { if (!cancelled) setInlineLoading(false); });
+    return () => { cancelled = true; };
+  }, [doc?.id, fetchPreviewUrl]);
 
   const handleCopy = text => {
     if (!text) return;
@@ -217,10 +235,7 @@ export default function DetailPane({
     );
   }
 
-  const expired     = isExpired(doc.expires_at);
   const isCompleted = doc.status === "ARCHIVED";
-  const isCancelled = doc.status === "CANCELLED";
-  const canOpen     = !expired && !isCancelled && !isCompleted;
   const canAssign   = !isCompleted && !doc.owner_user_id;
 
   // structured_json から OCR 情報を取得
@@ -254,24 +269,21 @@ export default function DetailPane({
         gap: 8,
       }}>
         <div>
-          <div style={{
-            fontSize: 15,
-            fontWeight: 800,
-            color: DP.navy,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+          <div style={{ fontSize: 11, color: DP.textSub, fontWeight: 600, marginBottom: 3 }}>
             {nameOf(doc.from_hospital_id)}
+            {myHospitalName && (
+              <span style={{ opacity: 0.6 }}> → {myHospitalName}</span>
+            )}
           </div>
-          <div style={{ fontSize: 12, color: DP.textSub, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: DP.textSub }}>
             {doc.original_filename || doc.file_key?.split("/").pop() || "（ファイル名不明）"}
             {doc.page_count ? ` · ${doc.page_count}ページ` : ""}
           </div>
-          <div style={{ fontSize: 11, color: DP.textSub, marginTop: 1 }}>
-            受信: {fmt(doc.created_at)}
-            {doc.expires_at ? ` · 期限: ${fmt(doc.expires_at)}` : ""}
-          </div>
+          {doc.expires_at && (
+            <div style={{ fontSize: 11, color: DP.textSub, marginTop: 1 }}>
+              期限: {fmt(doc.expires_at)}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -280,12 +292,9 @@ export default function DetailPane({
               アサイン
             </ActionButton>
           )}
-          <ActionButton variant="secondary" disabled={!canOpen} onClick={() => onPreview(doc)}>
-            プレビュー
-          </ActionButton>
-          <ActionButton disabled={isCompleted} onClick={() => onArchive(doc)}>
-            {isCompleted ? "完了済み" : "完了にする"}
-          </ActionButton>
+          {!isCompleted && (
+            <ActionButton onClick={() => onArchive(doc)}>完了にする</ActionButton>
+          )}
         </div>
       </div>
 
@@ -412,41 +421,66 @@ export default function DetailPane({
           </section>
         )}
 
-        {/* ファイルプレビュー */}
+        {/* ファイルプレビュー（インライン） */}
         <section>
           <SectionTitle>ファイルプレビュー</SectionTitle>
-          <div style={{
-            background: "#F1F5F9",
-            borderRadius: 10,
-            border: `1px solid ${DP.border}`,
-            minHeight: 110,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            padding: "20px 16px",
-          }}>
-            <span style={{ fontSize: 34, opacity: 0.5 }}>📄</span>
+          {inlineLoading ? (
             <div style={{
-              fontSize: 11,
-              color: DP.textSub,
-              textAlign: "center",
-              maxWidth: "90%",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              background: "#F1F5F9",
+              borderRadius: 10,
+              border: `1px solid ${DP.border}`,
+              minHeight: 80,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}>
-              {doc.original_filename || "（ファイル名不明）"}
+              <span style={{ fontSize: 12, color: DP.textSub }}>読み込み中...</span>
             </div>
-            <ActionButton
-              variant={canOpen ? "primary" : "ghost"}
-              disabled={!canOpen}
-              onClick={() => onPreview(doc)}
-            >
-              {canOpen ? "プレビューを開く" : isCompleted ? "完了済み" : "開けません"}
-            </ActionButton>
-          </div>
+          ) : inlineUrl && isPreviewable(getPreviewKey(doc)) ? (
+            <div style={{
+              borderRadius: 10,
+              border: `1px solid ${DP.border}`,
+              overflow: "hidden",
+              height: 420,
+            }}>
+              <iframe
+                src={inlineUrl}
+                style={{ width: "100%", height: "100%", border: "none" }}
+                title="ファイルプレビュー"
+              />
+            </div>
+          ) : inlineUrl ? (
+            <div style={{
+              background: "#F1F5F9",
+              borderRadius: 10,
+              border: `1px solid ${DP.border}`,
+              padding: "20px 16px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}>
+              <span style={{ fontSize: 34, opacity: 0.5 }}>📄</span>
+              <div style={{ fontSize: 11, color: DP.textSub }}>ブラウザではプレビューできません</div>
+              <a
+                href={inlineUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 9,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  background: DP.skyLight,
+                  color: DP.blue,
+                  border: `1px solid ${DP.borderActive}`,
+                  textDecoration: "none",
+                }}
+              >
+                ダウンロードして確認
+              </a>
+            </div>
+          ) : null}
         </section>
       </div>
 

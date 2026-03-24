@@ -752,6 +752,14 @@ export default function App() {
   const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: false });
   const openSentPreview = (doc) => openPreview(doc, { markDownloaded: false });
 
+  // DetailPane インラインプレビュー用（モーダルを開かずURLだけ返す）
+  const fetchPreviewUrl = async (doc) => {
+    if (!doc?.file_key) throw new Error("file_key not found");
+    const { download_url } = await getPresignedDownload(getPreviewKey(doc));
+    if (!download_url) throw new Error("download_url が取得できませんでした");
+    return download_url;
+  };
+
   const archiveDocument = async (doc) => {
     try {
       if (!doc?.id || doc.status === "ARCHIVED") return;
@@ -894,6 +902,7 @@ export default function App() {
           assignDocument={assignDocument}
           hospitalMembers={hospitalMembers}
           myUserId={session?.user?.id ?? null}
+          fetchPreviewUrl={fetchPreviewUrl}
         />
         <PreviewModal
           isOpen={!!previewDoc} onClose={closePreview}

@@ -22,11 +22,11 @@ export default function ReceiveScreen({
   fmt,
   isExpired,
   // アクション
-  openPreview,
   archiveDocument,
   assignDocument,
   hospitalMembers,
   myUserId,
+  fetchPreviewUrl,
 }) {
   const [activeLane,  setActiveLane]  = useState("new");
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -88,12 +88,12 @@ export default function ReceiveScreen({
         doc={selectedDoc}
         nameOf={nameOf}
         fmt={fmt}
-        onPreview={openPreview}
         onArchive={archiveDocument}
         onAssign={assignDocument}
-        isExpired={isExpired}
         hospitalMembers={hospitalMembers}
         myUserId={myUserId}
+        fetchPreviewUrl={fetchPreviewUrl}
+        myHospitalName={myHospitalName}
       />
     </div>
   );

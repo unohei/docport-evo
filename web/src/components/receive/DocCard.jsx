@@ -19,6 +19,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
         padding: "11px 13px",
         borderRadius: 10,
         border: `1px solid ${selected ? DP.borderActive : DP.border}`,
+        ...(isUnassigned && { borderLeft: "3px solid #EF4444" }),
         background: selected ? DP.skyLight : DP.white,
         cursor: "pointer",
         display: "grid",
@@ -29,31 +30,48 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
         transition: "all 130ms ease",
       }}
     >
-      {/* Row 1: 病院名 + DocPort バッジ */}
+      {/* Row 1: 送信元病院名 + ソースバッジ */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 800,
-          color: DP.navy,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          flex: 1,
-        }}>
-          {nameOf(doc.from_hospital_id)}
-        </span>
-        <span style={{
-          flexShrink: 0,
-          fontSize: 10,
-          fontWeight: 800,
-          padding: "2px 7px",
-          borderRadius: 999,
-          border: `1px solid ${DP.borderActive}`,
-          color: DP.blue,
-          background: "rgba(21,101,192,0.08)",
-        }}>
-          DocPort
-        </span>
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <div style={{ fontSize: 10, color: DP.textSub, fontWeight: 600, marginBottom: 1 }}>送信元</div>
+          <div style={{
+            fontSize: 13,
+            fontWeight: 800,
+            color: DP.navy,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {nameOf(doc.from_hospital_id)}
+          </div>
+        </div>
+        {doc.source === "fax" ? (
+          <span style={{
+            flexShrink: 0,
+            fontSize: 10,
+            fontWeight: 800,
+            padding: "2px 7px",
+            borderRadius: 999,
+            border: "1px solid #CBD5E1",
+            color: "#64748B",
+            background: "#F1F5F9",
+          }}>
+            FAX
+          </span>
+        ) : (
+          <span style={{
+            flexShrink: 0,
+            fontSize: 10,
+            fontWeight: 800,
+            padding: "2px 7px",
+            borderRadius: 999,
+            border: `1px solid ${DP.borderActive}`,
+            color: DP.blue,
+            background: "rgba(21,101,192,0.08)",
+          }}>
+            DocPort
+          </span>
+        )}
       </div>
 
       {/* Row 2: 書類種別 */}
