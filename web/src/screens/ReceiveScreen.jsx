@@ -27,6 +27,8 @@ export default function ReceiveScreen({
   hospitalMembers,
   myUserId,
   fetchPreviewUrl,
+  departments,
+  addDepartment,
 }) {
   const [activeLane,  setActiveLane]  = useState("new");
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -73,6 +75,8 @@ export default function ReceiveScreen({
         activeLane={activeLane}
         onLaneChange={handleLaneChange}
         myHospitalName={myHospitalName}
+        departments={departments}
+        addDepartment={addDepartment}
       />
 
       <CardListPanel

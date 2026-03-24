@@ -280,6 +280,7 @@ export default function App() {
   const [inboxDocs, setInboxDocs] = useState([]);
   const [sentDocs, setSentDocs] = useState([]);
   const [hospitalMembers, setHospitalMembers] = useState([]); // 同院メンバー一覧（港モデル用）
+  const [departments,    setDepartments]    = useState([]);   // 病院単位の部署一覧
 
   // send form
   const [toHospitalId, setToHospitalId] = useState("");
@@ -452,6 +453,15 @@ export default function App() {
       .select("id, display_name")
       .eq("hospital_id", prof.hospital_id);
     if (!membersErr) setHospitalMembers(members ?? []);
+
+    // 部署一覧（departments テーブルが未作成の環境は空配列で続行）
+    const { data: depts } = await supabase
+      .from("departments")
+      .select("id, name, sort_order")
+      .eq("hospital_id", prof.hospital_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    setDepartments(depts ?? []);
   };
 
   useEffect(() => {
@@ -752,6 +762,21 @@ export default function App() {
   const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: false });
   const openSentPreview = (doc) => openPreview(doc, { markDownloaded: false });
 
+  // 部署追加（departments テーブルへ INSERT して即時 UI 反映）
+  const addDepartment = async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("部署名を入力してください");
+    if (!myHospitalId) throw new Error("hospital_id が未設定です");
+    const { data, error } = await supabase
+      .from("departments")
+      .insert({ hospital_id: myHospitalId, name: trimmed, sort_order: departments.length, is_active: true })
+      .select("id, name, sort_order")
+      .single();
+    if (error) throw error;
+    setDepartments(prev => [...prev, data]);
+    return data;
+  };
+
   // DetailPane インラインプレビュー用（モーダルを開かずURLだけ返す）
   const fetchPreviewUrl = async (doc) => {
     if (!doc?.file_key) throw new Error("file_key not found");
@@ -903,6 +928,8 @@ export default function App() {
           hospitalMembers={hospitalMembers}
           myUserId={session?.user?.id ?? null}
           fetchPreviewUrl={fetchPreviewUrl}
+          departments={departments}
+          addDepartment={addDepartment}
         />
         <PreviewModal
           isOpen={!!previewDoc} onClose={closePreview}

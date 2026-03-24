@@ -1,9 +1,15 @@
 // BusinessLanePanel.jsx
 // 業務レーン（港）: 新着書類 / 部署別 / 完了 の切替パネル（220px 固定幅）
+// 変更点:
+//  - 部署を dynamicDepartments（DBから取得）で管理。DEPARTMENTS定数はフォールバック用に残存
+//  - ＋部署を追加モーダルを実装
+//  - 3ブロック構成（受信ポート / 部署レーン / 完了）で視覚的に分離
+//  - 「アーカイブ」文言を一切使用しない
 
-import { useMemo } from "react";
-import { DP, DEPARTMENTS } from "./receiveConstants";
+import { useMemo, useState } from "react";
+import { DP } from "./receiveConstants";
 
+// ---- LaneItem ----
 // variant: "inbox" | "dept" | "done"
 function LaneItem({ label, count, active, urgent, variant = "dept", onClick }) {
   const isInbox = variant === "inbox";
@@ -36,11 +42,9 @@ function LaneItem({ label, count, active, urgent, variant = "dept", onClick }) {
 
   const badgeColor = urgent
     ? "#991B1B"
-    : isInbox
+    : (isInbox || active)
       ? DP.blue
-      : active
-        ? DP.blue
-        : DP.textSub;
+      : DP.textSub;
 
   return (
     <button
@@ -88,10 +92,11 @@ function LaneItem({ label, count, active, urgent, variant = "dept", onClick }) {
   );
 }
 
-function SectionLabel({ children }) {
+// ---- BlockHeader ---- セクション見出し
+function BlockHeader({ children }) {
   return (
     <div style={{
-      padding: "10px 12px 4px",
+      padding: "8px 12px 4px",
       fontSize: 11,
       fontWeight: 800,
       color: DP.textSub,
@@ -103,13 +108,125 @@ function SectionLabel({ children }) {
   );
 }
 
+// ---- AddDeptModal ---- 部署追加モーダル
+function AddDeptModal({ onAdd, onClose }) {
+  const [name,       setName]       = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err,        setErr]        = useState("");
+
+  const handleSubmit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return setErr("部署名を入力してください");
+    setSubmitting(true);
+    setErr("");
+    try {
+      await onAdd(trimmed);
+      onClose();
+    } catch (e) {
+      setErr(e?.message ?? String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(14,42,92,0.30)",
+        zIndex: 200,
+        display: "grid",
+        placeItems: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{
+        width: "min(340px, 100%)",
+        background: DP.white,
+        borderRadius: 16,
+        padding: 22,
+        boxShadow: "0 24px 56px rgba(0,0,0,0.18)",
+        display: "grid",
+        gap: 14,
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: DP.navy }}>部署を追加</div>
+
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 800, color: DP.text, display: "block", marginBottom: 6 }}>
+            部署名
+          </label>
+          <input
+            autoFocus
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSubmit()}
+            placeholder="例：地域連携室"
+            style={{
+              width: "100%",
+              padding: "9px 12px",
+              borderRadius: 9,
+              border: `1px solid ${DP.border}`,
+              fontSize: 14,
+              color: DP.text,
+              background: DP.white,
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+          />
+        </div>
+
+        {err && (
+          <div style={{ fontSize: 12, color: "#B91C1C", fontWeight: 700 }}>{err}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 800,
+              background: "transparent", color: DP.text, border: `1px solid ${DP.border}`,
+              cursor: "pointer",
+            }}
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            style={{
+              padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 800,
+              background: DP.blue, color: DP.white, border: "none",
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.6 : 1,
+            }}
+          >
+            {submitting ? "追加中..." : "追加する"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- BusinessLanePanel ----
 export default function BusinessLanePanel({
   docs,
   activeLane,
   onLaneChange,
   myHospitalName,
+  departments = [],   // DB から取得した部署一覧 [{id, name, sort_order}]
+  addDepartment,      // async (name: string) => void
 }) {
-  const newCount  = docs.filter(d => !d.owner_user_id && d.status === "UPLOADED").length;
+  const [addDeptOpen, setAddDeptOpen] = useState(false);
+
+  // 新着: UPLOADED (DocPort) または ARRIVED (FAX) で未担当
+  const newCount  = docs.filter(d =>
+    !d.owner_user_id && (d.status === "UPLOADED" || d.status === "ARRIVED")
+  ).length;
+
   const doneCount = docs.filter(d => d.status === "ARCHIVED").length;
 
   const deptCounts = useMemo(() => {
@@ -161,55 +278,90 @@ export default function BusinessLanePanel({
         )}
       </div>
 
-      {/* レーン一覧 */}
-      <div style={{ flex: 1, overflow: "auto", padding: "8px 8px" }}>
-        <LaneItem
-          label="新着書類"
-          count={newCount}
-          active={activeLane === "new"}
-          urgent={newCount > 0}
-          variant="inbox"
-          onClick={() => onLaneChange("new")}
-        />
+      {/* レーン一覧（3ブロック構成） */}
+      <div style={{ flex: 1, overflow: "auto", padding: "10px 8px 8px" }}>
 
-        <SectionLabel>部署レーン</SectionLabel>
-
-        {DEPARTMENTS.map(dept => (
-          <LaneItem
-            key={dept}
-            label={dept}
-            count={deptCounts[dept] || 0}
-            active={activeLane === dept}
-            onClick={() => onLaneChange(dept)}
-          />
-        ))}
-
-        <button style={{
-          width: "100%",
-          marginTop: 4,
-          padding: "8px 12px",
-          borderRadius: 9,
-          border: `1px dashed ${DP.border}`,
-          background: "transparent",
-          color: DP.textSub,
-          cursor: "pointer",
-          fontSize: 13,
-          fontWeight: 600,
-          textAlign: "left",
+        {/* ── Block 1: 新着書類 ── */}
+        <div style={{
+          marginBottom: 10,
+          paddingBottom: 10,
+          borderBottom: `1px solid ${DP.border}`,
         }}>
-          ＋ 部署を追加
-        </button>
+          <LaneItem
+            label="新着書類"
+            count={newCount}
+            active={activeLane === "new"}
+            urgent={newCount > 0}
+            variant="inbox"
+            onClick={() => onLaneChange("new")}
+          />
+        </div>
 
-        <SectionLabel>完了済み</SectionLabel>
+        {/* ── Block 2: 部署レーン ── */}
+        <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${DP.border}` }}>
+          <BlockHeader>部署レーン</BlockHeader>
 
-        <LaneItem
-          label="完了"
-          count={doneCount}
-          active={activeLane === "done"}
-          variant="done"
-          onClick={() => onLaneChange("done")}
-        />
+          {departments.length === 0 ? (
+            <div style={{
+              padding: "6px 12px 4px",
+              fontSize: 12,
+              color: DP.textSub,
+              opacity: 0.7,
+            }}>
+              部署がありません
+            </div>
+          ) : (
+            departments.map(dept => (
+              <LaneItem
+                key={dept.id}
+                label={dept.name}
+                count={deptCounts[dept.name] || 0}
+                active={activeLane === dept.name}
+                onClick={() => onLaneChange(dept.name)}
+              />
+            ))
+          )}
+
+          <button
+            onClick={() => setAddDeptOpen(true)}
+            style={{
+              width: "100%",
+              marginTop: 4,
+              padding: "8px 12px",
+              borderRadius: 9,
+              border: `1px dashed ${DP.border}`,
+              background: "transparent",
+              color: DP.textSub,
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              textAlign: "left",
+              transition: "all 140ms ease",
+            }}
+          >
+            ＋ 部署を追加
+          </button>
+        </div>
+
+        {/* ── Block 3: 完了 ── */}
+        <div>
+          <BlockHeader>完了</BlockHeader>
+          <LaneItem
+            label="完了した書類"
+            count={doneCount}
+            active={activeLane === "done"}
+            variant="done"
+            onClick={() => onLaneChange("done")}
+          />
+        </div>
       </div>
+
+      {addDeptOpen && (
+        <AddDeptModal
+          onAdd={addDepartment}
+          onClose={() => setAddDeptOpen(false)}
+        />
+      )}
     </div>
   );
 }
