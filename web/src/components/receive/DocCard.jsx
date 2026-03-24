@@ -30,7 +30,7 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
         transition: "all 130ms ease",
       }}
     >
-      {/* Row 1: 送信元病院名 + ソースバッジ */}
+      {/* Row 1: 送信元病院名 + ソースバッジ + 書類種別バッジ */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, overflow: "hidden" }}>
           <div style={{ fontSize: 11, color: DP.textSub, fontWeight: 600, marginBottom: 1 }}>送信元</div>
@@ -45,33 +45,46 @@ export default function DocCard({ doc, nameOf, selected, onClick, isExpired }) {
             {senderDisplay(doc, nameOf)}
           </div>
         </div>
-        {doc.source === "fax" ? (
-          <span style={{
-            flexShrink: 0,
-            fontSize: 10,
-            fontWeight: 800,
-            padding: "2px 7px",
-            borderRadius: 999,
-            border: "1px solid #CBD5E1",
-            color: "#64748B",
-            background: "#F1F5F9",
-          }}>
-            FAX
-          </span>
-        ) : (
-          <span style={{
-            flexShrink: 0,
-            fontSize: 10,
-            fontWeight: 800,
-            padding: "2px 7px",
-            borderRadius: 999,
-            border: `1px solid ${DP.borderActive}`,
-            color: DP.blue,
-            background: "rgba(21,101,192,0.08)",
-          }}>
-            DocPort
-          </span>
-        )}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+          {doc.source === "fax" ? (
+            <span style={{
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "2px 7px",
+              borderRadius: 999,
+              border: "1px solid #CBD5E1",
+              color: "#64748B",
+              background: "#F1F5F9",
+            }}>
+              FAX
+            </span>
+          ) : (
+            <span style={{
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "2px 7px",
+              borderRadius: 999,
+              border: `1px solid ${DP.borderActive}`,
+              color: DP.blue,
+              background: "rgba(21,101,192,0.08)",
+            }}>
+              DocPort
+            </span>
+          )}
+          {doc.document_type === "紹介状" && (
+            <span style={{
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "2px 7px",
+              borderRadius: 999,
+              border: "1px solid rgba(22,163,74,0.35)",
+              color: "#15803D",
+              background: "rgba(22,163,74,0.09)",
+            }}>
+              紹介状
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Row 2: 書類種別 */}

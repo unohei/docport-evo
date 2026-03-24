@@ -80,7 +80,8 @@ function isLegacyKey(fileKey) {
 const SELECT_EXT =
   "id, from_hospital_id, to_hospital_id, comment, status, created_at, expires_at, file_key, " +
   "original_filename, file_ext, preview_file_key, structured_json, structured_updated_by, " +
-  "assigned_department, owner_user_id, assigned_at";
+  "assigned_department, owner_user_id, assigned_at, " +
+  "source, from_fax_number, to_fax_number, ocr_text, ocr_status, document_type";
 // SELECT_BASE: 新列が未反映の環境向けフォールバック。
 // original_filename / file_ext / preview_file_key は確実に存在するので含める
 const SELECT_BASE =

@@ -244,10 +244,10 @@ export default function DetailPane({
   const isCompleted = doc.status === "ARCHIVED";
   const canAssign   = !isCompleted && !doc.owner_user_id;
 
-  // structured_json から OCR 情報を取得
+  // OCR情報を取得（doc直列 > structured_json フォールバック）
   const sj             = doc.structured_json || {};
-  const ocrText        = sj.raw_text || sj.full_text || "";
-  const docType        = sj.doc_type || sj.document_type || "";
+  const ocrText        = doc.ocr_text || sj.raw_text || sj.full_text || "";
+  const docType        = doc.document_type || sj.doc_type || sj.document_type || "";
   const patientName    = sj.patient_name || sj.patient || "";
   const patientId      = sj.patient_id || "";
   const deptInfo       = sj.department || sj.dept || "";

@@ -72,7 +72,7 @@ import pypdfium2 as pdfium
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -1739,7 +1739,7 @@ _STAGE_STATUS_UPDATE   = "STATUS_UPDATE"
 # ----------------------------
 # CloudFax Inbound Webhook 処理実装
 # ----------------------------
-async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
+async def _cloudfax_inbound_impl(payload_raw: dict, background_tasks: BackgroundTasks) -> dict:
     """
     CloudFax Inbound Webhook の共通処理。
 
@@ -1859,12 +1859,21 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
                 "file_size":         len(pdf_bytes),
                 "from_fax_number":   payload_raw.get("from") or None,
                 "to_fax_number":     payload_raw.get("to")   or None,
+                "source":            "fax",
+                "ocr_status":        "PENDING",
             },
         )
         if not doc_rows:
             raise RuntimeError("documents INSERT に失敗しました（レスポンスが空）")
         doc_id = doc_rows[0]["id"]
         logger.info("[cloudfax] documents INSERT 完了: doc_id=%s", doc_id)
+
+        # ---- バックグラウンドOCR（best-effort: 失敗してもWebhook応答は成功） ----
+        if OPENAI_API_KEY:
+            background_tasks.add_task(_analyze_document_for_fax, doc_id, file_key)
+            logger.info("[cloudfax] OCRバックグラウンドタスク登録: doc_id=%s", doc_id)
+        else:
+            logger.warning("[cloudfax] OPENAI_API_KEY 未設定のためOCRスキップ: doc_id=%s", doc_id)
 
         # ---- fax_inbounds を DOC_CREATED に更新 ----
         error_stage = _STAGE_STATUS_UPDATE
@@ -1902,10 +1911,110 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
 
 
 # ----------------------------
+# FAX受信文書 バックグラウンドOCR
+# ----------------------------
+# 紹介状判定キーワード（OCRテキストに含まれれば "紹介状" と分類）
+_REFERRAL_KEYWORDS = [
+    "紹介状", "診療情報提供書", "診療情報提供", "ご紹介", "御紹介",
+    "紹介先", "紹介元", "かかりつけ", "専門診療科",
+]
+
+_MAX_FAX_OCR_SECS = 90  # FAX OCRのタイムアウト（秒）
+
+
+def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
+    """
+    FAX受信PDFに対してOCR + document_type分類を実行し、documentsを更新する。
+    - BackgroundTasks から呼ばれる（同期関数）
+    - 失敗しても documents 登録は影響しない（best-effort）
+    - document_type: "紹介状" | "不明"
+    """
+    logger.info("[fax-ocr] 開始: document_id=%s file_key=%s", document_id, file_key)
+    try:
+        # ---- R2 からPDF取得 ----
+        try:
+            bucket = get_bucket_name()
+            s3 = get_s3_client()
+        except Exception:
+            logger.exception("[fax-ocr] R2クライアント初期化失敗")
+            return
+
+        presigned_url = s3.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={"Bucket": bucket, "Key": file_key},
+            ExpiresIn=120,
+        )
+        try:
+            with urllib.request.urlopen(presigned_url, timeout=15) as resp:
+                pdf_bytes = resp.read()
+        except Exception:
+            logger.exception("[fax-ocr] R2からのPDF取得失敗: %s", file_key)
+            return
+
+        if len(pdf_bytes) > _MAX_PDF_SIZE_BYTES:
+            logger.warning("[fax-ocr] PDFサイズ超過 (%d bytes), スキップ", len(pdf_bytes))
+            return
+
+        # ---- PDF → PNG → OCR ----
+        try:
+            png_list, _ = _render_pdf_to_png_list(pdf_bytes)
+        except Exception:
+            logger.exception("[fax-ocr] PDF画像化失敗: %s", file_key)
+            _supabase_service_patch(
+                f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+                {"ocr_status": "FAILED"},
+            )
+            return
+
+        try:
+            raw_text = _call_openai_ocr(png_list, timeout=_MAX_FAX_OCR_SECS)
+        except Exception:
+            logger.exception("[fax-ocr] OpenAI OCR失敗: %s", file_key)
+            _supabase_service_patch(
+                f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+                {"ocr_status": "FAILED"},
+            )
+            return
+
+        normalized = _normalize_text(raw_text)
+
+        # ---- document_type 分類 ----
+        doc_type = "不明"
+        for kw in _REFERRAL_KEYWORDS:
+            if kw in normalized or kw in raw_text:
+                doc_type = "紹介状"
+                break
+
+        # ---- structured_json 生成（失敗時は None のまま） ----
+        structured = _structure_referral_text(normalized)
+
+        # ---- documents を更新 ----
+        patch_data: dict = {
+            "ocr_text":      raw_text,
+            "ocr_status":    "DONE",
+            "document_type": doc_type,
+        }
+        if structured:
+            patch_data["structured_json"] = structured
+
+        _supabase_service_patch(
+            f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+            patch_data,
+        )
+        logger.info(
+            "[fax-ocr] 完了: document_id=%s document_type=%s",
+            document_id, doc_type,
+        )
+
+    except Exception:
+        logger.exception("[fax-ocr] 予期しないエラー: document_id=%s", document_id)
+
+
+# ----------------------------
 # CloudFax Webhook エンドポイント
 # ----------------------------
 @app.post("/api/webhook/cloudfax/inbound")
-async def cloudfax_inbound_api(request: Request):
+async def cloudfax_inbound_api(request: Request, background_tasks: BackgroundTasks):
     """
     POST /api/webhook/cloudfax/inbound
     CloudFax からの Inbound FAX Webhook を受信する。
@@ -1938,11 +2047,11 @@ async def cloudfax_inbound_api(request: Request):
         logger.error("[cloudfax/inbound] payload バリデーション失敗: %s", e)
         raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
 
-    return await _cloudfax_inbound_impl(payload_raw)
+    return await _cloudfax_inbound_impl(payload_raw, background_tasks)
 
 
 @app.post("/webhook/cloudfax/inbound")
-async def cloudfax_inbound_compat(request: Request):
+async def cloudfax_inbound_compat(request: Request, background_tasks: BackgroundTasks):
     """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/inbound と同じ処理）"""
     try:
         payload_raw: dict = await request.json()
@@ -1956,7 +2065,7 @@ async def cloudfax_inbound_compat(request: Request):
         logger.error("[cloudfax/inbound] payload バリデーション失敗: %s", e)
         raise HTTPException(status_code=400, detail="payload のバリデーションに失敗しました")
 
-    return await _cloudfax_inbound_impl(payload_raw)
+    return await _cloudfax_inbound_impl(payload_raw, background_tasks)
 
 
 # ----------------------------
