@@ -1857,6 +1857,8 @@ async def _cloudfax_inbound_impl(payload_raw: dict) -> dict:
                 "content_type":      "application/pdf",
                 "file_ext":          "pdf",
                 "file_size":         len(pdf_bytes),
+                "from_fax_number":   payload_raw.get("from") or None,
+                "to_fax_number":     payload_raw.get("to")   or None,
             },
         )
         if not doc_rows:
