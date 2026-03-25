@@ -56,14 +56,7 @@ function isExpired(expiresAt) {
   return new Date(expiresAt).getTime() < Date.now();
 }
 
-function statusLabel(status) {
-  if (status === "UPLOADED") return "未読";
-  if (status === "DOWNLOADED") return "既読";
-  if (status === "CANCELLED") return "取消";
-  if (status === "ARCHIVED") return "アーカイブ";
-  if (status === "IN_PROGRESS") return "対応中";
-  return status || "-";
-}
+// statusLabel は receiveConstants.js の docStatusLabel に統合済み
 
 function isLegacyKey(fileKey) {
   if (!fileKey || typeof fileKey !== "string") return true;
@@ -761,8 +754,6 @@ export default function App() {
 
   // プレビューは閲覧のみ。status / owner_user_id は変更しない。
   const openInboxPreview = (doc) => openPreview(doc, { markDownloaded: false });
-  const openSentPreview = (doc) => openPreview(doc, { markDownloaded: false });
-
   // 部署追加（departments テーブルへ INSERT して即時 UI 反映）
   const addDepartment = async (name) => {
     const trimmed = name.trim();
@@ -832,19 +823,6 @@ export default function App() {
     if (!res.ok) throw new Error(await res.text());
     await loadAll();
     return res.json();
-  };
-
-  const statusTone = (doc) => {
-    const expired = isExpired(doc.expires_at);
-    if (expired) return { bg: "rgba(239,68,68,0.12)", text: "#991b1b", border: "rgba(153,27,27,0.22)" };
-    switch (doc.status) {
-      case "UPLOADED":     return { bg: "rgba(59,130,246,0.12)", text: "#1d4ed8", border: "rgba(29,78,216,0.22)" };
-      case "DOWNLOADED":   return { bg: "rgba(16,185,129,0.12)", text: "#047857", border: "rgba(4,120,87,0.22)" };
-      case "CANCELLED":    return { bg: "rgba(100,116,139,0.14)", text: "#334155", border: "rgba(51,65,85,0.22)" };
-      case "ARCHIVED":     return { bg: "rgba(168,85,247,0.12)", text: "#6d28d9", border: "rgba(109,40,217,0.22)" };
-      case "IN_PROGRESS":  return { bg: "rgba(245,158,11,0.12)", text: "#92400e", border: "rgba(146,64,14,0.22)" };
-      default:           return { bg: "rgba(15,23,42,0.08)", text: "#0f172a", border: "rgba(15,23,42,0.18)" };
-    }
   };
 
   // ---- Rendering ----
@@ -937,23 +915,12 @@ export default function App() {
           finalizeDocument={finalizeDocument}
           userId={session?.user?.id ?? null}
           allowedMimeExt={ALLOWED_MIME_EXT}
-          qSent={qSent}
-          setQSent={setQSent}
           filteredSentDocs={filteredSentDocs}
           nameOf={nameOf}
           fmt={fmt}
           isExpired={isExpired}
           cancelDocument={cancelDocument}
-          statusLabel={statusLabel}
-          statusTone={statusTone}
-          openPreview={openSentPreview}
-        />
-        <PreviewModal
-          isOpen={!!previewDoc} onClose={closePreview}
-          title={previewDoc ? `記録 / ${nameOf(previewDoc.to_hospital_id)}` : ""}
-          metaLeft={previewDoc ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}` : ""}
-          url={previewUrl} loading={previewLoading} error={previewError}
-          previewable={previewable}
+          fetchPreviewUrl={fetchPreviewUrl}
         />
       </Root>
     );

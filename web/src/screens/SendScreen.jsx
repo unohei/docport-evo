@@ -1,15 +1,16 @@
 // SendScreen.jsx
-// 送信画面 - GlobalSidebar + 新UIシェル
+// 送信画面 - GlobalSidebar + タブ切り替え（送信する / 送信済み）
 //
-// 変更点（タブ切り替え追加）:
-// 1. activeTab "send" / "sent" を使って「送信する」「送信済み」タブを切り替え
-// 2. 「送信済み」タブは SentTab のロジックをそのまま流用し新UIに組み込む
-// 3. ローカル state 不要 - activeTab / onTabChange で App.jsx と同期
+// 変更点（送信済みタブ 2ペイン化）:
+// 1. タブストリップをヘッダーに固定し、常に表示
+// 2. 「送信する」タブ: 従来の SendTab（スクロール可能な入力フォーム）
+// 3. 「送信済み」タブ: SentHistoryPanel（カード一覧 + 詳細ペイン）受信画面と同構成
+// 4. SentTab.jsx は不要になったため import を削除
 
-import GlobalSidebar from "../components/receive/GlobalSidebar";
-import SendTab from "../tabs/SendTab";
-import SentTab from "../tabs/SentTab";
-import { DP } from "../components/receive/receiveConstants";
+import GlobalSidebar     from "../components/receive/GlobalSidebar";
+import SendTab           from "../tabs/SendTab";
+import SentHistoryPanel  from "../components/sent/SentHistoryPanel";
+import { DP }            from "../components/receive/receiveConstants";
 
 export default function SendScreen({
   // ナビゲーション
@@ -38,17 +39,13 @@ export default function SendScreen({
   finalizeDocument,
   userId,
   allowedMimeExt,
-  // SentTab props
-  qSent,
-  setQSent,
+  // SentHistoryPanel props
   filteredSentDocs,
   nameOf,
   fmt,
   isExpired,
   cancelDocument,
-  statusLabel,
-  statusTone,
-  openPreview,
+  fetchPreviewUrl,
 }) {
   const isSent = activeTab === "sent";
 
@@ -60,7 +57,7 @@ export default function SendScreen({
       overflow: "hidden",
       background: DP.white,
     }}>
-      {/* 左: グローバルサイドバー（受信画面と共通） */}
+      {/* 左: グローバルサイドバー */}
       <GlobalSidebar
         activeTab={activeTab}
         onTabChange={onTabChange}
@@ -69,40 +66,36 @@ export default function SendScreen({
         onLogout={onLogout}
       />
 
-      {/* 右: メインコンテンツエリア */}
+      {/* 右: ヘッダー + コンテンツ */}
       <div style={{
         flex: 1,
-        overflow: "auto",
-        background: DP.surface,
-        padding: isMobile ? "16px 12px" : "28px 36px",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minWidth: 0,
       }}>
-        <div style={{ maxWidth: 740, margin: "0 auto" }}>
-          {/* ページヘッダー */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{
-              fontSize: 22,
-              fontWeight: 900,
-              color: DP.navy,
-              letterSpacing: -0.3,
-            }}>
-              送信
-            </div>
-            <div style={{
-              fontSize: 13,
-              color: DP.textSub,
-              marginTop: 4,
-            }}>
-              書類を置いて相手の受け取りBOXに届ける
-            </div>
+        {/* ---- ヘッダー + タブストリップ（常時固定） ---- */}
+        <div style={{
+          padding: "16px 24px 0",
+          background: DP.surface,
+          borderBottom: `1px solid ${DP.border}`,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            fontSize: 20,
+            fontWeight: 900,
+            color: DP.navy,
+            letterSpacing: -0.3,
+            marginBottom: 2,
+          }}>
+            送信
+          </div>
+          <div style={{ fontSize: 12, color: DP.textSub, marginBottom: 10 }}>
+            書類を置いて相手の受け取りBOXに届ける
           </div>
 
-          {/* タブ切り替え */}
-          <div style={{
-            display: "flex",
-            gap: 0,
-            marginBottom: 20,
-            borderBottom: "2px solid rgba(15,23,42,0.1)",
-          }}>
+          {/* タブ */}
+          <div style={{ display: "flex", gap: 0 }}>
             {[
               { key: "send", label: "送信する" },
               { key: "sent", label: "送信済み" },
@@ -120,7 +113,7 @@ export default function SendScreen({
                   borderBottom: activeTab === key
                     ? `2px solid ${DP.navy}`
                     : "2px solid transparent",
-                  marginBottom: -2,
+                  marginBottom: -1,
                   cursor: "pointer",
                 }}
               >
@@ -128,52 +121,56 @@ export default function SendScreen({
               </button>
             ))}
           </div>
+        </div>
 
-          {/* 送信するタブ */}
-          {!isSent && (
-            <SendTab
-              headerTitle={{ display: "none" }}
-              isMobile={isMobile}
-              myHospitalId={myHospitalId}
-              hospitals={hospitals}
-              toHospitalId={toHospitalId}
-              setToHospitalId={setToHospitalId}
-              comment={comment}
-              setComment={setComment}
-              pdfFile={pdfFile}
-              onFileDrop={onFileDrop}
-              onCancelFile={onCancelFile}
-              sending={sending}
-              uploadStatus={uploadStatus}
-              ocrResult={ocrResult}
-              ocrError={ocrError}
-              checkMode={checkMode}
-              setCheckMode={setCheckMode}
-              finalizeDocument={finalizeDocument}
-              userId={userId}
-              allowedMimeExt={allowedMimeExt}
-            />
-          )}
+        {/* ---- 送信するタブ: スクロール可能フォーム ---- */}
+        {!isSent && (
+          <div style={{
+            flex: 1,
+            overflow: "auto",
+            background: DP.surface,
+            padding: isMobile ? "20px 12px" : "24px 36px",
+          }}>
+            <div style={{ maxWidth: 740, margin: "0 auto" }}>
+              <SendTab
+                headerTitle={{ display: "none" }}
+                isMobile={isMobile}
+                myHospitalId={myHospitalId}
+                hospitals={hospitals}
+                toHospitalId={toHospitalId}
+                setToHospitalId={setToHospitalId}
+                comment={comment}
+                setComment={setComment}
+                pdfFile={pdfFile}
+                onFileDrop={onFileDrop}
+                onCancelFile={onCancelFile}
+                sending={sending}
+                uploadStatus={uploadStatus}
+                ocrResult={ocrResult}
+                ocrError={ocrError}
+                checkMode={checkMode}
+                setCheckMode={setCheckMode}
+                finalizeDocument={finalizeDocument}
+                userId={userId}
+                allowedMimeExt={allowedMimeExt}
+              />
+            </div>
+          </div>
+        )}
 
-          {/* 送信済みタブ（SentTab のロジックをそのまま流用） */}
-          {isSent && (
-            <SentTab
-              headerTitle={{ display: "none" }}
-              headerDesc={{ display: "none" }}
-              isMobile={isMobile}
-              qSent={qSent}
-              setQSent={setQSent}
-              filteredSentDocs={filteredSentDocs ?? []}
+        {/* ---- 送信済みタブ: 2ペイン（カード一覧 + 詳細） ---- */}
+        {isSent && (
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <SentHistoryPanel
+              docs={filteredSentDocs ?? []}
               nameOf={nameOf}
               fmt={fmt}
               isExpired={isExpired}
               cancelDocument={cancelDocument}
-              statusLabel={statusLabel}
-              statusTone={statusTone}
-              openPreview={openPreview}
+              fetchPreviewUrl={fetchPreviewUrl}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
