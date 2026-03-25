@@ -37,9 +37,8 @@ import {
   TextInput,
 } from "./components/ui/primitives";
 
-import SendTab from "./tabs/SendTab";
+// SendTab / SentTab は SendScreen 内で使用（App.jsx では不要）
 // import InboxTab from "./tabs/InboxTab"; // ReceiveScreen に統合（ロールバック用に残す）
-import SentTab from "./tabs/SentTab";
 import FaxInboundList from "./tabs/FaxInboundList";
 import ReceiveScreen from "./screens/ReceiveScreen";
 import SendScreen from "./screens/SendScreen";
@@ -909,8 +908,8 @@ export default function App() {
 
   // ------- APP -------
 
-  // 送信画面は新UIシェル（GlobalSidebar + SendTab）でフルスクリーン表示
-  if (tab === "send") {
+  // 送信画面（送信する / 送信済み）は新UIシェルでフルスクリーン表示
+  if (tab === "send" || tab === "sent") {
     return (
       <Root>
         <SendScreen
@@ -938,6 +937,23 @@ export default function App() {
           finalizeDocument={finalizeDocument}
           userId={session?.user?.id ?? null}
           allowedMimeExt={ALLOWED_MIME_EXT}
+          qSent={qSent}
+          setQSent={setQSent}
+          filteredSentDocs={filteredSentDocs}
+          nameOf={nameOf}
+          fmt={fmt}
+          isExpired={isExpired}
+          cancelDocument={cancelDocument}
+          statusLabel={statusLabel}
+          statusTone={statusTone}
+          openPreview={openSentPreview}
+        />
+        <PreviewModal
+          isOpen={!!previewDoc} onClose={closePreview}
+          title={previewDoc ? `記録 / ${nameOf(previewDoc.to_hospital_id)}` : ""}
+          metaLeft={previewDoc ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}` : ""}
+          url={previewUrl} loading={previewLoading} error={previewError}
+          previewable={previewable}
         />
       </Root>
     );
@@ -977,9 +993,6 @@ export default function App() {
       </Root>
     );
   }
-
-  const headerTitle = { fontSize: 18, fontWeight: 800, color: THEME.text };
-  const headerDesc = { fontSize: 12, opacity: 0.7, color: THEME.text };
 
   const isInboxPreviewing = !!previewDoc && previewDoc.to_hospital_id === myHospitalId;
   const previewTitle = previewDoc
@@ -1073,42 +1086,8 @@ export default function App() {
 
         {/* Main */}
         <div>
-          {tab === "send" && (
-            <SendTab
-              headerTitle={headerTitle}
-              headerDesc={headerDesc}
-              isMobile={isMobile}
-              myHospitalId={myHospitalId}
-              hospitals={hospitals}
-              toHospitalId={toHospitalId}
-              setToHospitalId={setToHospitalId}
-              comment={comment}
-              setComment={setComment}
-              pdfFile={pdfFile}
-              onFileDrop={handleFileDrop}
-              onCancelFile={onCancelFile}
-              sending={sending}
-              uploadStatus={uploadStatus}
-              ocrResult={ocrResult}
-              ocrError={ocrError}
-              checkMode={checkMode}
-              setCheckMode={setCheckMode}
-              finalizeDocument={finalizeDocument}
-              userId={session?.user?.id ?? null}
-              allowedMimeExt={ALLOWED_MIME_EXT}
-            />
-          )}
+          {/* tab === "send" / "sent" は SendScreen で early return 済みのためここには到達しない */}
           {/* tab === "inbox" は ReceiveScreen で early return 済みのためここには到達しない */}
-          {tab === "sent" && (
-            <SentTab
-              headerTitle={headerTitle} headerDesc={headerDesc} isMobile={isMobile}
-              qSent={qSent} setQSent={setQSent}
-              filteredSentDocs={filteredSentDocs}
-              nameOf={nameOf} fmt={fmt} isExpired={isExpired}
-              cancelDocument={cancelDocument} statusLabel={statusLabel}
-              statusTone={statusTone} openPreview={openSentPreview}
-            />
-          )}
           {tab === "fax_inbound" && (
             <FaxInboundList session={session} />
           )}

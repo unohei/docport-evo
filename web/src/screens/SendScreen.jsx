@@ -1,14 +1,14 @@
 // SendScreen.jsx
-// 送信画面 - GlobalSidebar + 新UIシェルで SendTab を包む
-// ReceiveScreen と並列に存在し、アプリ全体の世界観を統一する
+// 送信画面 - GlobalSidebar + 新UIシェル
 //
-// 変更点:
-// 1. GlobalSidebar を共有し、受信画面と同一のナビゲーション体験を提供
-// 2. 右側メインエリアは DP.surface 背景で新UIと統一
-// 3. SendTab のロジックはそのまま流用（最小差分）
+// 変更点（タブ切り替え追加）:
+// 1. activeTab "send" / "sent" を使って「送信する」「送信済み」タブを切り替え
+// 2. 「送信済み」タブは SentTab のロジックをそのまま流用し新UIに組み込む
+// 3. ローカル state 不要 - activeTab / onTabChange で App.jsx と同期
 
 import GlobalSidebar from "../components/receive/GlobalSidebar";
 import SendTab from "../tabs/SendTab";
+import SentTab from "../tabs/SentTab";
 import { DP } from "../components/receive/receiveConstants";
 
 export default function SendScreen({
@@ -18,7 +18,8 @@ export default function SendScreen({
   onLogout,
   myHospitalIcon,
   unreadCount,
-  // SendTab に渡す props
+  isMobile,
+  // SendTab props
   myHospitalId,
   hospitals,
   toHospitalId,
@@ -37,8 +38,20 @@ export default function SendScreen({
   finalizeDocument,
   userId,
   allowedMimeExt,
-  isMobile,
+  // SentTab props
+  qSent,
+  setQSent,
+  filteredSentDocs,
+  nameOf,
+  fmt,
+  isExpired,
+  cancelDocument,
+  statusLabel,
+  statusTone,
+  openPreview,
 }) {
+  const isSent = activeTab === "sent";
+
   return (
     <div style={{
       display: "flex",
@@ -65,7 +78,7 @@ export default function SendScreen({
       }}>
         <div style={{ maxWidth: 740, margin: "0 auto" }}>
           {/* ページヘッダー */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 16 }}>
             <div style={{
               fontSize: 22,
               fontWeight: 900,
@@ -83,29 +96,83 @@ export default function SendScreen({
             </div>
           </div>
 
-          {/* SendTab（"置く" タイトルは非表示にして SendScreen ヘッダーに統一） */}
-          <SendTab
-            headerTitle={{ display: "none" }}
-            isMobile={isMobile}
-            myHospitalId={myHospitalId}
-            hospitals={hospitals}
-            toHospitalId={toHospitalId}
-            setToHospitalId={setToHospitalId}
-            comment={comment}
-            setComment={setComment}
-            pdfFile={pdfFile}
-            onFileDrop={onFileDrop}
-            onCancelFile={onCancelFile}
-            sending={sending}
-            uploadStatus={uploadStatus}
-            ocrResult={ocrResult}
-            ocrError={ocrError}
-            checkMode={checkMode}
-            setCheckMode={setCheckMode}
-            finalizeDocument={finalizeDocument}
-            userId={userId}
-            allowedMimeExt={allowedMimeExt}
-          />
+          {/* タブ切り替え */}
+          <div style={{
+            display: "flex",
+            gap: 0,
+            marginBottom: 20,
+            borderBottom: "2px solid rgba(15,23,42,0.1)",
+          }}>
+            {[
+              { key: "send", label: "送信する" },
+              { key: "sent", label: "送信済み" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => onTabChange(key)}
+                style={{
+                  padding: "8px 18px",
+                  fontSize: 14,
+                  fontWeight: activeTab === key ? 700 : 400,
+                  color: activeTab === key ? DP.navy : DP.textSub,
+                  background: "none",
+                  border: "none",
+                  borderBottom: activeTab === key
+                    ? `2px solid ${DP.navy}`
+                    : "2px solid transparent",
+                  marginBottom: -2,
+                  cursor: "pointer",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 送信するタブ */}
+          {!isSent && (
+            <SendTab
+              headerTitle={{ display: "none" }}
+              isMobile={isMobile}
+              myHospitalId={myHospitalId}
+              hospitals={hospitals}
+              toHospitalId={toHospitalId}
+              setToHospitalId={setToHospitalId}
+              comment={comment}
+              setComment={setComment}
+              pdfFile={pdfFile}
+              onFileDrop={onFileDrop}
+              onCancelFile={onCancelFile}
+              sending={sending}
+              uploadStatus={uploadStatus}
+              ocrResult={ocrResult}
+              ocrError={ocrError}
+              checkMode={checkMode}
+              setCheckMode={setCheckMode}
+              finalizeDocument={finalizeDocument}
+              userId={userId}
+              allowedMimeExt={allowedMimeExt}
+            />
+          )}
+
+          {/* 送信済みタブ（SentTab のロジックをそのまま流用） */}
+          {isSent && (
+            <SentTab
+              headerTitle={{ display: "none" }}
+              headerDesc={{ display: "none" }}
+              isMobile={isMobile}
+              qSent={qSent}
+              setQSent={setQSent}
+              filteredSentDocs={filteredSentDocs ?? []}
+              nameOf={nameOf}
+              fmt={fmt}
+              isExpired={isExpired}
+              cancelDocument={cancelDocument}
+              statusLabel={statusLabel}
+              statusTone={statusTone}
+              openPreview={openPreview}
+            />
+          )}
         </div>
       </div>
     </div>
