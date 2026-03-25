@@ -42,6 +42,7 @@ import SendTab from "./tabs/SendTab";
 import SentTab from "./tabs/SentTab";
 import FaxInboundList from "./tabs/FaxInboundList";
 import ReceiveScreen from "./screens/ReceiveScreen";
+import SendScreen from "./screens/SendScreen";
 import { getPreviewKey, isPreviewable } from "./utils/preview";
 import { logEvent, setAuditHospitalId } from "./utils/audit";
 
@@ -907,6 +908,40 @@ export default function App() {
   }
 
   // ------- APP -------
+
+  // 送信画面は新UIシェル（GlobalSidebar + SendTab）でフルスクリーン表示
+  if (tab === "send") {
+    return (
+      <Root>
+        <SendScreen
+          activeTab={tab}
+          onTabChange={setTab}
+          onLogout={logout}
+          myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+          unreadCount={unreadCount}
+          isMobile={isMobile}
+          myHospitalId={myHospitalId}
+          hospitals={hospitals}
+          toHospitalId={toHospitalId}
+          setToHospitalId={setToHospitalId}
+          comment={comment}
+          setComment={setComment}
+          pdfFile={pdfFile}
+          onFileDrop={handleFileDrop}
+          onCancelFile={onCancelFile}
+          sending={sending}
+          uploadStatus={uploadStatus}
+          ocrResult={ocrResult}
+          ocrError={ocrError}
+          checkMode={checkMode}
+          setCheckMode={setCheckMode}
+          finalizeDocument={finalizeDocument}
+          userId={session?.user?.id ?? null}
+          allowedMimeExt={ALLOWED_MIME_EXT}
+        />
+      </Root>
+    );
+  }
 
   // 受信画面は4カラムの ReceiveScreen でフルスクリーン表示
   if (tab === "inbox") {
