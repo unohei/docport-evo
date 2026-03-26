@@ -1,9 +1,9 @@
-// ScanCapture.jsx（改善版 v5）
-// 変更点（v5）:
-// 1. autoPlay 属性を除去 → autoPlay + explicit play() の AbortError 競合を解消
-// 2. getUserMedia に 10秒タイムアウトを追加 → 許可ダイアログ放置による無限ハングを防止
-// 3. setShowFallback(true) を NotAllowed/NotFound のみに限定 → 一時エラーで再試行可能に
-// 4. friendlyError に TimeoutError を追加
+// ScanCapture.jsx（改善版 v6）
+// 変更点（v6）:
+// 1. v.srcObject = stream を setStage/setCamOn より先に移動（hidden 状態でセット → 表示と同時に再生開始）
+// 2. <video> から autoPlay 属性を除去（autoPlay + explicit play() の AbortError 競合を完全解消）
+// 3. デバッグログ 8点追加（[Scan] プレフィックス）
+// 4. window.__dpScan でコンソールから video/stream を確認可能にする
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -222,26 +222,40 @@ export default function ScanCapture({
           }, CAMERA_TIMEOUT_MS)
         ),
       ]);
+      console.log("[Scan] getUserMedia success, stream.active:", stream.active);
       streamRef.current = stream;
 
-      // getUserMedia 成功後に stage を camera に移行
+      // srcObject を先にセット（video は display:none のまま）
+      // → setCamOn(true) で display:block になった瞬間に再生可能な状態にしておく
+      const v = videoRef.current;
+      console.log("[Scan] videoRef.current exists:", !!v);
+      if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
+
+      v.srcObject = stream;
+      console.log("[Scan] srcObject assigned");
+
+      // loadedmetadata をログ（ワンショット）
+      v.addEventListener("loadedmetadata", () => {
+        console.log("[Scan] loadedmetadata fired, videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+      }, { once: true });
+
+      // stage → camera に遷移（ここで video が display:block になる）
       setStage("camera");
       setCamOn(true);
       cameraStartingRef.current = false;
       setCameraStarting(false);
-      await sleep(0);
+      await sleep(0);  // React の DOM commit を待つ
 
-      const v = videoRef.current;
-      if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
-
-      v.srcObject = stream;
-      await sleep(0);
-      // AbortError は autoPlay 属性との race condition で発生することがある → 無視してよい
+      // autoPlay 属性を除去したため明示的に play() が必要
+      console.log("[Scan] play start");
       try {
         await v.play();
+        console.log("[Scan] play resolved, videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+        console.log("[Scan] current preview mode: video");
       } catch (playErr) {
+        console.warn("[Scan] play rejected:", playErr?.name, playErr?.message);
         if (playErr?.name !== "AbortError") throw playErr;
-        console.log("[DocPort] play() AbortError (autoPlay race) - ignored");
+        console.log("[Scan] AbortError ignored (race with browser autoplay)");
       }
 
       const elapsed = Math.round(performance.now() - t0);
@@ -305,6 +319,15 @@ export default function ScanCapture({
       stopStreamOnly();
     }
   };
+
+  // ---- コンソールデバッグ用 window 参照 ----
+  useEffect(() => {
+    window.__dpScan = {
+      getVideo:  () => videoRef.current,
+      getStream: () => streamRef.current,
+    };
+    return () => { delete window.__dpScan; };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -753,8 +776,8 @@ export default function ScanCapture({
           ref={videoRef}
           playsInline
           muted
-          autoPlay
           style={{
+            /* autoPlay を除去：srcObject 先セット → 明示的 play() の順で確実に再生する */
             width: "100%",
             borderRadius: 14,
             background: "#0b1220",
