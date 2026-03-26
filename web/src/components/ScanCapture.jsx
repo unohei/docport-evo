@@ -1,10 +1,9 @@
-// ScanCapture.jsx（改善版 v9）
-// 変更点（v9）:
-// 1. v.muted / v.playsInline を命令的にセット（React の muted prop は defaultMuted のみ → .muted = false のまま）
-// 2. metadata waiter (loadedmetadata|loadeddata|canplay) を srcObject より前に登録（取りこぼし防止）
-// 3. video を visible にしてから srcObject をセット（rAF × 2 で DOM commit 確認後）
-// 4. rAF 後に videoRef.current を再取得（stale reference 対策）
-// 5. stream track 状態・video 寸法をすべてログ出力
+// ScanCapture.jsx（改善版 v10）
+// 変更点（v10）:
+// 1. rAF × 2 後の単一 videoRef.current だけを使う（vPre/v の分離を廃止し要素ズレを解消）
+// 2. ログリスナー・metaWaiter・readyState ポーラーを全て srcObject より前に登録
+// 3. ensureOpenCV() を play() 成功後に後ろ倒し（初期化中の再レンダリングを排除）
+// 4. readyState polling を metaWaiter の補完として追加（イベント不発時の保護）
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -191,9 +190,6 @@ export default function ScanCapture({
       return;
     }
 
-    // OpenCV をバックグラウンドで読み込み開始（カメラ起動をブロックしない）
-    ensureOpenCV();
-
     // 前のストリームを stage を変えずに停止
     stopStreamOnly();
     await sleep(0);
@@ -226,18 +222,6 @@ export default function ScanCapture({
       console.log("[Scan] getUserMedia success, stream.active:", stream.active);
       streamRef.current = stream;
 
-      const vPre = videoRef.current;
-      console.log("[Scan] videoRef.current exists:", !!vPre);
-      if (!vPre) throw new Error("video 要素が見つかりません（描画タイミング）");
-
-      // ── metadata waiter を最初に登録（srcObject・表示変更より前）──
-      // loadedmetadata / loadeddata / canplay のどれか 1 つで進める
-      const metaWaiter = new Promise(resolve => {
-        vPre.addEventListener("loadedmetadata", resolve, { once: true });
-        vPre.addEventListener("loadeddata",     resolve, { once: true });
-        vPre.addEventListener("canplay",        resolve, { once: true });
-      });
-
       // ── video を visible にする（React state 更新）──
       setStage("camera");
       setCamOn(true);
@@ -245,56 +229,81 @@ export default function ScanCapture({
       setCameraStarting(false);
 
       // ── rAF × 2 で DOM commit を確実に待つ ──
+      // sleep(0) は React 18 の DOM commit を保証しないため rAF を使う
       console.log("[Scan] before rAF (1)");
       await new Promise(r => requestAnimationFrame(r));
-      console.log("[Scan] after rAF (1) — readyState:", vPre.readyState);
       await new Promise(r => requestAnimationFrame(r));
 
-      // rAF 後に最新の video 参照を取得（stale reference 対策）
-      const v = videoRef.current ?? vPre;
+      // ── rAF 後に単一の video 参照を確定（以降この v だけを使う）──
+      const v = videoRef.current;
+      if (!v) throw new Error("video 要素が見つかりません（rAF 後）");
       const rect = v.getBoundingClientRect();
-      console.log("[Scan] after rAF (2) — same element:", v === vPre,
-        "readyState:", v.readyState, "display:", getComputedStyle(v).display,
+      console.log("[Scan] after rAF — readyState:", v.readyState,
+        "display:", getComputedStyle(v).display,
         "clientW:", v.clientWidth, "clientH:", v.clientHeight,
         "rect:", Math.round(rect.width), "x", Math.round(rect.height));
 
-      // ── video プロパティを命令的にセット（React の muted prop は defaultMuted のみ → .muted=false のまま）──
-      console.log("[Scan] before srcObject setup — muted(before):", v.muted);
-      v.muted      = true;
+      // ── video プロパティを命令的にセット ──
+      // React の muted prop は defaultMuted attribute のみ → v.muted は false のまま
+      // → Chrome の MediaStream pipeline がブロックされるため imperative に設定する
+      console.log("[Scan] before srcObject setup — v.muted:", v.muted);
+      v.muted       = true;
       v.playsInline = true;
-      v.setAttribute("playsinline", "");  // iOS Safari 用
-      v.setAttribute("muted", "");        // 一部ブラウザで attribute も必要
-      v.preload    = "auto";
+      v.setAttribute("playsinline", "");  // iOS Safari
+      v.setAttribute("muted", "");        // 一部ブラウザ用
+      v.preload     = "auto";
       console.log("[Scan] after property set — muted:", v.muted, "playsInline:", v.playsInline);
 
-      // ── stream track 状態を確認 ──
+      // ── stream track 確認 ──
       const tracks = stream.getVideoTracks();
       console.log("[Scan] stream tracks:", tracks.length,
         "| enabled:", tracks[0]?.enabled,
         "| readyState:", tracks[0]?.readyState,
         "| muted:", tracks[0]?.muted);
 
-      // ── srcObject 代入（visible かつ正しく初期化された video に対して）──
+      // ── ログリスナーを srcObject より前に登録（取りこぼし防止）──
+      v.addEventListener("loadedmetadata", () => {
+        console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth,
+          "videoHeight:", v.videoHeight, "clientW:", v.clientWidth, "clientH:", v.clientHeight);
+      }, { once: true });
+      v.addEventListener("loadeddata", () => console.log("[Scan] loadeddata fired"),  { once: true });
+      v.addEventListener("canplay",    () => console.log("[Scan] canplay fired"),     { once: true });
+      v.addEventListener("playing",    () => console.log("[Scan] playing fired"),     { once: true });
+      v.addEventListener("error",      () => console.warn("[Scan] video error —",
+        v.error?.message, v.error?.code), { once: true });
+
+      // ── metaWaiter: event 待ちと readyState ポーリングを並走させる ──
+      // （イベントが不発の場合でも readyState >= 1 になれば進める）
+      const metaWaiter = new Promise(resolve => {
+        v.addEventListener("loadedmetadata", resolve, { once: true });
+        v.addEventListener("loadeddata",     resolve, { once: true });
+        v.addEventListener("canplay",        resolve, { once: true });
+      });
+      const readyPoller = new Promise(resolve => {
+        const poll = () => {
+          if (!v.isConnected) return;                        // unmount 後は止める
+          if (v.readyState >= 1) {
+            console.log("[Scan] readyState poller resolved:", v.readyState);
+            resolve();
+            return;
+          }
+          requestAnimationFrame(poll);
+        };
+        requestAnimationFrame(poll);
+      });
+
+      // ── srcObject 代入（同じ v に対して）──
       v.srcObject = stream;
       console.log("[Scan] after srcObject — readyState:", v.readyState);
 
-      // ── metadata を待つ（loadedmetadata | loadeddata | canplay, max 5 秒）──
+      // ── metadata or readyState >= 1 を待つ（max 5 秒）──
       await Promise.race([
         metaWaiter,
+        readyPoller,
         sleep(5000).then(() => console.warn("[Scan] metadata wait timeout (5s)")),
       ]);
       console.log("[Scan] after metadata wait — readyState:", v.readyState,
         "videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
-
-      // ── ログリスナー（metadata wait とは別に pure observation 用）──
-      v.addEventListener("loadedmetadata", () => {
-        console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight,
-          "clientW:", v.clientWidth, "clientH:", v.clientHeight);
-      }, { once: true });
-      v.addEventListener("loadeddata", () => console.log("[Scan] loadeddata fired"),  { once: true });
-      v.addEventListener("canplay",   () => console.log("[Scan] canplay fired"),    { once: true });
-      v.addEventListener("playing",   () => console.log("[Scan] playing fired"),    { once: true });
-      v.addEventListener("error",     () => console.warn("[Scan] video error —", v.error?.message, v.error?.code), { once: true });
 
       // ── play() + 5 秒タイムアウト ──
       console.log("[Scan] play start — readyState:", v.readyState);
@@ -321,6 +330,9 @@ export default function ScanCapture({
           throw playErr;
         }
       }
+
+      // ── OpenCV を preview 成功後に起動（初期化中の再レンダリングを排除）──
+      ensureOpenCV();
 
       const elapsed = Math.round(performance.now() - t0);
       console.log(`[DocPort:Perf] Camera started in ${elapsed}ms`);
