@@ -1,9 +1,10 @@
-// ScanCapture.jsx（改善版 v8）
-// 変更点（v8）:
-// 1. sleep(0) → requestAnimationFrame × 2 に変更（React 18 DOM commit の確実な待機）
-// 2. canplay 待機を制御フローから外す（ログ観察専用）→ play() を直接呼ぶ
-// 3. 詳細ログを全ステップに追加（readyState / display / srcObject 確認）
-// 4. play() に 5 秒タイムアウト維持
+// ScanCapture.jsx（改善版 v9）
+// 変更点（v9）:
+// 1. v.muted / v.playsInline を命令的にセット（React の muted prop は defaultMuted のみ → .muted = false のまま）
+// 2. metadata waiter (loadedmetadata|loadeddata|canplay) を srcObject より前に登録（取りこぼし防止）
+// 3. video を visible にしてから srcObject をセット（rAF × 2 で DOM commit 確認後）
+// 4. rAF 後に videoRef.current を再取得（stale reference 対策）
+// 5. stream track 状態・video 寸法をすべてログ出力
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -225,21 +226,17 @@ export default function ScanCapture({
       console.log("[Scan] getUserMedia success, stream.active:", stream.active);
       streamRef.current = stream;
 
-      const v = videoRef.current;
-      console.log("[Scan] videoRef.current exists:", !!v);
-      if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
+      const vPre = videoRef.current;
+      console.log("[Scan] videoRef.current exists:", !!vPre);
+      if (!vPre) throw new Error("video 要素が見つかりません（描画タイミング）");
 
-      // ── イベントリスナーをすべて srcObject 前に登録（ログ観察用・制御フローには使わない）──
-      v.addEventListener("loadedmetadata", () => {
-        console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
-      }, { once: true });
-      v.addEventListener("canplay",  () => console.log("[Scan] canplay fired"),  { once: true });
-      v.addEventListener("playing",  () => console.log("[Scan] playing fired"),  { once: true });
-      v.addEventListener("error",    () => console.warn("[Scan] video error —", v.error?.message, v.error?.code), { once: true });
-
-      // ── srcObject を hidden video に先セット ──
-      v.srcObject = stream;
-      console.log("[Scan] after srcObject — readyState:", v.readyState);
+      // ── metadata waiter を最初に登録（srcObject・表示変更より前）──
+      // loadedmetadata / loadeddata / canplay のどれか 1 つで進める
+      const metaWaiter = new Promise(resolve => {
+        vPre.addEventListener("loadedmetadata", resolve, { once: true });
+        vPre.addEventListener("loadeddata",     resolve, { once: true });
+        vPre.addEventListener("canplay",        resolve, { once: true });
+      });
 
       // ── video を visible にする（React state 更新）──
       setStage("camera");
@@ -247,17 +244,59 @@ export default function ScanCapture({
       cameraStartingRef.current = false;
       setCameraStarting(false);
 
-      // ── requestAnimationFrame × 2 で React DOM commit を確実に待つ ──
-      // sleep(0) = setTimeout(0) は React 18 の DOM commit を保証しない
+      // ── rAF × 2 で DOM commit を確実に待つ ──
       console.log("[Scan] before rAF (1)");
       await new Promise(r => requestAnimationFrame(r));
-      console.log("[Scan] after rAF (1) — readyState:", v.readyState);
+      console.log("[Scan] after rAF (1) — readyState:", vPre.readyState);
       await new Promise(r => requestAnimationFrame(r));
-      console.log("[Scan] after rAF (2) — readyState:", v.readyState,
-        "srcObject:", !!v.srcObject, "display:", getComputedStyle(v).display);
 
-      // ── play() を直接呼ぶ（canplay 待機を外す：waiting for canplay は詰まる原因になる）──
-      // canplay/loadedmetadata は上のリスナーで観察するが、制御フローには使わない
+      // rAF 後に最新の video 参照を取得（stale reference 対策）
+      const v = videoRef.current ?? vPre;
+      const rect = v.getBoundingClientRect();
+      console.log("[Scan] after rAF (2) — same element:", v === vPre,
+        "readyState:", v.readyState, "display:", getComputedStyle(v).display,
+        "clientW:", v.clientWidth, "clientH:", v.clientHeight,
+        "rect:", Math.round(rect.width), "x", Math.round(rect.height));
+
+      // ── video プロパティを命令的にセット（React の muted prop は defaultMuted のみ → .muted=false のまま）──
+      console.log("[Scan] before srcObject setup — muted(before):", v.muted);
+      v.muted      = true;
+      v.playsInline = true;
+      v.setAttribute("playsinline", "");  // iOS Safari 用
+      v.setAttribute("muted", "");        // 一部ブラウザで attribute も必要
+      v.preload    = "auto";
+      console.log("[Scan] after property set — muted:", v.muted, "playsInline:", v.playsInline);
+
+      // ── stream track 状態を確認 ──
+      const tracks = stream.getVideoTracks();
+      console.log("[Scan] stream tracks:", tracks.length,
+        "| enabled:", tracks[0]?.enabled,
+        "| readyState:", tracks[0]?.readyState,
+        "| muted:", tracks[0]?.muted);
+
+      // ── srcObject 代入（visible かつ正しく初期化された video に対して）──
+      v.srcObject = stream;
+      console.log("[Scan] after srcObject — readyState:", v.readyState);
+
+      // ── metadata を待つ（loadedmetadata | loadeddata | canplay, max 5 秒）──
+      await Promise.race([
+        metaWaiter,
+        sleep(5000).then(() => console.warn("[Scan] metadata wait timeout (5s)")),
+      ]);
+      console.log("[Scan] after metadata wait — readyState:", v.readyState,
+        "videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+
+      // ── ログリスナー（metadata wait とは別に pure observation 用）──
+      v.addEventListener("loadedmetadata", () => {
+        console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight,
+          "clientW:", v.clientWidth, "clientH:", v.clientHeight);
+      }, { once: true });
+      v.addEventListener("loadeddata", () => console.log("[Scan] loadeddata fired"),  { once: true });
+      v.addEventListener("canplay",   () => console.log("[Scan] canplay fired"),    { once: true });
+      v.addEventListener("playing",   () => console.log("[Scan] playing fired"),    { once: true });
+      v.addEventListener("error",     () => console.warn("[Scan] video error —", v.error?.message, v.error?.code), { once: true });
+
+      // ── play() + 5 秒タイムアウト ──
       console.log("[Scan] play start — readyState:", v.readyState);
       try {
         await Promise.race([
@@ -269,7 +308,8 @@ export default function ScanCapture({
             }, 5000)
           ),
         ]);
-        console.log("[Scan] play resolved — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+        console.log("[Scan] play resolved — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight,
+          "clientW:", v.clientWidth, "clientH:", v.clientHeight);
         console.log("[Scan] current preview mode: video");
       } catch (playErr) {
         console.warn("[Scan] play rejected:", playErr?.name, playErr?.message);
@@ -277,7 +317,6 @@ export default function ScanCapture({
           console.log("[Scan] AbortError ignored");
         } else if (playErr?.name === "PlayTimeoutError") {
           console.warn("[Scan] play timeout — UI visible, continuing");
-          // タイムアウトは致命的エラーではない：video は visible なので続行
         } else {
           throw playErr;
         }
