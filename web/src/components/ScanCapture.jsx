@@ -1,12 +1,8 @@
-// ScanCapture.jsx（改善版 v3）
-// 変更点（v3）:
-// 1. カメラ起動を最優先 — OpenCV ロード完了を待たずに getUserMedia を開始
-// 2. startCamera の state-flip バグ修正（setCamOn→stopCamera→setCamOn の二重反転を排除）
-// 3. cameraStarting 状態を追加し「起動中…」スピナーを表示
-// 4. OpenCV をマウント時ではなく初回カメラ起動/ファイル選択時にレイジーロード
-// 5. idle UI 簡素化：カメラ起動・ファイル選択・キャンセルのみ表示
-// 6. permission denied 時の状態整理：cameraStarting を必ず false に戻す
-// 7. autoStart と手動ボタンの二重起動を防止（didAutoStartRef / cameraStarting ガード）
+// ScanCapture.jsx（改善版 v4）
+// 変更点（v4）:
+// 1. cameraStartingRef (useRef) を追加し、ガードをrefで行う（stale closure 解消）
+// 2. 全ての exit path で cameraStartingRef.current = false をリセット
+// 3. キャンセルボタンを cameraStarting 中でも押せるように変更（stopCamera を呼ぶ）
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -26,12 +22,13 @@ export default function ScanCapture({
   const streamRef        = useRef(null);
   const fallbackInputRef = useRef(null);
 
-  const rafRef           = useRef(null);
-  const lastGuideAtRef   = useRef(0);
-  const lastQuadNormRef  = useRef(null);
-  const didAutoStartRef  = useRef(false);
-  const perfRef          = useRef({});
+  const rafRef              = useRef(null);
+  const lastGuideAtRef      = useRef(0);
+  const lastQuadNormRef     = useRef(null);
+  const didAutoStartRef     = useRef(false);
+  const perfRef             = useRef({});
   const opencvLoadStartedRef = useRef(false); // OpenCV ロードを一度だけ起動するガード
+  const cameraStartingRef   = useRef(false);  // stale closure を避けるための ref ガード
 
   const [camOn,          setCamOn]          = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false); // getUserMedia 呼び出し中
@@ -173,14 +170,16 @@ export default function ScanCapture({
   const startCamera = async (opts = {}) => {
     const { forceDeviceId, retryWithoutFacingMode = false } = opts;
 
-    // 二重起動ガード
-    if (cameraStarting) return;
+    // 二重起動ガード（refで判定：stale closure を避けるため）
+    if (cameraStartingRef.current) return;
 
+    cameraStartingRef.current = true;
     setErr("");
     setShowFallback(false);
     setCameraStarting(true);
 
     if (!canUseMedia) {
+      cameraStartingRef.current = false;
       setErr("このブラウザではカメラが使えません。");
       setShowFallback(true);
       setCameraStarting(false);
@@ -216,6 +215,7 @@ export default function ScanCapture({
       // getUserMedia 成功後に stage を camera に移行
       setStage("camera");
       setCamOn(true);
+      cameraStartingRef.current = false;
       setCameraStarting(false);
       await sleep(0);
 
@@ -238,6 +238,7 @@ export default function ScanCapture({
           vids.find((d) => /back|rear|environment/i.test(d.label)) || null;
         if (rearLike?.deviceId) {
           setDeviceId(rearLike.deviceId);
+          cameraStartingRef.current = false; // リトライ前にリセット
           stopStreamOnly();
           await sleep(0);
           return startCamera({ forceDeviceId: rearLike.deviceId });
@@ -254,6 +255,7 @@ export default function ScanCapture({
         !retryWithoutFacingMode
       ) {
         console.warn("[DocPort] OverconstrainedError → retry without facingMode");
+        cameraStartingRef.current = false; // リトライ前にリセット（再帰呼び出しがガードを通れるよう）
         setCameraStarting(false);
         stopStreamOnly();
         return startCamera({ retryWithoutFacingMode: true });
@@ -269,6 +271,7 @@ export default function ScanCapture({
       } catch { /* ignore */ }
 
       // 失敗時は必ず cameraStarting を false に戻す
+      cameraStartingRef.current = false;
       setCameraStarting(false);
       setCamOn(false);
       setStage("idle");
@@ -820,17 +823,17 @@ export default function ScanCapture({
             />
           </label>
 
-          {/* キャンセル */}
+          {/* キャンセル（cameraStarting 中でも押せる：stopCamera してから onCancel） */}
           <button
-            onClick={onCancel}
-            disabled={busy || cameraStarting}
+            onClick={() => { cameraStartingRef.current = false; setCameraStarting(false); stopCamera(); onCancel?.(); }}
+            disabled={busy}
             style={{
               padding: "11px 16px",
               borderRadius: 14,
               border: "1px solid rgba(15, 23, 42, 0.12)",
               background: "rgba(255,255,255,0.75)",
               fontWeight: 800,
-              cursor: (busy || cameraStarting) ? "not-allowed" : "pointer",
+              cursor: busy ? "not-allowed" : "pointer",
               fontSize: 13,
             }}
           >
