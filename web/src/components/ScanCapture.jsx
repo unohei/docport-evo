@@ -1,9 +1,9 @@
-// ScanCapture.jsx（改善版 v7）
-// 変更点（v7）:
-// 1. イベントリスナー（loadedmetadata/canplay/playing/error）を srcObject より前に登録（取りこぼし防止）
-// 2. video を先に visible にしてから srcObject をセット（Chrome は hidden video の stream 処理を遅延させる）
-// 3. canplay を 4 秒以内に待ってから play() を呼ぶ（readyState=0 で play() するとハングするため）
-// 4. play() に 5 秒タイムアウトを追加（resolve/reject しないケースの保護）
+// ScanCapture.jsx（改善版 v8）
+// 変更点（v8）:
+// 1. sleep(0) → requestAnimationFrame × 2 に変更（React 18 DOM commit の確実な待機）
+// 2. canplay 待機を制御フローから外す（ログ観察専用）→ play() を直接呼ぶ
+// 3. 詳細ログを全ステップに追加（readyState / display / srcObject 確認）
+// 4. play() に 5 秒タイムアウト維持
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -229,10 +229,7 @@ export default function ScanCapture({
       console.log("[Scan] videoRef.current exists:", !!v);
       if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
 
-      // ── イベントリスナーを srcObject より前にすべて登録（取りこぼし防止）──
-      // canplay 待機用 Promise（waiter 登録を最初に）
-      const canplayWaiter = new Promise(r => v.addEventListener("canplay", r, { once: true }));
-
+      // ── イベントリスナーをすべて srcObject 前に登録（ログ観察用・制御フローには使わない）──
       v.addEventListener("loadedmetadata", () => {
         console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
       }, { once: true });
@@ -240,31 +237,36 @@ export default function ScanCapture({
       v.addEventListener("playing",  () => console.log("[Scan] playing fired"),  { once: true });
       v.addEventListener("error",    () => console.warn("[Scan] video error —", v.error?.message, v.error?.code), { once: true });
 
-      // ── Chrome は display:none の video の MediaStream 処理を遅延させるため
-      //    先に video を visible にしてから srcObject をセットする ──
+      // ── srcObject を hidden video に先セット ──
+      v.srcObject = stream;
+      console.log("[Scan] after srcObject — readyState:", v.readyState);
+
+      // ── video を visible にする（React state 更新）──
       setStage("camera");
       setCamOn(true);
       cameraStartingRef.current = false;
       setCameraStarting(false);
-      await sleep(0);  // React DOM commit（この時点で video は display:block）
 
-      v.srcObject = stream;
-      console.log("[Scan] srcObject assigned");
+      // ── requestAnimationFrame × 2 で React DOM commit を確実に待つ ──
+      // sleep(0) = setTimeout(0) は React 18 の DOM commit を保証しない
+      console.log("[Scan] before rAF (1)");
+      await new Promise(r => requestAnimationFrame(r));
+      console.log("[Scan] after rAF (1) — readyState:", v.readyState);
+      await new Promise(r => requestAnimationFrame(r));
+      console.log("[Scan] after rAF (2) — readyState:", v.readyState,
+        "srcObject:", !!v.srcObject, "display:", getComputedStyle(v).display);
 
-      // canplay を待つ（最大 4 秒）— readyState が上がってから play() を呼ぶ
-      await Promise.race([
-        canplayWaiter,
-        sleep(4000).then(() => console.warn("[Scan] canplay timeout (4s)")),
-      ]);
-
-      // play() に 5 秒タイムアウト（resolve/reject しないハング対策）
-      console.log("[Scan] play start");
+      // ── play() を直接呼ぶ（canplay 待機を外す：waiting for canplay は詰まる原因になる）──
+      // canplay/loadedmetadata は上のリスナーで観察するが、制御フローには使わない
+      console.log("[Scan] play start — readyState:", v.readyState);
       try {
         await Promise.race([
           v.play(),
           new Promise((_, rej) =>
-            setTimeout(() =>
-              rej(Object.assign(new Error("play timeout"), { name: "PlayTimeoutError" })), 5000)
+            setTimeout(() => {
+              console.warn("[Scan] play timeout (5s)");
+              rej(Object.assign(new Error("play timeout"), { name: "PlayTimeoutError" }));
+            }, 5000)
           ),
         ]);
         console.log("[Scan] play resolved — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
@@ -274,8 +276,8 @@ export default function ScanCapture({
         if (playErr?.name === "AbortError") {
           console.log("[Scan] AbortError ignored");
         } else if (playErr?.name === "PlayTimeoutError") {
-          console.warn("[Scan] play timeout — video may still become active");
-          // タイムアウトは致命的エラーではない：UI は表示済みなので処理継続
+          console.warn("[Scan] play timeout — UI visible, continuing");
+          // タイムアウトは致命的エラーではない：video は visible なので続行
         } else {
           throw playErr;
         }
