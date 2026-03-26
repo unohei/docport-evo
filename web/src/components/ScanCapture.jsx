@@ -1,8 +1,9 @@
-// ScanCapture.jsx（改善版 v4）
-// 変更点（v4）:
-// 1. cameraStartingRef (useRef) を追加し、ガードをrefで行う（stale closure 解消）
-// 2. 全ての exit path で cameraStartingRef.current = false をリセット
-// 3. キャンセルボタンを cameraStarting 中でも押せるように変更（stopCamera を呼ぶ）
+// ScanCapture.jsx（改善版 v5）
+// 変更点（v5）:
+// 1. autoPlay 属性を除去 → autoPlay + explicit play() の AbortError 競合を解消
+// 2. getUserMedia に 10秒タイムアウトを追加 → 許可ダイアログ放置による無限ハングを防止
+// 3. setShowFallback(true) を NotAllowed/NotFound のみに限定 → 一時エラーで再試行可能に
+// 4. friendlyError に TimeoutError を追加
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -105,6 +106,9 @@ export default function ScanCapture({
     if (name === "TypeError") {
       return "カメラの使用にはHTTPS接続が必要です。";
     }
+    if (name === "TimeoutError") {
+      return e?.message ?? "カメラの起動がタイムアウトしました。再試行してください。";
+    }
     return e?.message ?? String(e);
   }
 
@@ -206,10 +210,18 @@ export default function ScanCapture({
           : { facingMode: { ideal: "user" } };
       })();
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: videoConstraint,
-      });
+      // 10秒タイムアウト：許可ダイアログ放置による無限ハングを防止
+      const CAMERA_TIMEOUT_MS = 10000;
+      const stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraint }),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const e = new Error("カメラの起動がタイムアウトしました。再試行してください。");
+            e.name = "TimeoutError";
+            reject(e);
+          }, CAMERA_TIMEOUT_MS)
+        ),
+      ]);
       streamRef.current = stream;
 
       // getUserMedia 成功後に stage を camera に移行
@@ -224,7 +236,13 @@ export default function ScanCapture({
 
       v.srcObject = stream;
       await sleep(0);
-      await v.play();
+      // AbortError は autoPlay 属性との race condition で発生することがある → 無視してよい
+      try {
+        await v.play();
+      } catch (playErr) {
+        if (playErr?.name !== "AbortError") throw playErr;
+        console.log("[DocPort] play() AbortError (autoPlay race) - ignored");
+      }
 
       const elapsed = Math.round(performance.now() - t0);
       console.log(`[DocPort:Perf] Camera started in ${elapsed}ms`);
@@ -276,7 +294,14 @@ export default function ScanCapture({
       setCamOn(false);
       setStage("idle");
       setErr(msg);
-      setShowFallback(true);
+      // NotAllowed / NotFound のみ fallback へ（カメラボタンを隠す）
+      // それ以外（Timeout, NotReadable, AbortError 等）はカメラボタンを残して再試行可能にする
+      const isFatal =
+        e?.name === "NotAllowedError" ||
+        e?.name === "PermissionDeniedError" ||
+        e?.name === "NotFoundError" ||
+        e?.name === "DevicesNotFoundError";
+      if (isFatal) setShowFallback(true);
       stopStreamOnly();
     }
   };
