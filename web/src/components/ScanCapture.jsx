@@ -1,9 +1,9 @@
-// ScanCapture.jsx（改善版 v6）
-// 変更点（v6）:
-// 1. v.srcObject = stream を setStage/setCamOn より先に移動（hidden 状態でセット → 表示と同時に再生開始）
-// 2. <video> から autoPlay 属性を除去（autoPlay + explicit play() の AbortError 競合を完全解消）
-// 3. デバッグログ 8点追加（[Scan] プレフィックス）
-// 4. window.__dpScan でコンソールから video/stream を確認可能にする
+// ScanCapture.jsx（改善版 v7）
+// 変更点（v7）:
+// 1. イベントリスナー（loadedmetadata/canplay/playing/error）を srcObject より前に登録（取りこぼし防止）
+// 2. video を先に visible にしてから srcObject をセット（Chrome は hidden video の stream 処理を遅延させる）
+// 3. canplay を 4 秒以内に待ってから play() を呼ぶ（readyState=0 で play() するとハングするため）
+// 4. play() に 5 秒タイムアウトを追加（resolve/reject しないケースの保護）
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -225,37 +225,60 @@ export default function ScanCapture({
       console.log("[Scan] getUserMedia success, stream.active:", stream.active);
       streamRef.current = stream;
 
-      // srcObject を先にセット（video は display:none のまま）
-      // → setCamOn(true) で display:block になった瞬間に再生可能な状態にしておく
       const v = videoRef.current;
       console.log("[Scan] videoRef.current exists:", !!v);
       if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
 
-      v.srcObject = stream;
-      console.log("[Scan] srcObject assigned");
+      // ── イベントリスナーを srcObject より前にすべて登録（取りこぼし防止）──
+      // canplay 待機用 Promise（waiter 登録を最初に）
+      const canplayWaiter = new Promise(r => v.addEventListener("canplay", r, { once: true }));
 
-      // loadedmetadata をログ（ワンショット）
       v.addEventListener("loadedmetadata", () => {
-        console.log("[Scan] loadedmetadata fired, videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+        console.log("[Scan] loadedmetadata fired — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
       }, { once: true });
+      v.addEventListener("canplay",  () => console.log("[Scan] canplay fired"),  { once: true });
+      v.addEventListener("playing",  () => console.log("[Scan] playing fired"),  { once: true });
+      v.addEventListener("error",    () => console.warn("[Scan] video error —", v.error?.message, v.error?.code), { once: true });
 
-      // stage → camera に遷移（ここで video が display:block になる）
+      // ── Chrome は display:none の video の MediaStream 処理を遅延させるため
+      //    先に video を visible にしてから srcObject をセットする ──
       setStage("camera");
       setCamOn(true);
       cameraStartingRef.current = false;
       setCameraStarting(false);
-      await sleep(0);  // React の DOM commit を待つ
+      await sleep(0);  // React DOM commit（この時点で video は display:block）
 
-      // autoPlay 属性を除去したため明示的に play() が必要
+      v.srcObject = stream;
+      console.log("[Scan] srcObject assigned");
+
+      // canplay を待つ（最大 4 秒）— readyState が上がってから play() を呼ぶ
+      await Promise.race([
+        canplayWaiter,
+        sleep(4000).then(() => console.warn("[Scan] canplay timeout (4s)")),
+      ]);
+
+      // play() に 5 秒タイムアウト（resolve/reject しないハング対策）
       console.log("[Scan] play start");
       try {
-        await v.play();
-        console.log("[Scan] play resolved, videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
+        await Promise.race([
+          v.play(),
+          new Promise((_, rej) =>
+            setTimeout(() =>
+              rej(Object.assign(new Error("play timeout"), { name: "PlayTimeoutError" })), 5000)
+          ),
+        ]);
+        console.log("[Scan] play resolved — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
         console.log("[Scan] current preview mode: video");
       } catch (playErr) {
         console.warn("[Scan] play rejected:", playErr?.name, playErr?.message);
-        if (playErr?.name !== "AbortError") throw playErr;
-        console.log("[Scan] AbortError ignored (race with browser autoplay)");
+        if (playErr?.name === "AbortError") {
+          console.log("[Scan] AbortError ignored");
+        } else if (playErr?.name === "PlayTimeoutError") {
+          console.warn("[Scan] play timeout — video may still become active");
+          // タイムアウトは致命的エラーではない：UI は表示済みなので処理継続
+        } else {
+          throw playErr;
+        }
       }
 
       const elapsed = Math.round(performance.now() - t0);
