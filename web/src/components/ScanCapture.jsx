@@ -1,14 +1,12 @@
-// ScanCapture.jsx（改善版 v2）
-// 変更点:
-// 1. OpenCV.js をレイジーロード（loadOpenCV ユーティリティ経由 / index.html から削除）
-// 2. iOS / getUserMedia失敗時に input[capture="environment"] フォールバック
-// 3. エラー名ベースのユーザーフレンドリーメッセージ（iOS用案内含む）
-// 4. パフォーマンス計測（OpenCV・カメラ起動・スキャン処理時間）
-// 5. 四隅未検出時のフォールバック（全体画像を使用、エラーで詰まらない）
-// 6. Cannyを2段階試行（50/150 → 30/100）で検出安定化
-// 7. warpPerspective後にコントラスト強化（alpha=1.2, beta=10 / OCR精度向上）
-// 8. THROTTLE を 200ms に改善、ガイド検出の最小面積を緩和（8% → 6%）
-// 9. OverconstrainedError 時に facingMode 無しで自動リトライ
+// ScanCapture.jsx（改善版 v3）
+// 変更点（v3）:
+// 1. カメラ起動を最優先 — OpenCV ロード完了を待たずに getUserMedia を開始
+// 2. startCamera の state-flip バグ修正（setCamOn→stopCamera→setCamOn の二重反転を排除）
+// 3. cameraStarting 状態を追加し「起動中…」スピナーを表示
+// 4. OpenCV をマウント時ではなく初回カメラ起動/ファイル選択時にレイジーロード
+// 5. idle UI 簡素化：カメラ起動・ファイル選択・キャンセルのみ表示
+// 6. permission denied 時の状態整理：cameraStarting を必ず false に戻す
+// 7. autoStart と手動ボタンの二重起動を防止（didAutoStartRef / cameraStarting ガード）
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
@@ -26,15 +24,17 @@ export default function ScanCapture({
   const outCanvasRef     = useRef(null);
   const overlayRef       = useRef(null);
   const streamRef        = useRef(null);
-  const fallbackInputRef = useRef(null);  // iOS フォールバック用 file input
+  const fallbackInputRef = useRef(null);
 
   const rafRef           = useRef(null);
   const lastGuideAtRef   = useRef(0);
   const lastQuadNormRef  = useRef(null);
   const didAutoStartRef  = useRef(false);
-  const perfRef          = useRef({});    // 計測ログ蓄積
+  const perfRef          = useRef({});
+  const opencvLoadStartedRef = useRef(false); // OpenCV ロードを一度だけ起動するガード
 
   const [camOn,          setCamOn]          = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false); // getUserMedia 呼び出し中
   const [busy,           setBusy]           = useState(false);
   const [err,            setErr]            = useState("");
   const [opencvReady,    setOpenCvReady]    = useState(false);
@@ -49,19 +49,19 @@ export default function ScanCapture({
   const [devices,        setDevices]        = useState([]);
   const [deviceId,       setDeviceId]       = useState("");
 
-  // UI
   const SKY_TEXT = "#0369a1";
   const DEEP     = "#0F172A";
 
-  // iOS 判定（getUserMedia失敗時のメッセージ分岐）
   const isIOS = /iPad|iPhone|iPod/.test(
     typeof navigator !== "undefined" ? navigator.userAgent : ""
   );
   const canUseMedia =
     typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
-  // ---- OpenCV.js レイジーロード ----
-  useEffect(() => {
+  // ---- OpenCV レイジーロード（初回カメラ/ファイル選択時のみ起動）----
+  const ensureOpenCV = () => {
+    if (opencvLoadStartedRef.current) return;
+    opencvLoadStartedRef.current = true;
     setOpenCvLoading(true);
     loadOpenCV()
       .then(() => {
@@ -72,7 +72,7 @@ export default function ScanCapture({
         setOpenCvLoading(false);
         console.warn("[DocPort] OpenCV load failed:", e?.message);
       });
-  }, []);
+  };
 
   // ---- autoStart: マウント直後にカメラを起動 ----
   useEffect(() => {
@@ -81,10 +81,9 @@ export default function ScanCapture({
     startCamera();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // OpenCV が読み込まれた後に cv を参照
   const cv = useMemo(
     () => (typeof window !== "undefined" ? window.cv : null),
-    [opencvReady] // opencvReady が変わったタイミングで再評価
+    [opencvReady]
   );
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -133,16 +132,21 @@ export default function ScanCapture({
     } catch { /* ignore */ }
   };
 
+  // ---- ストリームだけ停止（stage は変えない）----
+  const stopStreamOnly = () => {
+    stopGuideLoop();
+    const s = streamRef.current;
+    if (s) s.getTracks().forEach((tr) => tr.stop());
+    streamRef.current = null;
+    const v = videoRef.current;
+    if (v) v.srcObject = null;
+    setCamOn(false);
+  };
+
   const stopCamera = async (opts = {}) => {
     const { preserveStage = false } = opts;
     try {
-      stopGuideLoop();
-      const s = streamRef.current;
-      if (s) s.getTracks().forEach((tr) => tr.stop());
-      streamRef.current = null;
-      const v = videoRef.current;
-      if (v) v.srcObject = null;
-      setCamOn(false);
+      stopStreamOnly();
       if (!preserveStage) setStage("idle");
     } catch { /* ignore */ }
   };
@@ -153,7 +157,7 @@ export default function ScanCapture({
 
     const tick = (t) => {
       rafRef.current = requestAnimationFrame(tick);
-      const THROTTLE = 200; // ~5fps（改善: 220 → 200ms）
+      const THROTTLE = 200;
       if (!opencvReady || !cv) return;
       if (t - lastGuideAtRef.current < THROTTLE) {
         drawGuide();
@@ -165,28 +169,34 @@ export default function ScanCapture({
     rafRef.current = requestAnimationFrame(tick);
   };
 
-  // ---- カメラ起動 ----
+  // ---- カメラ起動（state-flip 修正版）----
   const startCamera = async (opts = {}) => {
     const { forceDeviceId, retryWithoutFacingMode = false } = opts;
+
+    // 二重起動ガード
+    if (cameraStarting) return;
+
     setErr("");
     setShowFallback(false);
+    setCameraStarting(true);
 
     if (!canUseMedia) {
       setErr("このブラウザではカメラが使えません。");
       setShowFallback(true);
+      setCameraStarting(false);
       return;
     }
 
-    const t0 = performance.now();
-    setCamOn(true);
-    setStage("camera");
+    // OpenCV をバックグラウンドで読み込み開始（カメラ起動をブロックしない）
+    ensureOpenCV();
+
+    // 前のストリームを stage を変えずに停止
+    stopStreamOnly();
     await sleep(0);
 
-    try {
-      await stopCamera();
-      setCamOn(true);
-      await sleep(0);
+    const t0 = performance.now();
 
+    try {
       const videoConstraint = (() => {
         if (forceDeviceId || deviceId) {
           return { deviceId: { exact: forceDeviceId || deviceId } };
@@ -202,6 +212,12 @@ export default function ScanCapture({
         video: videoConstraint,
       });
       streamRef.current = stream;
+
+      // getUserMedia 成功後に stage を camera に移行
+      setStage("camera");
+      setCamOn(true);
+      setCameraStarting(false);
+      await sleep(0);
 
       const v = videoRef.current;
       if (!v) throw new Error("video 要素が見つかりません（描画タイミング）");
@@ -222,7 +238,7 @@ export default function ScanCapture({
           vids.find((d) => /back|rear|environment/i.test(d.label)) || null;
         if (rearLike?.deviceId) {
           setDeviceId(rearLike.deviceId);
-          await stopCamera();
+          stopStreamOnly();
           await sleep(0);
           return startCamera({ forceDeviceId: rearLike.deviceId });
         }
@@ -231,8 +247,6 @@ export default function ScanCapture({
       if (forceDeviceId) setDeviceId(forceDeviceId);
       else if (!deviceId && vids?.[0]?.deviceId) setDeviceId(vids[0].deviceId);
 
-      setCamOn(true);
-      setStage("camera");
     } catch (e) {
       // OverconstrainedError: facingMode なしで自動リトライ
       if (
@@ -240,32 +254,34 @@ export default function ScanCapture({
         !retryWithoutFacingMode
       ) {
         console.warn("[DocPort] OverconstrainedError → retry without facingMode");
-        setCamOn(false);
-        await stopCamera();
+        setCameraStarting(false);
+        stopStreamOnly();
         return startCamera({ retryWithoutFacingMode: true });
       }
 
       const msg = friendlyError(e);
       console.warn(`[DocPort] Camera error (${e?.name}): ${msg}`);
-      // 計測: カメラ起動失敗ログ
+
       try {
         const prev = JSON.parse(sessionStorage.getItem("dp_cam_errors") || "[]");
         prev.push({ ts: Date.now(), name: e?.name, ios: isIOS });
         sessionStorage.setItem("dp_cam_errors", JSON.stringify(prev.slice(-10)));
       } catch { /* ignore */ }
 
-      setErr(msg);
+      // 失敗時は必ず cameraStarting を false に戻す
+      setCameraStarting(false);
       setCamOn(false);
       setStage("idle");
+      setErr(msg);
       setShowFallback(true);
-      await stopCamera();
+      stopStreamOnly();
     }
   };
 
   useEffect(() => {
     return () => {
       stopGuideLoop();
-      stopCamera();
+      stopStreamOnly();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -330,14 +346,12 @@ export default function ScanCapture({
   };
 
   // ---- 四隅検出（共通：Canny 2段階試行）----
-  // minAreaRatio: 最小面積比。ガイド用は緩め(0.06)、本処理は(0.08)
   function detectQuad(gray, w, h, minAreaRatio = 0.08) {
     if (!cv) return null;
 
     const denoise = new cv.Mat();
     cv.bilateralFilter(gray, denoise, 7, 50, 50);
 
-    // Canny 2段階試行: 第1パスで見つからなければ第2パス（閾値を下げる）
     for (const [lo, hi] of [[50, 150], [30, 100]]) {
       const edges = new cv.Mat();
       cv.Canny(denoise, edges, lo, hi);
@@ -382,7 +396,7 @@ export default function ScanCapture({
     }
 
     denoise.delete();
-    return null; // 両パスで未検出
+    return null;
   }
 
   const detectQuadForGuide = () => {
@@ -409,7 +423,7 @@ export default function ScanCapture({
       cv.cvtColor(srcRGBA, gray, cv.COLOR_RGBA2GRAY);
       srcRGBA.delete();
 
-      const bestQuad = detectQuad(gray, cw, ch, 0.06); // ガイドは面積閾値を緩く
+      const bestQuad = detectQuad(gray, cw, ch, 0.06);
       gray.delete();
 
       if (!bestQuad) { lastQuadNormRef.current = null; drawGuide(); return; }
@@ -457,8 +471,6 @@ export default function ScanCapture({
   }
 
   // ---- OpenCV コア処理: rawCanvas → outCanvas ----
-  // 四隅検出 → warpPerspective → コントラスト強化
-  // 四隅未検出時はフォールバック（全体画像）を使用
   function processRawCanvas(rawCanvas, outCanvas) {
     const t0 = performance.now();
     const cw = rawCanvas.width;
@@ -468,14 +480,13 @@ export default function ScanCapture({
     const gray    = new cv.Mat();
     cv.cvtColor(srcRGBA, gray, cv.COLOR_RGBA2GRAY);
 
-    const bestQuad     = detectQuad(gray, cw, ch, 0.08);
+    const bestQuad = detectQuad(gray, cw, ch, 0.08);
     gray.delete();
 
     let tl, tr, br, bl;
     let usedFallback = false;
 
     if (!bestQuad) {
-      // フォールバック: 全体を2%インセットして使用
       usedFallback = true;
       const inset = Math.round(Math.min(cw, ch) * 0.02);
       tl = { x: inset,        y: inset };
@@ -506,7 +517,6 @@ export default function ScanCapture({
     const warped = new cv.Mat();
     cv.warpPerspective(srcRGBA, warped, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
 
-    // ★ コントラスト強化 (OCR精度向上: alpha=1.2, beta=10)
     const enhanced = new cv.Mat();
     warped.convertTo(enhanced, -1, 1.2, 10);
 
@@ -531,9 +541,20 @@ export default function ScanCapture({
   // ---- 撮影 → OpenCV処理 ----
   const captureAndProcess = async () => {
     setErr("");
-    if (!opencvReady) return setErr("OpenCV がまだ読み込み中です（少し待ってください）");
-    if (!camOn)       return setErr("カメラが起動していません");
-    if (!cv)          return setErr("OpenCV が見つかりません");
+    if (!camOn) return setErr("カメラが起動していません");
+
+    // OpenCV がまだロード中なら待機（最大10秒）
+    if (!opencvReady) {
+      if (opencvLoading) {
+        setErr("画像解析を準備中です。もう少し待ってから撮影してください。");
+      } else {
+        // ロードが開始されていなければここで開始
+        ensureOpenCV();
+        setErr("画像解析を準備中です。もう少し待ってから撮影してください。");
+      }
+      return;
+    }
+    if (!cv) return setErr("OpenCV が見つかりません");
 
     const video     = videoRef.current;
     const rawCanvas = rawCanvasRef.current;
@@ -581,11 +602,13 @@ export default function ScanCapture({
   const handleFallbackFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // reset so same file can be re-selected
     if (fallbackInputRef.current) fallbackInputRef.current.value = "";
 
+    // OpenCV ロードをここで開始（まだなら）
+    ensureOpenCV();
+
     if (!opencvReady || !cv) {
-      setErr("OpenCV がまだ準備中です。しばらく待ってから再試行してください。");
+      setErr("画像解析を準備中です。しばらく待ってから再試行してください。");
       return;
     }
 
@@ -679,6 +702,13 @@ export default function ScanCapture({
     await startCamera({ forceDeviceId: next.deviceId });
   };
 
+  // ---- 撮影ボタンのラベル ----
+  const captureLabel = (() => {
+    if (busy) return "処理中...";
+    if (!opencvReady && opencvLoading) return "解析準備中…";
+    return "📄 撮ってPDF化";
+  })();
+
   // ---- Render ----
   return (
     <div style={{
@@ -687,14 +717,7 @@ export default function ScanCapture({
       padding: 14,
       background: "rgba(255,255,255,0.8)",
     }}>
-      <div style={{ fontWeight: 900, marginBottom: 6 }}>スキャンして置く</div>
-
-      {/* OpenCV 読み込み中インジケーター */}
-      {opencvLoading && (
-        <div style={{ fontSize: 12, color: "#0369a1", marginBottom: 8, opacity: 0.8 }}>
-          AI（画像解析）を読み込んでいます…
-        </div>
-      )}
+      <div style={{ fontWeight: 900, marginBottom: 8 }}>スキャンして置く</div>
 
       {/* カメラ映像 + ガイドオーバーレイ */}
       <div style={{ position: "relative" }}>
@@ -724,75 +747,68 @@ export default function ScanCapture({
         />
       </div>
 
-      {/* ===== idle: カメラ起動ボタン ===== */}
+      {/* ===== idle / cameraStarting: 起動ボタン + ファイル選択 ===== */}
       {!camOn && stage !== "preview" && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-          <button
-            onClick={() => startCamera()}
-            disabled={busy}
-            style={{
-              padding: "12px 16px",
-              borderRadius: 14,
-              border: "1px solid rgba(15, 23, 42, 0.16)",
-              background: busy ? "rgba(15,23,42,0.08)" : DEEP,
-              color: busy ? "rgba(15,23,42,0.45)" : "#fff",
-              fontWeight: 900,
-              letterSpacing: 0.2,
-              cursor: busy ? "not-allowed" : "pointer",
-              boxShadow: busy ? "none" : "0 10px 22px rgba(15,23,42,0.18)",
-              minWidth: 180,
-            }}
-          >
-            📷 カメラを起動
-          </button>
+        <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
 
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            style={{
-              padding: "12px 16px",
-              borderRadius: 14,
-              border: "1px solid rgba(15, 23, 42, 0.12)",
-              background: "rgba(255,255,255,0.75)",
-              fontWeight: 800,
-              cursor: busy ? "not-allowed" : "pointer",
-              minWidth: 140,
-            }}
-          >
-            キャンセル
-          </button>
+          {/* カメラ起動中スピナー */}
+          {cameraStarting && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "12px 14px", borderRadius: 12,
+              background: "rgba(14,165,233,0.06)",
+              border: "1px solid rgba(14,165,233,0.18)",
+              fontSize: 13, fontWeight: 700, color: SKY_TEXT,
+            }}>
+              <span style={{
+                display: "inline-block", width: 16, height: 16,
+                border: "2.5px solid rgba(14,165,233,0.25)",
+                borderTopColor: "rgba(14,165,233,0.9)",
+                borderRadius: "50%",
+                animation: "spin 0.7s linear infinite",
+                flexShrink: 0,
+              }} />
+              カメラを起動中…
+            </div>
+          )}
 
-          {/* OpenCV ステータス（開発・計測用） */}
-          <div style={{ fontSize: 11, opacity: 0.55 }}>
-            OpenCV: {opencvReady ? "ready" : opencvLoading ? "loading…" : "—"}
-          </div>
-        </div>
-      )}
+          {/* カメラ起動ボタン（拒否後は非表示、起動中は disabled） */}
+          {!showFallback && (
+            <button
+              onClick={() => startCamera()}
+              disabled={cameraStarting || busy}
+              style={{
+                padding: "13px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(15, 23, 42, 0.16)",
+                background: (cameraStarting || busy) ? "rgba(15,23,42,0.08)" : DEEP,
+                color: (cameraStarting || busy) ? "rgba(15,23,42,0.45)" : "#fff",
+                fontWeight: 900,
+                letterSpacing: 0.2,
+                cursor: (cameraStarting || busy) ? "not-allowed" : "pointer",
+                boxShadow: (cameraStarting || busy) ? "none" : "0 10px 22px rgba(15,23,42,0.18)",
+                width: "100%",
+                fontSize: 14,
+              }}
+            >
+              📷 カメラを起動
+            </button>
+          )}
 
-      {/* iOS / getUserMedia失敗時 フォールバックボタン */}
-      {showFallback && stage !== "preview" && (
-        <div style={{
-          marginTop: 12,
-          padding: "10px 14px",
-          borderRadius: 12,
-          background: "rgba(14,165,233,0.06)",
-          border: "1px solid rgba(14,165,233,0.22)",
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#0369a1", marginBottom: 8 }}>
-            📁 カメラの代わりに写真ファイルを使う
-          </div>
+          {/* ファイル選択（常時表示） */}
           <label style={{
-            display: "inline-block",
-            padding: "10px 16px",
-            borderRadius: 12,
-            border: "1px solid rgba(14,165,233,0.35)",
-            background: "rgba(224,242,254,0.85)",
-            color: "#0369a1",
+            display: "block",
+            padding: "12px 16px",
+            borderRadius: 14,
+            border: "1px solid rgba(14,165,233,0.28)",
+            background: "rgba(224,242,254,0.75)",
+            color: SKY_TEXT,
             fontWeight: 800,
             cursor: busy ? "not-allowed" : "pointer",
             fontSize: 13,
+            textAlign: "center",
           }}>
-            {isIOS ? "📷 カメラで撮影 / ファイルを選択" : "📁 画像ファイルを選択"}
+            {isIOS ? "📷 カメラで撮影 / 写真を選択" : "📁 画像ファイルを選択"}
             <input
               ref={fallbackInputRef}
               type="file"
@@ -803,11 +819,30 @@ export default function ScanCapture({
               style={{ display: "none" }}
             />
           </label>
-          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
-            {isIOS
-              ? "iOSの場合: カメラまたは写真ライブラリから選択できます"
-              : "画像ファイルを選択すると自動で書類補正します"}
-          </div>
+
+          {/* キャンセル */}
+          <button
+            onClick={onCancel}
+            disabled={busy || cameraStarting}
+            style={{
+              padding: "11px 16px",
+              borderRadius: 14,
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              background: "rgba(255,255,255,0.75)",
+              fontWeight: 800,
+              cursor: (busy || cameraStarting) ? "not-allowed" : "pointer",
+              fontSize: 13,
+            }}
+          >
+            キャンセル
+          </button>
+
+          {/* カメラ拒否時の説明（エラーメッセージより先に表示） */}
+          {showFallback && !err && (
+            <div style={{ fontSize: 12, color: "#b45309", lineHeight: 1.5 }}>
+              カメラが使えないため、ファイル選択をご利用ください。
+            </div>
+          )}
         </div>
       )}
 
@@ -817,22 +852,22 @@ export default function ScanCapture({
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
             <button
               onClick={captureAndProcess}
-              disabled={busy}
+              disabled={busy || (!opencvReady && opencvLoading)}
               style={{
                 padding: "14px 18px",
                 borderRadius: 16,
-                border: `1px solid ${busy ? "rgba(15,23,42,0.12)" : "rgba(14,165,233,0.45)"}`,
-                background: busy ? "rgba(15,23,42,0.06)" : "rgba(224,242,254,0.85)",
-                color: busy ? "rgba(15,23,42,0.55)" : SKY_TEXT,
+                border: `1px solid ${(busy || (!opencvReady && opencvLoading)) ? "rgba(15,23,42,0.12)" : "rgba(14,165,233,0.45)"}`,
+                background: (busy || (!opencvReady && opencvLoading)) ? "rgba(15,23,42,0.06)" : "rgba(224,242,254,0.85)",
+                color: (busy || (!opencvReady && opencvLoading)) ? "rgba(15,23,42,0.55)" : SKY_TEXT,
                 fontWeight: 950,
                 fontSize: 15,
                 letterSpacing: 0.25,
-                cursor: busy ? "not-allowed" : "pointer",
-                boxShadow: busy ? "none" : "0 14px 30px rgba(14,165,233,0.22)",
+                cursor: (busy || (!opencvReady && opencvLoading)) ? "not-allowed" : "pointer",
+                boxShadow: (busy || (!opencvReady && opencvLoading)) ? "none" : "0 14px 30px rgba(14,165,233,0.22)",
                 minWidth: 220,
               }}
             >
-              {busy ? "処理中..." : "📄 撮ってPDF化"}
+              {captureLabel}
             </button>
 
             {canSwitch && (
@@ -867,13 +902,14 @@ export default function ScanCapture({
             >
               カメラ停止
             </button>
-
-            <div style={{ fontSize: 11, opacity: 0.55 }}>
-              {deviceId
-                ? devices.find((d) => d.deviceId === deviceId)?.label || "selected"
-                : "auto"}
-            </div>
           </div>
+
+          {/* OpenCV ロード中の補助表示（カメラ起動後のみ） */}
+          {opencvLoading && !opencvReady && (
+            <div style={{ fontSize: 11, color: "#0369a1", marginTop: 6, opacity: 0.7 }}>
+              画像解析を準備中…撮影ボタンはもうすぐ使えます
+            </div>
+          )}
 
           <canvas ref={outCanvasRef} style={{ display: "none" }} />
         </>
@@ -977,7 +1013,7 @@ export default function ScanCapture({
         <div style={{
           marginTop: 10,
           fontSize: 13,
-          color: err.includes("自動検出") ? "#b45309" : "#b91c1c",
+          color: err.includes("自動検出") || err.includes("準備中") ? "#b45309" : "#b91c1c",
           lineHeight: 1.5,
         }}>
           {err}
