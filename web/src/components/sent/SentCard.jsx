@@ -6,8 +6,9 @@
 
 import { buildCardSummary } from "../../utils/cardSummary";
 import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
+import HospitalAvatar from "../common/HospitalAvatar";
 
-export default function SentCard({ doc, nameOf, selected, onClick, isExpired }) {
+export default function SentCard({ doc, nameOf, iconOf, selected, onClick, isExpired }) {
   const summary = buildCardSummary(doc);
   const sc      = docStatusColor(doc, isExpired);
   const sl      = docStatusLabel(doc, isExpired);
@@ -35,15 +36,22 @@ export default function SentCard({ doc, nameOf, selected, onClick, isExpired }) 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, overflow: "hidden" }}>
           <div style={{ fontSize: 11, color: DP.textSub, fontWeight: 600, marginBottom: 1 }}>宛先</div>
-          <div style={{
-            fontSize: 15,
-            fontWeight: 800,
-            color: DP.navy,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {nameOf(doc.to_hospital_id)}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+            <HospitalAvatar
+              name={nameOf(doc.to_hospital_id)}
+              iconUrl={iconOf ? iconOf(doc.to_hospital_id) : ""}
+              size={22}
+            />
+            <div style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: DP.navy,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {nameOf(doc.to_hospital_id)}
+            </div>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>

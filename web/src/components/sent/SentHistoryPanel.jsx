@@ -10,6 +10,7 @@ import SentDetailPane from "./SentDetailPane";
 export default function SentHistoryPanel({
   docs,
   nameOf,
+  iconOf,
   fmt,
   isExpired,
   cancelDocument,
@@ -115,6 +116,7 @@ export default function SentHistoryPanel({
                 key={doc.id}
                 doc={doc}
                 nameOf={nameOf}
+                iconOf={iconOf}
                 selected={selectedDoc?.id === doc.id}
                 onClick={() => setSelectedDoc(doc)}
                 isExpired={isExpired}
@@ -128,6 +130,7 @@ export default function SentHistoryPanel({
       <SentDetailPane
         doc={selectedDoc}
         nameOf={nameOf}
+        iconOf={iconOf}
         fmt={fmt}
         isExpired={isExpired}
         cancelDocument={cancelDocument}

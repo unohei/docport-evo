@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
 import { getPreviewKey, isPreviewable } from "../../utils/preview";
+import HospitalAvatar from "../common/HospitalAvatar";
 
 function InfoRow({ label, value }) {
   if (!value) return null;
@@ -72,7 +73,7 @@ function ActionButton({ children, variant = "ghost", disabled = false, onClick }
   );
 }
 
-export default function SentDetailPane({ doc, nameOf, fmt, isExpired, cancelDocument, fetchPreviewUrl }) {
+export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, cancelDocument, fetchPreviewUrl }) {
   const [inlineUrl,     setInlineUrl]     = useState("");
   const [inlineLoading, setInlineLoading] = useState(false);
   const [copied,        setCopied]        = useState(false);
@@ -155,9 +156,19 @@ export default function SentDetailPane({ doc, nameOf, fmt, isExpired, cancelDocu
         gap: 8,
       }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <HospitalAvatar
+              name={senderDisplay(doc, nameOf)}
+              iconUrl={iconOf ? iconOf(doc.from_hospital_id) : ""}
+              size={20}
+            />
             {senderDisplay(doc, nameOf)}
             <span style={{ color: DP.textSub, fontWeight: 400 }}> → </span>
+            <HospitalAvatar
+              name={recipientDisplay(doc, nameOf)}
+              iconUrl={iconOf ? iconOf(doc.to_hospital_id) : ""}
+              size={20}
+            />
             {recipientDisplay(doc, nameOf)}
           </div>
           <div style={{ fontSize: 13, color: DP.textSub }}>

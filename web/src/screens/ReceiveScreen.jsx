@@ -19,6 +19,7 @@ export default function ReceiveScreen({
   // データ
   docs,
   nameOf,
+  iconOf,
   fmt,
   isExpired,
   // アクション
@@ -83,6 +84,7 @@ export default function ReceiveScreen({
         docs={laneDocs}
         activeLane={activeLane}
         nameOf={nameOf}
+        iconOf={iconOf}
         selectedDoc={selectedDoc}
         onSelect={setSelectedDoc}
         isExpired={isExpired}
@@ -91,6 +93,7 @@ export default function ReceiveScreen({
       <DetailPane
         doc={selectedDoc}
         nameOf={nameOf}
+        iconOf={iconOf}
         fmt={fmt}
         onArchive={archiveDocument}
         onAssign={assignDocument}

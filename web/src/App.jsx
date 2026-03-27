@@ -378,7 +378,7 @@ export default function App() {
     return hospitals.find((h) => h.id === myHospitalId)?.name ?? "";
   }, [myHospitalId, hospitals]);
   const nameOf = (hid) => hospitals.find((h) => h.id === hid)?.name ?? hid;
-  const iconOf = (hid) => hospitals.find((h) => h.id === hid)?.icon_url || "/default-hospital.svg";
+  const iconOf = (hid) => hospitals.find((h) => h.id === hid)?.icon_url || "";
 
   const unreadCount = useMemo(() => {
     return inboxDocs.filter(
@@ -917,6 +917,7 @@ export default function App() {
           allowedMimeExt={ALLOWED_MIME_EXT}
           filteredSentDocs={filteredSentDocs}
           nameOf={nameOf}
+          iconOf={iconOf}
           fmt={fmt}
           isExpired={isExpired}
           cancelDocument={cancelDocument}
@@ -939,6 +940,7 @@ export default function App() {
           unreadCount={unreadCount}
           docs={filteredInboxDocs}
           nameOf={nameOf}
+          iconOf={iconOf}
           fmt={fmt}
           isExpired={isExpired}
           openPreview={openInboxPreview}

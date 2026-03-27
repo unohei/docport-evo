@@ -9,6 +9,7 @@ export default function CardListPanel({
   docs,
   activeLane,
   nameOf,
+  iconOf,
   selectedDoc,
   onSelect,
   isExpired,
@@ -117,6 +118,7 @@ export default function CardListPanel({
               key={doc.id}
               doc={doc}
               nameOf={nameOf}
+              iconOf={iconOf}
               selected={selectedDoc?.id === doc.id}
               onClick={() => onSelect(doc)}
               isExpired={isExpired}

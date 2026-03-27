@@ -42,6 +42,7 @@ export default function SendScreen({
   // SentHistoryPanel props
   filteredSentDocs,
   nameOf,
+  iconOf,
   fmt,
   isExpired,
   cancelDocument,
@@ -164,6 +165,7 @@ export default function SendScreen({
             <SentHistoryPanel
               docs={filteredSentDocs ?? []}
               nameOf={nameOf}
+              iconOf={iconOf}
               fmt={fmt}
               isExpired={isExpired}
               cancelDocument={cancelDocument}

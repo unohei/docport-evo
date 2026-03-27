@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay } from "./receiveConstants";
 import { getPreviewKey, isPreviewable } from "../../utils/preview";
+import HospitalAvatar from "../common/HospitalAvatar";
 
 // ---- 小コンポーネント ----
 
@@ -186,6 +187,7 @@ function AssignModal({ doc, departments, hospitalMembers, myUserId, onAssign, on
 export default function DetailPane({
   doc,
   nameOf,
+  iconOf,
   fmt,
   onArchive,
   onAssign,
@@ -275,9 +277,19 @@ export default function DetailPane({
         gap: 8,
       }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <HospitalAvatar
+              name={senderDisplay(doc, nameOf)}
+              iconUrl={iconOf ? iconOf(doc.from_hospital_id) : ""}
+              size={20}
+            />
             {senderDisplay(doc, nameOf)}
             <span style={{ color: DP.textSub, fontWeight: 400 }}> → </span>
+            <HospitalAvatar
+              name={recipientDisplay(doc, nameOf)}
+              iconUrl={iconOf ? iconOf(doc.to_hospital_id) : ""}
+              size={20}
+            />
             {recipientDisplay(doc, nameOf)}
           </div>
           <div style={{ fontSize: 13, color: DP.textSub }}>
