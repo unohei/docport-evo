@@ -58,24 +58,33 @@ export default function ScanCapture({
     typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
   // ---- OpenCV レイジーロード（初回カメラ/ファイル選択時のみ起動）----
-  const ensureOpenCV = () => {
-    console.log(`[Scan] before ensureOpenCV state — opencvLoading:${opencvLoading}, opencvReady:${opencvReady}, stage:${stage}, busy:${busy}, cameraStarting:${cameraStarting}`);
+  // async/await + try/finally に統一:
+  //   .then() チェーンでは error が無音で飲み込まれる可能性があるため await に変換
+  //   setOpenCvLoading(false) は finally に置き、成功/失敗問わず必ず実行する
+  const ensureOpenCV = async () => {
+    console.log("[Scan] ensureOpenCV enter");
     if (opencvLoadStartedRef.current) {
       console.log("[Scan] ensureOpenCV: already started, skipping");
       return;
     }
     opencvLoadStartedRef.current = true;
+    console.log("[Scan] ensureOpenCV before load");
     setOpenCvLoading(true);
-    loadOpenCV()
-      .then(() => {
-        console.log("[Scan] after ensureOpenCV success — setting opencvReady=true, opencvLoading=false");
-        setOpenCvReady(true);
-        setOpenCvLoading(false);
-      })
-      .catch((e) => {
-        setOpenCvLoading(false);
-        console.warn("[DocPort] OpenCV load failed:", e?.message);
-      });
+    try {
+      await loadOpenCV();
+      console.log("[Scan] ensureOpenCV after load");
+      console.log("[Scan] ensureOpenCV before setOpenCvReady(true)");
+      setOpenCvReady(true);
+      console.log("[Scan] ensureOpenCV after setOpenCvReady(true)");
+    } catch (e) {
+      console.warn("[Scan] ensureOpenCV caught error:", e?.message);
+      console.warn("[DocPort] OpenCV load failed:", e?.message);
+    } finally {
+      console.log("[Scan] ensureOpenCV before setOpenCvLoading(false)");
+      setOpenCvLoading(false);
+      console.log("[Scan] ensureOpenCV after setOpenCvLoading(false)");
+      console.log("[Scan] ensureOpenCV finally");
+    }
   };
 
   // ---- autoStart: マウント直後にカメラを起動 ----
