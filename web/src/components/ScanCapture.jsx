@@ -312,30 +312,39 @@ export default function ScanCapture({
       console.log("[Scan] after srcObject — readyState:", v.readyState);
 
       // ── metadata or readyState >= 1 を待つ（max 5 秒）──
-      await Promise.race([
-        metaWaiter,
-        readyPoller,
-        sleep(5000).then(() => console.warn("[Scan] metadata wait timeout (5s)")),
-      ]);
+      // timeout ID を保持し、成功時は clearTimeout で warning を抑止する
+      let metaTimeoutId = null;
+      const metaTimeout = new Promise(resolve => {
+        metaTimeoutId = setTimeout(() => {
+          console.warn("[Scan] metadata wait timeout (5s)");
+          resolve();
+        }, 5000);
+      });
+      await Promise.race([metaWaiter, readyPoller, metaTimeout]);
+      clearTimeout(metaTimeoutId); // 成功時はタイマーをキャンセルして warning を出さない
       console.log("[Scan] after metadata wait — readyState:", v.readyState,
         "videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight);
 
       // ── play() + 5 秒タイムアウト ──
+      // timeout ID を保持し、play 成功/失敗時に clearTimeout で warning を抑止する
       console.log("[Scan] play start — readyState:", v.readyState);
+      let playTimeoutId = null;
       try {
         await Promise.race([
           v.play(),
-          new Promise((_, rej) =>
-            setTimeout(() => {
+          new Promise((_, rej) => {
+            playTimeoutId = setTimeout(() => {
               console.warn("[Scan] play timeout (5s)");
               rej(Object.assign(new Error("play timeout"), { name: "PlayTimeoutError" }));
-            }, 5000)
-          ),
+            }, 5000);
+          }),
         ]);
+        clearTimeout(playTimeoutId); // play 成功時はタイマーをキャンセル
         console.log("[Scan] play resolved — videoWidth:", v.videoWidth, "videoHeight:", v.videoHeight,
           "clientW:", v.clientWidth, "clientH:", v.clientHeight);
         console.log("[Scan] current preview mode: video");
       } catch (playErr) {
+        clearTimeout(playTimeoutId); // play 失敗時も残存タイマーをキャンセル
         console.warn("[Scan] play rejected:", playErr?.name, playErr?.message);
         if (playErr?.name === "AbortError") {
           console.log("[Scan] AbortError ignored");
