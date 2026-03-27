@@ -59,11 +59,16 @@ export default function ScanCapture({
 
   // ---- OpenCV レイジーロード（初回カメラ/ファイル選択時のみ起動）----
   const ensureOpenCV = () => {
-    if (opencvLoadStartedRef.current) return;
+    console.log(`[Scan] before ensureOpenCV state — opencvLoading:${opencvLoading}, opencvReady:${opencvReady}, stage:${stage}, busy:${busy}, cameraStarting:${cameraStarting}`);
+    if (opencvLoadStartedRef.current) {
+      console.log("[Scan] ensureOpenCV: already started, skipping");
+      return;
+    }
     opencvLoadStartedRef.current = true;
     setOpenCvLoading(true);
     loadOpenCV()
       .then(() => {
+        console.log("[Scan] after ensureOpenCV success — setting opencvReady=true, opencvLoading=false");
         setOpenCvReady(true);
         setOpenCvLoading(false);
       })
@@ -413,6 +418,28 @@ export default function ScanCapture({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- state 変化ログ（デバッグ用）----
+  useEffect(() => {
+    console.log(`[Scan] openCvLoading:${opencvLoading}, openCvReady:${opencvReady}, stage:${stage}, busy:${busy}, cameraStarting:${cameraStarting}`);
+  }, [opencvLoading, opencvReady, stage, busy, cameraStarting]);
+
+  // ---- 安全網: opencvReady=true になっても opencvLoading が残留していたら強制クリア ----
+  // ensureOpenCV の .then() が何らかの理由で setOpenCvLoading(false) を呼べなかった場合のフォールバック
+  useEffect(() => {
+    if (opencvReady && opencvLoading) {
+      console.log("[Scan] safety net: opencvReady=true but opencvLoading still true → forcing opencvLoading=false");
+      setOpenCvLoading(false);
+    }
+  }, [opencvReady]); // opencvReady が true になった瞬間のみ発火
+
+  // ---- 撮影ボタン状態ログ（デバッグ用）----
+  useEffect(() => {
+    if (stage === "camera") {
+      const isDisabled = busy || (!opencvReady && opencvLoading);
+      console.log(`[Scan] capture button rendered — disabled:${isDisabled}, busy:${busy}, opencvReady:${opencvReady}, opencvLoading:${opencvLoading}`);
+    }
+  }, [stage, busy, opencvReady, opencvLoading]);
 
   // ---- ガイド描画 ----
   const drawGrid = (ctx, w, h) => {
