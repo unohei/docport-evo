@@ -30,6 +30,7 @@ export default function ScanCapture({
   const perfRef             = useRef({});
   const opencvLoadStartedRef = useRef(false); // OpenCV ロードを一度だけ起動するガード
   const cameraStartingRef   = useRef(false);  // stale closure を避けるための ref ガード
+  const cancelledRef        = useRef(false);  // キャンセル後に後続 setState を無視するフラグ
 
   const [camOn,          setCamOn]          = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false); // getUserMedia 呼び出し中
@@ -667,6 +668,7 @@ export default function ScanCapture({
 
   // ---- 撮影 → OpenCV処理 ----
   const captureAndProcess = async () => {
+    cancelledRef.current = false;
     setErr("");
     if (!camOn) return setErr("カメラが起動していません");
 
@@ -690,7 +692,9 @@ export default function ScanCapture({
 
     setBusy(true);
     setStage("processing");
+    console.log("[Scan] capture confirmed");
     try {
+      console.log("[Scan] processing start");
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) {
@@ -706,8 +710,15 @@ export default function ScanCapture({
       rawCanvas.height = ch;
       rawCanvas.getContext("2d").drawImage(video, 0, 0, cw, ch);
 
+      if (cancelledRef.current) { console.log("[Scan] processing aborted by cancel"); return; }
+
+      console.log("[Scan] processing step: detect corners");
+      console.log("[Scan] processing step: warp");
       const { usedFallback } = processRawCanvas(rawCanvas, outCanvas);
 
+      if (cancelledRef.current) { console.log("[Scan] processing aborted by cancel"); return; }
+
+      console.log("[Scan] processing step: pdf create");
       if (usedFallback) {
         setErr("書類の四隅を自動検出できませんでした（全体を使用しています）。必要なら撮り直してください。");
       }
@@ -715,13 +726,18 @@ export default function ScanCapture({
       const outName = buildFilename(filenameBase);
       setPendingName(outName);
       setPreviewUrl(outCanvas.toDataURL("image/jpeg", 0.92));
+
+      if (cancelledRef.current) { console.log("[Scan] processing aborted by cancel"); return; }
+
+      console.log("[Scan] processing finished");
       setStage("preview");
       await stopCamera({ preserveStage: true });
     } catch (e) {
+      if (cancelledRef.current) return;
       setErr(e?.message ?? String(e));
       setStage(camOn ? "camera" : "idle");
     } finally {
-      setBusy(false);
+      if (!cancelledRef.current) setBusy(false);
     }
   };
 
@@ -815,6 +831,22 @@ export default function ScanCapture({
     lastQuadNormRef.current = null;
     setShowFallback(false);
     await startCamera();
+  };
+
+  // ---- キャンセル：処理中でも確実に脱出できる ----
+  const handleCancel = () => {
+    console.log("[Scan] cancel clicked");
+    cancelledRef.current = true;
+    cameraStartingRef.current = false;
+    setCameraStarting(false);
+    setBusy(false);
+    setErr("");
+    setStage("idle");
+    setPreviewUrl("");
+    setPendingName("");
+    stopStreamOnly();
+    console.log("[Scan] cancel completed");
+    onCancel?.();
   };
 
   const canSwitch = devices.length >= 2;
@@ -947,17 +979,16 @@ export default function ScanCapture({
             />
           </label>
 
-          {/* キャンセル（cameraStarting 中でも押せる：stopCamera してから onCancel） */}
+          {/* キャンセル（busy 中でも常に押せる） */}
           <button
-            onClick={() => { cameraStartingRef.current = false; setCameraStarting(false); stopCamera(); onCancel?.(); }}
-            disabled={busy}
+            onClick={handleCancel}
             style={{
               padding: "11px 16px",
               borderRadius: 14,
               border: "1px solid rgba(15, 23, 42, 0.12)",
               background: "rgba(255,255,255,0.75)",
               fontWeight: 800,
-              cursor: busy ? "not-allowed" : "pointer",
+              cursor: "pointer",
               fontSize: 13,
             }}
           >
@@ -970,6 +1001,44 @@ export default function ScanCapture({
               カメラが使えないため、ファイル選択をご利用ください。
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== processing: 解析中（キャンセルは常に押せる）===== */}
+      {stage === "processing" && (
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "12px 14px", borderRadius: 12,
+            background: "rgba(14,165,233,0.06)",
+            border: "1px solid rgba(14,165,233,0.18)",
+            fontSize: 13, fontWeight: 700, color: SKY_TEXT,
+          }}>
+            <span style={{
+              display: "inline-block", width: 16, height: 16,
+              border: "2.5px solid rgba(14,165,233,0.25)",
+              borderTopColor: "rgba(14,165,233,0.9)",
+              borderRadius: "50%",
+              animation: "spin 0.7s linear infinite",
+              flexShrink: 0,
+            }} />
+            書類を解析中…
+          </div>
+          <button
+            onClick={handleCancel}
+            style={{
+              padding: "11px 16px",
+              borderRadius: 14,
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              background: "rgba(255,255,255,0.75)",
+              fontWeight: 800,
+              cursor: "pointer",
+              fontSize: 13,
+              width: "100%",
+            }}
+          >
+            キャンセル
+          </button>
         </div>
       )}
 
@@ -1031,12 +1100,28 @@ export default function ScanCapture({
             </button>
           </div>
 
-          {/* OpenCV ロード中の補助表示（カメラ起動後のみ） */}
+              {/* OpenCV ロード中の補助表示（カメラ起動後のみ） */}
           {opencvLoading && !opencvReady && (
             <div style={{ fontSize: 11, color: "#0369a1", marginTop: 6, opacity: 0.7 }}>
               画像解析を準備中…撮影ボタンはもうすぐ使えます
             </div>
           )}
+
+          {/* camera stage のキャンセル（常に押せる） */}
+          <button
+            onClick={handleCancel}
+            style={{
+              padding: "11px 14px",
+              borderRadius: 14,
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              background: "transparent",
+              fontWeight: 800,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            キャンセル
+          </button>
 
           <canvas ref={outCanvasRef} style={{ display: "none" }} />
         </>
@@ -1108,21 +1193,14 @@ export default function ScanCapture({
             </button>
 
             <button
-              onClick={() => {
-                setPreviewUrl("");
-                setPendingName("");
-                setStage("idle");
-                setShowFallback(false);
-                onCancel?.();
-              }}
-              disabled={submitting}
+              onClick={handleCancel}
               style={{
                 padding: "12px 14px",
                 borderRadius: 14,
                 border: "1px solid rgba(15, 23, 42, 0.12)",
                 background: "transparent",
                 fontWeight: 800,
-                cursor: submitting ? "not-allowed" : "pointer",
+                cursor: "pointer",
               }}
             >
               キャンセル
