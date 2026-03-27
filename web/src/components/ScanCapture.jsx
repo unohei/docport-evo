@@ -692,6 +692,11 @@ export default function ScanCapture({
 
     setBusy(true);
     setStage("processing");
+    // React が processing UI (キャンセルボタン含む) を DOM にコミットできるよう
+    // 1フレーム分イベントループを譲る。これがないと同期 OpenCV 処理中は
+    // キャンセルボタンが表示される前にスレッドがブロックされてしまう。
+    await new Promise(r => requestAnimationFrame(r));
+    if (cancelledRef.current) { console.log("[Scan] processing aborted by cancel"); return; }
     console.log("[Scan] capture confirmed");
     try {
       console.log("[Scan] processing start");
@@ -726,6 +731,7 @@ export default function ScanCapture({
       const outName = buildFilename(filenameBase);
       setPendingName(outName);
       setPreviewUrl(outCanvas.toDataURL("image/jpeg", 0.92));
+      console.log("[Scan] processing step: preview ready");
 
       if (cancelledRef.current) { console.log("[Scan] processing aborted by cancel"); return; }
 
@@ -812,11 +818,14 @@ export default function ScanCapture({
     setErr("");
     const t0 = performance.now();
     try {
+      console.log("[Scan] processing step: pdf create");
       const file = await canvasToPdfFile(outCanvas, pendingName);
       const ms = Math.round(performance.now() - t0);
       console.log(`[DocPort:Perf] PDF created in ${ms}ms`);
       perfRef.current.pdfMs = ms;
+      console.log("[Scan] processing step: onDone before");
       onDone?.(file);
+      console.log("[Scan] processing step: onDone after");
     } catch (e) {
       setErr(e?.message ?? String(e));
     } finally {
@@ -835,18 +844,25 @@ export default function ScanCapture({
 
   // ---- キャンセル：処理中でも確実に脱出できる ----
   const handleCancel = () => {
-    console.log("[Scan] cancel clicked");
-    cancelledRef.current = true;
-    cameraStartingRef.current = false;
-    setCameraStarting(false);
-    setBusy(false);
-    setErr("");
-    setStage("idle");
-    setPreviewUrl("");
-    setPendingName("");
-    stopStreamOnly();
-    console.log("[Scan] cancel completed");
-    onCancel?.();
+    try {
+      console.log("[Scan] cancel clicked");
+      cancelledRef.current = true;
+      cameraStartingRef.current = false;
+      setCameraStarting(false);
+      setBusy(false);
+      setErr("");
+      setStage("idle");
+      setPreviewUrl("");
+      setPendingName("");
+      console.log("[Scan] cancel before stopStreamOnly");
+      stopStreamOnly();
+      console.log("[Scan] cancel after stopStreamOnly");
+      console.log("[Scan] cancel before onCancel");
+      console.log("[Scan] cancel completed");
+      onCancel?.();
+    } catch (e) {
+      console.error("[Scan] cancel failed:", e?.message);
+    }
   };
 
   const canSwitch = devices.length >= 2;
