@@ -18,6 +18,8 @@ export default function SendScreen({
   onTabChange,
   onLogout,
   myHospitalIcon,
+  myAvatarUrl,
+  onAvatarUpload,
   unreadCount,
   isMobile,
   // SendTab props
@@ -63,6 +65,8 @@ export default function SendScreen({
         activeTab={activeTab}
         onTabChange={onTabChange}
         myHospitalIcon={myHospitalIcon}
+        myAvatarUrl={myAvatarUrl}
+        onAvatarUpload={onAvatarUpload}
         unreadCount={unreadCount}
         onLogout={onLogout}
       />

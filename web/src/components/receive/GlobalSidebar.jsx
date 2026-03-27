@@ -2,9 +2,97 @@
 // アプリ全体のナビゲーション（64px 固定幅）
 // 項目: ホーム(ロゴ) / 受信 / 送信 / 下書き / 設定
 
+import { useRef, useState } from "react";
 import DocPortLogo  from "../../assets/logo/logo.png";
 import ReceiveIcon  from "../../assets/logo/receive_box.svg";
 import { DP } from "./receiveConstants";
+
+// ---- ユーザーアバターボタン（クリックで画像変更） ----
+function AvatarButton({ avatarUrl, onAvatarUpload }) {
+  const inputRef   = useRef(null);
+  const [busy,     setBusy]     = useState(false);
+  const [hovered,  setHovered]  = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const handleChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setBusy(true);
+    try {
+      await onAvatarUpload(file);
+      setImgError(false); // 新画像で再試行
+    } catch (err) {
+      console.error("avatar upload:", err);
+      alert("画像のアップロードに失敗しました。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showImg = avatarUrl && !imgError;
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        style={{ display: "none" }}
+        onChange={handleChange}
+      />
+      <button
+        onClick={() => !busy && inputRef.current?.click()}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title="プロフィール画像を変更"
+        disabled={busy}
+        style={{
+          width: 34, height: 34,
+          borderRadius: "50%",
+          border: hovered
+            ? "2px solid rgba(255,255,255,0.55)"
+            : "2px solid rgba(255,255,255,0.18)",
+          background: showImg ? "transparent" : "rgba(255,255,255,0.12)",
+          cursor: busy ? "wait" : "pointer",
+          padding: 0,
+          overflow: "hidden",
+          position: "relative",
+          transition: "border-color 140ms ease",
+          flexShrink: 0,
+        }}
+      >
+        {/* アバター画像 or プレースホルダー */}
+        {busy ? (
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", lineHeight: "34px" }}>…</span>
+        ) : showImg ? (
+          <img
+            src={avatarUrl}
+            alt="ユーザー"
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <span style={{ fontSize: 18, lineHeight: "30px" }}>👤</span>
+        )}
+
+        {/* hoverオーバーレイ */}
+        {hovered && !busy && (
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.42)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 12, lineHeight: 1 }}>📷</span>
+          </div>
+        )}
+      </button>
+    </>
+  );
+}
 
 function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = false }) {
   return (
@@ -58,6 +146,8 @@ export default function GlobalSidebar({
   activeTab,
   onTabChange,
   myHospitalIcon,
+  myAvatarUrl,
+  onAvatarUpload,
   unreadCount,
   onLogout,
 }) {
@@ -152,6 +242,7 @@ export default function GlobalSidebar({
             }}
           />
         )}
+        <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} />
         <button
           onClick={onLogout}
           title="ログアウト"

@@ -271,6 +271,7 @@ export default function App() {
   // data
   const [profile, setProfile] = useState(null);
   const [hospitals, setHospitals] = useState([]);
+  const [myAvatarUrl, setMyAvatarUrl] = useState("");
   const [inboxDocs, setInboxDocs] = useState([]);
   const [sentDocs, setSentDocs] = useState([]);
   const [hospitalMembers, setHospitalMembers] = useState([]); // 同院メンバー一覧（港モデル用）
@@ -418,12 +419,13 @@ export default function App() {
     if (!session) return;
 
     const { data: prof, error: profErr } = await supabase
-      .from("profiles").select("hospital_id, role").eq("id", session.user.id).single();
+      .from("profiles").select("hospital_id, role, avatar_url").eq("id", session.user.id).single();
     if (profErr) {
       alert(`profiles取得に失敗: ${profErr.message}\n（profilesに紐付け済みか確認）`);
       return;
     }
     setProfile(prof);
+    setMyAvatarUrl(prof.avatar_url || "");
     setAuditHospitalId(prof.hospital_id); // 監査ログ用キャッシュをセット
 
     const { data: hs, error: hsErr } = await supabase
@@ -532,6 +534,27 @@ export default function App() {
       const t = await res.text().catch(() => "");
       throw new Error(`R2 PUT failed: ${res.status} ${t}`);
     }
+  };
+
+  // ---- アバター画像アップロード (Supabase Storage "avatars" バケット) ----
+  const uploadAvatar = async (file) => {
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("未ログイン");
+    const ext  = file.name.split(".").pop().toLowerCase() || "jpg";
+    const path = `${userId}/avatar.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) throw upErr;
+    const { data: { publicUrl } } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(path);
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
+    if (updateErr) throw updateErr;
+    setMyAvatarUrl(publicUrl + "?t=" + Date.now()); // キャッシュバスター
   };
 
   const getPresignedDownload = async (fileKey) => {
@@ -895,6 +918,8 @@ export default function App() {
           onTabChange={setTab}
           onLogout={logout}
           myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+          myAvatarUrl={myAvatarUrl}
+          onAvatarUpload={uploadAvatar}
           unreadCount={unreadCount}
           isMobile={isMobile}
           myHospitalId={myHospitalId}
@@ -936,6 +961,8 @@ export default function App() {
           onTabChange={setTab}
           onLogout={logout}
           myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+          myAvatarUrl={myAvatarUrl}
+          onAvatarUpload={uploadAvatar}
           myHospitalName={myHospitalName}
           unreadCount={unreadCount}
           docs={filteredInboxDocs}

@@ -14,6 +14,8 @@ export default function ReceiveScreen({
   onTabChange,
   onLogout,
   myHospitalIcon,
+  myAvatarUrl,
+  onAvatarUpload,
   myHospitalName,
   unreadCount,
   // データ
@@ -67,6 +69,8 @@ export default function ReceiveScreen({
         activeTab={activeTab}
         onTabChange={onTabChange}
         myHospitalIcon={myHospitalIcon}
+        myAvatarUrl={myAvatarUrl}
+        onAvatarUpload={onAvatarUpload}
         unreadCount={unreadCount}
         onLogout={onLogout}
       />
