@@ -276,9 +276,11 @@ export default function App() {
   const [sentDocs, setSentDocs] = useState([]);
   const [hospitalMembers, setHospitalMembers] = useState([]); // 同院メンバー一覧（港モデル用）
   const [departments,    setDepartments]    = useState([]);   // 病院単位の部署一覧
+  const [contacts,       setContacts]       = useState([]);   // FAX宛先帳
 
   // send form
-  const [toHospitalId, setToHospitalId] = useState("");
+  // recipient: { type:"hospital"|"fax", id, name, sub, faxNumber } | null
+  const [recipient, setRecipient] = useState(null);
   const [comment, setComment] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -389,6 +391,9 @@ export default function App() {
 
   const filteredInboxDocs = useMemo(() => {
     let list = inboxDocs;
+    // FAX送信文書を除外（to_hospital_id=自院の暫定値で受信一覧に混入するため）
+    // source="fax"（FAX受信）は除外しない
+    list = list.filter((d) => d.source !== "fax_outbound");
     if (!showExpired) list = list.filter((d) => !isExpired(d.expires_at));
     // ARCHIVED フィルタはここでは行わない。InboxTab のタブ分岐で制御する。
     if (showUnreadOnly) list = list.filter((d) => d.status === "UPLOADED");
@@ -405,16 +410,13 @@ export default function App() {
   }, [inboxDocs, showExpired, showUnreadOnly, qInbox, hospitals]);
 
   const filteredSentDocs = useMemo(() => {
-    // [デバッグ] 送信済み一覧候補の確認ログ（確認後に削除してよい）
-    console.log("[DocPort] sentDocs raw:", sentDocs.map(d => ({
-      id: d.id, source: d.source,
-      from_hospital_id: d.from_hospital_id, to_hospital_id: d.to_hospital_id,
-      status: d.status,
-    })));
-
-    // FAX受信文書を除外
-    // 理由: FAX受信文書は from_hospital_id = to_hospital_id = 自院ID（暫定値）のため、
-    //        "自院が送信元" の条件を満たしてしまい送信済みに混入する
+    // source 値の定義:
+    //   null / "docport" : DocPort通常送信  → 送信済みに表示 ✓
+    //   "fax_outbound"   : FAX送信          → 送信済みに表示 ✓
+    //   "fax"            : FAX受信（外部から） → 送信済みに表示しない ✗
+    //
+    // "fax" を除外することで受信文書の混入を防ぐ。
+    // "fax_outbound" は除外しないため FAX送信は必ず表示される。
     const base = sentDocs.filter(d => d.source !== "fax");
 
     const q = (qSent || "").trim().toLowerCase();
@@ -470,6 +472,14 @@ export default function App() {
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
     setDepartments(depts ?? []);
+
+    // FAX宛先帳（contacts テーブルが未作成の環境は空配列で続行）
+    const { data: ctcts } = await supabase
+      .from("contacts")
+      .select("id, name, fax_number, department_name, is_active, replaced_by_hospital_id, notes")
+      .eq("hospital_id", prof.hospital_id)
+      .order("name", { ascending: true });
+    setContacts(ctcts ?? []);
   };
 
   useEffect(() => {
@@ -493,7 +503,7 @@ export default function App() {
     setHospitals([]);
     setInboxDocs([]);
     setSentDocs([]);
-    setToHospitalId("");
+    setRecipient(null);
     setComment("");
     setPdfFile(null);
     setShowUnreadOnly(false);
@@ -646,20 +656,20 @@ export default function App() {
     setUploadStatus("idle");
     setOcrResult(null);
     setOcrError(null);
-    setToHospitalId("");
+    setRecipient(null);
     setComment("");
   };
 
-  // ---- 「置く」ボタン: documents INSERT のみ ----
+  // ---- 「置く」ボタン: DocPort送信 or FAX送信に振り分け ----
   // structuredPayload: SendTab から渡される { structured_json, structured_version, ... } または null
   const finalizeDocument = async (structuredPayload = null) => {
     const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
     if (sending || isProcessing) return;
 
     if (!myHospitalId) return alert("profileのhospital_idが取れてません");
-    if (!toHospitalId) return alert("宛先病院を選んでください");
-    if (toHospitalId === myHospitalId)
-      return alert("自院宛は選べません（テストならOKにしても良い）");
+    if (!recipient) return alert("宛先を選んでください");
+    if (recipient.type === "hospital" && recipient.id === myHospitalId)
+      return alert("自院宛は選べません");
 
     if (!pendingFileKey) {
       return alert("アップロードに失敗しています。ファイルを選び直してください");
@@ -670,16 +680,50 @@ export default function App() {
       const ok = confirm("チェックを省略して置きます。よろしいですか？");
       if (!ok) return;
     } else if (!ocrResult && !ocrError) {
-      // チェックON だが OCR 結果なし（正常フローでは起きないが念のため）
       const ok = confirm("OCR未実行です。そのまま置きますか？");
       if (!ok) return;
     }
 
     setSending(true);
     try {
+      // ---- FAX送信 ----
+      if (recipient.type === "fax") {
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${API_BASE}/send-fax`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            file_key:    pendingFileKey,
+            contact_id:  recipient.id,
+            fax_number:  recipient.faxNumber,
+            comment:     comment || null,
+            original_filename: pdfFile?.name ?? null,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `FAX送信失敗 (${res.status})`);
+        }
+        setComment("");
+        setRecipient(null);
+        setPdfFile(null);
+        setPendingFileKey(null);
+        setOcrResult(null);
+        setOcrError(null);
+        setUploadStatus("idle");
+        await loadAll();
+        setTab("sent");
+        alert("FAX送信を依頼しました");
+        return;
+      }
+
+      // ---- DocPort送信 ----
       const baseInsert = {
         from_hospital_id: myHospitalId,
-        to_hospital_id: toHospitalId,
+        to_hospital_id: recipient.id,
         comment: comment || null,
         file_key: pendingFileKey,
         status: "UPLOADED",
@@ -688,7 +732,6 @@ export default function App() {
 
       // 拡張カラム（original_filename, content_type, file_ext, structured_*）が存在する場合に保存。
       // カラム未追加の場合（PGERR 42703）はベースカラムのみで再試行するフォールバック。
-      // structuredPayload が null の場合は structured_* を省略（DB 側で NULL default）
       const extInsert = {
         ...baseInsert,
         original_filename: pdfFile?.name ?? null,
@@ -701,7 +744,6 @@ export default function App() {
       const { data: d1, error: e1 } = await supabase
         .from("documents").insert(extInsert).select().single();
       if (e1) {
-        // 42703 = undefined_column（カラム未追加）の場合はフォールバック
         if (e1.code === "42703" || e1.message?.includes("column")) {
           const { data: d2, error: e2 } = await supabase
             .from("documents").insert(baseInsert).select().single();
@@ -717,15 +759,13 @@ export default function App() {
       // 監査ログ（best-effort: logEvent 内で失敗を吸収する）
       const uid = session.user.id;
       await logEvent(data.id, uid, "DOC_CREATED");
-      // OCR を実行した場合のみ記録（ocrResult がある = チェックON + PDF + OCR成功）
       if (ocrResult !== null) await logEvent(data.id, uid, "OCR_RUN");
-      // 人が構造化情報を編集した場合のみ記録
       if (structuredPayload?.structured_updated_by === "human") {
         await logEvent(data.id, uid, "STRUCTURED_EDIT");
       }
 
       setComment("");
-      setToHospitalId("");
+      setRecipient(null);
       setPdfFile(null);
       setPendingFileKey(null);
       setOcrResult(null);
@@ -936,8 +976,9 @@ export default function App() {
           isMobile={isMobile}
           myHospitalId={myHospitalId}
           hospitals={hospitals}
-          toHospitalId={toHospitalId}
-          setToHospitalId={setToHospitalId}
+          contacts={contacts}
+          recipient={recipient}
+          setRecipient={setRecipient}
           comment={comment}
           setComment={setComment}
           pdfFile={pdfFile}

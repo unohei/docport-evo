@@ -1,12 +1,10 @@
 // SendTab.jsx
-// v2.0 変更点（チェックモードUI刷新）:
-// 1. ToggleBtn（ON/OFFボタン対）を廃止し、iOS風トグルスイッチ（IOSToggle）に置き換え
-// 2. チェック強度（高速/詳細）UIを廃止し、内部処理を "full"（詳細・構造化あり）に固定
-//    → checkIntensity / setCheckIntensity props も削除
-// 3. トグル右に AI ON / AI OFF バッジを追加
-//    トグル下に補足文（AIを使用します / AIを使用しません）を追加
-// 4. checkIntensity === "full" の条件分岐を削除（常に構造化表示）
-// ※ v1.x 以前の変更点（hospitalMatch.js 切り出し、structured 永続化）はそのまま維持
+// v2.1 変更点（宛先選択を RecipientPicker に変更）:
+// 1. toHospitalId / setToHospitalId を廃止し、recipient / setRecipient に統一
+// 2. hospitals の <select> を RecipientPicker（DocPort + FAX統合検索）に置き換え
+// 3. contacts prop を追加（FAX連絡先一覧）
+// 4. AI候補クリックで setRecipient({ type:"hospital", ... }) をセット
+// ※ v2.0 以前の変更点はそのまま維持
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -18,6 +16,7 @@ import {
 import FileDrop from "../components/FileDrop";
 import ScanCapture from "../components/ScanCapture";
 import { findHospitalCandidates } from "../utils/hospitalMatch";
+import RecipientPicker from "../components/send/RecipientPicker";
 
 // 構造化JSONの表示ラベル（順序保持のため配列）
 const STRUCTURED_LABELS = [
@@ -185,8 +184,9 @@ export default function SendTab({
   isMobile,
   myHospitalId,
   hospitals,
-  toHospitalId,
-  setToHospitalId,
+  contacts,         // FAX連絡先一覧 [{id, name, fax_number, department_name, is_active, replaced_by_hospital_id}]
+  recipient,        // { type:"hospital"|"fax", id, name, sub, faxNumber } | null
+  setRecipient,
   comment,
   setComment,
   pdfFile,
@@ -267,11 +267,6 @@ export default function SendTab({
 
   const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
 
-  const hospitalOptions = useMemo(() => {
-    return (hospitals || [])
-      .filter((h) => h.id !== myHospitalId)
-      .map((h) => ({ id: h.id, name: h.name }));
-  }, [hospitals, myHospitalId]);
 
   const hospitalCandidates = useMemo(() => {
     const targetName = ocrResult?.structured?.referral_to_hospital;
@@ -421,23 +416,16 @@ export default function SendTab({
             </div>
 
             <div style={{ fontWeight: 800 }}>置く先（宛先）</div>
-            <select
-              value={toHospitalId}
-              onChange={(e) => setToHospitalId(e.target.value)}
+            <RecipientPicker
+              hospitals={hospitals}
+              myHospitalId={myHospitalId}
+              contacts={contacts}
+              recipient={recipient}
+              setRecipient={setRecipient}
               disabled={sending}
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: 12,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.85)", fontWeight: 700, color: THEME.text,
-              }}
-            >
-              <option value="">選択してください</option>
-              {hospitalOptions.map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
+            />
 
-            {/* 宛先病院AI候補 */}
+            {/* 宛先病院AI候補（OCRから紹介先病院名を読み取れた場合） */}
             {checkMode && ocrResult?.structured?.referral_to_hospital && hospitalCandidates.length > 0 && (
               <div style={{
                 padding: "8px 12px", borderRadius: 10,
@@ -451,13 +439,13 @@ export default function SendTab({
                   {hospitalCandidates.map((h) => (
                     <button
                       key={h.id}
-                      onClick={() => setToHospitalId(h.id)}
+                      onClick={() => setRecipient({ type: "hospital", id: h.id, name: h.name, sub: null, faxNumber: null })}
                       style={{
                         padding: "5px 12px", borderRadius: 8,
-                        border: toHospitalId === h.id
+                        border: recipient?.id === h.id
                           ? "1px solid rgba(14,165,233,0.55)"
                           : "1px solid rgba(14,165,233,0.30)",
-                        background: toHospitalId === h.id
+                        background: recipient?.id === h.id
                           ? "rgba(14,165,233,0.18)"
                           : "rgba(255,255,255,0.85)",
                         color: "#0369a1", fontWeight: 800, fontSize: 12,
@@ -465,7 +453,7 @@ export default function SendTab({
                         transition: "background 120ms, border-color 120ms",
                       }}
                     >
-                      {h.name} {toHospitalId === h.id ? "✓" : "適用"}
+                      {h.name} {recipient?.id === h.id ? "✓" : "適用"}
                     </button>
                   ))}
                 </div>

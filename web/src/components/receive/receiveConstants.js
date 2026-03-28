@@ -64,6 +64,11 @@ export function senderDisplay(doc, nameOf) {
 }
 
 export function recipientDisplay(doc, nameOf) {
-  if (doc.source === "fax") return doc.to_fax_number || "不明";
+  if (doc.source === "fax")          return doc.to_fax_number   || "不明（FAX）";
+  if (doc.source === "fax_outbound") return doc.to_fax_number   || "不明（FAX送信）";
   return (nameOf && doc.to_hospital_id) ? nameOf(doc.to_hospital_id) || "不明" : "不明";
+}
+
+export function isFaxOutbound(doc) {
+  return doc.source === "fax_outbound";
 }

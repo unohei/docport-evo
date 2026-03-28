@@ -30,8 +30,9 @@ export default function SendScreen({
   // SendTab props
   myHospitalId,
   hospitals,
-  toHospitalId,
-  setToHospitalId,
+  contacts,
+  recipient,
+  setRecipient,
   comment,
   setComment,
   pdfFile,
@@ -154,8 +155,9 @@ export default function SendScreen({
                 isMobile={isMobile}
                 myHospitalId={myHospitalId}
                 hospitals={hospitals}
-                toHospitalId={toHospitalId}
-                setToHospitalId={setToHospitalId}
+                contacts={contacts}
+                recipient={recipient}
+                setRecipient={setRecipient}
                 comment={comment}
                 setComment={setComment}
                 pdfFile={pdfFile}

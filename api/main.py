@@ -2203,6 +2203,172 @@ async def cloudfax_outbound_api(request: Request):
     return await _cloudfax_outbound_impl(payload_raw)
 
 
+# ===========================================================================
+# FAX送信エンドポイント（v2.8 追加）
+# POST /api/send-fax
+# 認証: Supabase JWT 必須（_bearer / verify_jwt）
+# 処理: R2上の既アップロード済みファイルを CloudFAX API 経由で FAX 送信する
+# ===========================================================================
+
+class SendFaxRequest(BaseModel):
+    file_key:          str
+    contact_id:        str              # contacts.id（ログ用）
+    fax_number:        str              # FAX番号（contacts.fax_number から渡される）
+    comment:           Optional[str] = None
+    original_filename: Optional[str] = None
+
+
+async def _send_fax_impl(
+    req: SendFaxRequest,
+    hospital_id: str,
+    user_id: str,
+    jwt_token: str,
+) -> dict:
+    """
+    CloudFAX API で FAX 送信する共通処理。
+
+    フロー:
+    1. R2 から presigned GET URL を生成し、PDFバイト列を取得
+    2. CloudFAX POST /v1/Faxes で送信依頼（multipart/form-data）
+    3. documents テーブルに source="fax_outbound" で記録
+    4. document_events に FAX_SEND を記録（best-effort）
+    """
+    # 1. R2 から PDF バイト列を取得
+    try:
+        bucket = get_bucket_name()
+        s3     = get_s3_client()
+    except Exception:
+        logger.exception("[send-fax] R2クライアント初期化失敗")
+        raise HTTPException(status_code=500, detail="ストレージ接続エラー")
+
+    presigned_url = s3.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={"Bucket": bucket, "Key": req.file_key},
+        ExpiresIn=120,
+    )
+    try:
+        with urllib.request.urlopen(presigned_url, timeout=30) as resp:
+            pdf_bytes = resp.read()
+    except Exception as e:
+        logger.error("[send-fax] R2 PDF取得失敗: %s", e)
+        raise HTTPException(status_code=502, detail="PDFの取得に失敗しました")
+
+    # 2. CloudFAX API で送信依頼
+    if not CLOUDFAX_API_BASE or not CLOUDFAX_BEARER_TOKEN or not CLOUDFAX_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="CloudFAX API が未設定です (CLOUDFAX_API_BASE / CLOUDFAX_BEARER_TOKEN / CLOUDFAX_API_KEY)",
+        )
+
+    boundary = f"----FormBoundary{uuid.uuid4().hex}"
+    filename  = req.original_filename or req.file_key.split("/")[-1]
+    # multipart/form-data を手動構築（外部ライブラリ不使用）
+    header = (
+        f'--{boundary}\r\n'
+        f'Content-Disposition: form-data; name="to"\r\n\r\n'
+        f'{req.fax_number}\r\n'
+        f'--{boundary}\r\n'
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        f'Content-Type: application/pdf\r\n\r\n'
+    ).encode()
+    footer = f'\r\n--{boundary}--\r\n'.encode()
+    body_bytes = header + pdf_bytes + footer
+
+    send_url = f"{CLOUDFAX_API_BASE}/Faxes"
+    send_req = urllib.request.Request(
+        send_url,
+        data=body_bytes,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {CLOUDFAX_BEARER_TOKEN}",
+            "x-api-key":     CLOUDFAX_API_KEY,
+            "Content-Type":  f"multipart/form-data; boundary={boundary}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(send_req, timeout=60) as resp:
+            send_result = json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error("[send-fax] CloudFAX送信APIエラー: %s", e)
+        raise HTTPException(status_code=502, detail=f"FAX送信APIエラー: {e}")
+
+    transmission_id = send_result.get("transmission_id") or send_result.get("id") or ""
+    logger.info("[send-fax] CloudFAX送信依頼完了: transmission_id=%s to=%s", transmission_id, req.fax_number)
+
+    # 3. documents テーブルに記録（source="fax_outbound"）
+    # service_role 使用理由: JWT ユーザーのスコープ外テーブル行を書くため（RLS バイパス）
+    doc_rows = _supabase_service_post(
+        "documents",
+        {
+            "from_hospital_id":  hospital_id,
+            "to_hospital_id":    hospital_id,   # FAX相手は hospitals 外のため自院IDで代替
+            "to_fax_number":     req.fax_number,
+            "file_key":          req.file_key,
+            "original_filename": req.original_filename,
+            "comment":           req.comment,
+            "status":            "UPLOADED",
+            "source":            "fax_outbound",
+        },
+    )
+    doc_id = doc_rows[0]["id"] if doc_rows else ""
+
+    # 4. 監査ログ（best-effort）
+    if doc_id:
+        try:
+            _supabase_service_post(
+                "document_events",
+                {
+                    "document_id": doc_id,
+                    "user_id":     user_id,
+                    "event_type":  "FAX_SEND",
+                    "hospital_id": hospital_id,
+                },
+            )
+        except Exception:
+            pass
+
+    return {
+        "ok":              True,
+        "transmission_id": transmission_id,
+        "document_id":     doc_id,
+        "to":              req.fax_number,
+    }
+
+
+@app.post("/api/send-fax")
+async def send_fax_api(
+    req: SendFaxRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """
+    POST /api/send-fax
+    JWT認証 + 自院のファイルのみ FAX 送信可能。
+    file_key は presign-upload で取得した R2 キー。
+    fax_number は contacts.fax_number（フロント側で contacts から取得して渡す）。
+    送信結果は documents に source="fax_outbound" で記録。
+    """
+    jwt_token   = credentials.credentials
+    user_id     = user.get("sub", "")
+    hospital_id = _get_hospital_id(user_id, jwt_token)
+    _assert_download_access(req.file_key, hospital_id, jwt_token)
+    return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
+
+
+@app.post("/send-fax")
+async def send_fax_compat(
+    req: SendFaxRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user: dict = Depends(verify_jwt),
+):
+    """compat: Vite proxy 経由のローカル開発用（/api/send-fax と同じ処理）"""
+    jwt_token   = credentials.credentials
+    user_id     = user.get("sub", "")
+    hospital_id = _get_hospital_id(user_id, jwt_token)
+    _assert_download_access(req.file_key, hospital_id, jwt_token)
+    return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
+
+
 @app.post("/webhook/cloudfax/outbound")
 async def cloudfax_outbound_compat(request: Request):
     """compat: Vite proxy 経由のローカル開発用（/api/webhook/cloudfax/outbound と同じ処理）"""
