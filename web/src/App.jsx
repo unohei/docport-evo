@@ -405,9 +405,21 @@ export default function App() {
   }, [inboxDocs, showExpired, showUnreadOnly, qInbox, hospitals]);
 
   const filteredSentDocs = useMemo(() => {
+    // [デバッグ] 送信済み一覧候補の確認ログ（確認後に削除してよい）
+    console.log("[DocPort] sentDocs raw:", sentDocs.map(d => ({
+      id: d.id, source: d.source,
+      from_hospital_id: d.from_hospital_id, to_hospital_id: d.to_hospital_id,
+      status: d.status,
+    })));
+
+    // FAX受信文書を除外
+    // 理由: FAX受信文書は from_hospital_id = to_hospital_id = 自院ID（暫定値）のため、
+    //        "自院が送信元" の条件を満たしてしまい送信済みに混入する
+    const base = sentDocs.filter(d => d.source !== "fax");
+
     const q = (qSent || "").trim().toLowerCase();
-    if (!q) return sentDocs;
-    return sentDocs.filter((d) => {
+    if (!q) return base;
+    return base.filter((d) => {
       const from = nameOf(d.from_hospital_id).toLowerCase();
       const to = nameOf(d.to_hospital_id).toLowerCase();
       const c = (d.comment || "").toLowerCase();
