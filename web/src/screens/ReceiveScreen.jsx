@@ -1,7 +1,7 @@
 // ReceiveScreen.jsx
 // 受信画面のオーケストレーター
 // 変更点（レスポンシブ対応）:
-// - モバイル（<640px）: GlobalSidebar → BottomNav、カード一覧↔詳細をトグル、上部トップバー
+// - モバイル（<640px）: GlobalSidebar → BottomNav、レーンフィルタ横スクロールタブ、カード一覧↔詳細をトグル
 // - タブレット（<1024px）: GlobalSidebar + カード一覧 + 詳細（BusinessLanePanel非表示）
 // - PC: 従来の4カラム構成（GlobalSidebar + BusinessLane + CardList + DetailPane）
 
@@ -12,6 +12,84 @@ import BusinessLanePanel from "../components/receive/BusinessLanePanel";
 import CardListPanel     from "../components/receive/CardListPanel";
 import DetailPane        from "../components/receive/DetailPane";
 import { DP }            from "../components/receive/receiveConstants";
+
+// ---- モバイル用レーンフィルタ（横スクロールタブ） ----
+function MobileLaneFilter({ docs, departments, activeLane, onLaneChange }) {
+  const newCount  = docs.filter(d =>
+    !d.owner_user_id && (d.status === "UPLOADED" || d.status === "ARRIVED")
+  ).length;
+  const doneCount = docs.filter(d => d.status === "ARCHIVED").length;
+
+  const deptCounts = useMemo(() => {
+    const counts = {};
+    docs.forEach(d => {
+      if (d.assigned_department && d.status !== "ARCHIVED") {
+        counts[d.assigned_department] = (counts[d.assigned_department] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [docs]);
+
+  const lanes = [
+    { key: "new",  label: "新着書類", count: newCount },
+    ...(departments || []).map(d => ({ key: d.name, label: d.name, count: deptCounts[d.name] || 0 })),
+    { key: "done", label: "完了",     count: doneCount },
+  ];
+
+  return (
+    <div style={{
+      display: "flex",
+      overflowX: "auto",
+      gap: 8,
+      padding: "8px 12px",
+      borderBottom: `1px solid ${DP.border}`,
+      background: DP.surface,
+      flexShrink: 0,
+      WebkitOverflowScrolling: "touch",
+      scrollbarWidth: "none",
+    }}>
+      {lanes.map(lane => {
+        const active = activeLane === lane.key;
+        return (
+          <button
+            key={lane.key}
+            onClick={() => onLaneChange(lane.key)}
+            style={{
+              flexShrink: 0,
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: active ? `1.5px solid ${DP.blue}` : `1px solid ${DP.border}`,
+              background: active ? DP.skyLight : DP.white,
+              color: active ? DP.blue : DP.text,
+              fontSize: 13,
+              fontWeight: active ? 800 : 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              whiteSpace: "nowrap",
+              minHeight: 36,
+            }}
+          >
+            {lane.label}
+            {lane.count > 0 && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 800,
+                padding: "1px 6px",
+                borderRadius: 999,
+                background: active ? "rgba(21,101,192,0.15)" : "rgba(15,23,42,0.07)",
+                color: active ? DP.blue : DP.textSub,
+              }}>
+                {lane.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ReceiveScreen({
   // ナビゲーション
@@ -146,11 +224,22 @@ export default function ReceiveScreen({
         </div>
 
         {/* コンテンツ（flex-1） */}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
-          {showDetail
-            ? <DetailPane {...detailProps} />
-            : <CardListPanel {...cardProps} />
-          }
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {showDetail ? (
+            <DetailPane {...detailProps} />
+          ) : (
+            <>
+              <MobileLaneFilter
+                docs={docs}
+                departments={departments}
+                activeLane={activeLane}
+                onLaneChange={handleLaneChange}
+              />
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <CardListPanel {...cardProps} fullWidth />
+              </div>
+            </>
+          )}
         </div>
 
         {/* BottomNav（固定） */}

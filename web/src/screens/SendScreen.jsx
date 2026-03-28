@@ -186,6 +186,7 @@ export default function SendScreen({
               isExpired={isExpired}
               cancelDocument={cancelDocument}
               fetchPreviewUrl={fetchPreviewUrl}
+              isMobile={isMobileActual}
             />
           </div>
         )}

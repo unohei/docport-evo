@@ -1,5 +1,6 @@
 // CardListPanel.jsx
-// 選択中レーンの書類カード一覧（340px 固定幅）
+// 選択中レーンの書類カード一覧（340px 固定幅 / fullWidth=true で 100% 幅）
+// 変更点: fullWidth prop 追加（モバイル時に 100% 幅で表示するため）
 
 import { useState, useMemo } from "react";
 import { DP } from "./receiveConstants";
@@ -13,6 +14,7 @@ export default function CardListPanel({
   selectedDoc,
   onSelect,
   isExpired,
+  fullWidth = false,
 }) {
   const [q, setQ] = useState("");
 
@@ -34,7 +36,7 @@ export default function CardListPanel({
 
   return (
     <div style={{
-      width: 340,
+      width: fullWidth ? "100%" : 340,
       flexShrink: 0,
       background: "#F8FAFC",
       borderRight: `1px solid ${DP.border}`,
