@@ -1,6 +1,7 @@
 // GlobalSidebar.jsx
 // アプリ全体のナビゲーション（64px 固定幅）
 // 項目: ホーム(ロゴ) / 受信 / 送信 / 下書き / 設定
+// 変更点: BottomNav をnamed exportとして追加（モバイル時に使用）
 
 import { useRef, useState } from "react";
 import DocPortLogo  from "../../assets/logo/logo.png";
@@ -139,6 +140,49 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
         </span>
       )}
     </button>
+  );
+}
+
+// ---- BottomNav（モバイル用・画面下部固定ナビ） ----
+export function BottomNav({
+  activeTab,
+  onTabChange,
+  myAvatarUrl,
+  onAvatarUpload,
+  unreadCount,
+}) {
+  return (
+    <div style={{
+      position: "fixed",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 56,
+      background: DP.navy,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-around",
+      borderTop: "1px solid rgba(255,255,255,0.08)",
+      zIndex: 200,
+      paddingBottom: "env(safe-area-inset-bottom)",
+    }}>
+      <NavIcon
+        iconSrc={ReceiveIcon}
+        label="受信"
+        active={activeTab === "inbox"}
+        badge={unreadCount}
+        onClick={() => onTabChange("inbox")}
+      />
+      <NavIcon
+        emoji="📤"
+        label="送信"
+        active={activeTab === "send" || activeTab === "sent"}
+        onClick={() => onTabChange("send")}
+      />
+      <NavIcon emoji="📝" label="下書き" active={false} disabled />
+      <NavIcon emoji="⚙️" label="設定"   active={false} disabled />
+      <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} />
+    </div>
   );
 }
 

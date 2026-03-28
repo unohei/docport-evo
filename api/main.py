@@ -1966,6 +1966,11 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
             )
             return
 
+        logger.info("[fax-ocr] OCR開始: pages=%d document_id=%s", len(png_list), document_id)
+        _supabase_service_patch(
+            f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+            {"ocr_status": "RUNNING"},
+        )
         try:
             raw_text = _call_openai_ocr(png_list, timeout=_MAX_FAX_OCR_SECS)
         except Exception:
@@ -1976,6 +1981,7 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
             )
             return
 
+        logger.info("[fax-ocr] OCR完了: chars=%d document_id=%s", len(raw_text), document_id)
         normalized = _normalize_text(raw_text)
 
         # ---- document_type 分類 ----
@@ -1987,6 +1993,10 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
 
         # ---- structured_json 生成（失敗時は None のまま） ----
         structured = _structure_referral_text(normalized)
+        if structured:
+            logger.info("[fax-ocr] 構造化JSON生成完了: document_id=%s", document_id)
+        else:
+            logger.warning("[fax-ocr] 構造化JSON生成スキップ/失敗: document_id=%s", document_id)
 
         # ---- documents を更新 ----
         patch_data: dict = {

@@ -1,5 +1,9 @@
 // DetailPane.jsx
 // 書類詳細ペイン（flex-1）: OCR情報・コメント・テキスト・プレビュー + AssignModal
+// 変更点:
+// - FAX受信時は HospitalAvatar に isFax=true を渡し、自院アイコンの誤表示を防止
+// - OCRステータスバッジ（未処理/処理中/完了/失敗）を FAX書類に表示
+// - プレビュー iframe 高さを固定 420px → clamp(300px, 60vh, 800px) に変更
 
 import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay } from "./receiveConstants";
@@ -26,6 +30,34 @@ function InfoRow({ label, value }) {
         {value}
       </span>
     </div>
+  );
+}
+
+function OcrStatusBadge({ status }) {
+  const states = {
+    DONE:    { label: "OCR 完了",   bg: "rgba(22,163,74,0.09)",  color: "#15803D", border: "rgba(22,163,74,0.35)" },
+    FAILED:  { label: "OCR 失敗",   bg: "rgba(239,68,68,0.08)",  color: "#B91C1C", border: "rgba(239,68,68,0.30)" },
+    RUNNING: { label: "OCR 処理中", bg: "rgba(234,179,8,0.10)",  color: "#854D0E", border: "rgba(234,179,8,0.35)" },
+  };
+  const s = states[status] || { label: "OCR 未処理", bg: "#F1F5F9", color: "#64748B", border: "#CBD5E1" };
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 5,
+      fontSize: 12,
+      fontWeight: 800,
+      padding: "3px 10px",
+      borderRadius: 999,
+      background: s.bg,
+      color: s.color,
+      border: `1px solid ${s.border}`,
+    }}>
+      {status === "RUNNING" && <span style={{ fontSize: 10 }}>⏳</span>}
+      {status === "DONE"    && <span style={{ fontSize: 10 }}>✓</span>}
+      {status === "FAILED"  && <span style={{ fontSize: 10 }}>✗</span>}
+      {s.label}
+    </span>
   );
 }
 
@@ -280,7 +312,8 @@ export default function DetailPane({
           <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <HospitalAvatar
               name={senderDisplay(doc, nameOf)}
-              iconUrl={iconOf ? iconOf(doc.from_hospital_id) : ""}
+              iconUrl={doc.source === "fax" ? "" : (iconOf ? iconOf(doc.from_hospital_id) : "")}
+              isFax={doc.source === "fax"}
               size={20}
             />
             {senderDisplay(doc, nameOf)}
@@ -324,6 +357,14 @@ export default function DetailPane({
         gap: 18,
         alignContent: "start",
       }}>
+        {/* FAX書類: OCR処理状態 */}
+        {doc.source === "fax" && (
+          <section>
+            <SectionTitle>OCR 処理状態</SectionTitle>
+            <OcrStatusBadge status={doc.ocr_status} />
+          </section>
+        )}
+
         {/* 要配慮情報警告 */}
         {sensitiveFlags.length > 0 && (
           <div style={{
@@ -458,7 +499,7 @@ export default function DetailPane({
               borderRadius: 10,
               border: `1px solid ${DP.border}`,
               overflow: "hidden",
-              height: 420,
+              height: "clamp(300px, 60vh, 800px)",
             }}>
               <iframe
                 src={inlineUrl}

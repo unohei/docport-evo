@@ -6,8 +6,13 @@
 // 2. 「送信する」タブ: 従来の SendTab（スクロール可能な入力フォーム）
 // 3. 「送信済み」タブ: SentHistoryPanel（カード一覧 + 詳細ペイン）受信画面と同構成
 // 4. SentTab.jsx は不要になったため import を削除
+//
+// 変更点（レスポンシブ対応）:
+// - モバイル時は GlobalSidebar の代わりに BottomNav を使用
+// - isMobile prop がない場合は useMediaQuery で自己判定
 
-import GlobalSidebar     from "../components/receive/GlobalSidebar";
+import GlobalSidebar, { BottomNav } from "../components/receive/GlobalSidebar";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import SendTab           from "../tabs/SendTab";
 import SentHistoryPanel  from "../components/sent/SentHistoryPanel";
 import { DP }            from "../components/receive/receiveConstants";
@@ -51,6 +56,9 @@ export default function SendScreen({
   fetchPreviewUrl,
 }) {
   const isSent = activeTab === "sent";
+  // prop で渡される isMobile を優先、なければ自己判定
+  const isMobileQuery = useMediaQuery("(max-width: 639px)");
+  const isMobileActual = isMobile ?? isMobileQuery;
 
   return (
     <div style={{
@@ -59,17 +67,21 @@ export default function SendScreen({
       width: "100vw",
       overflow: "hidden",
       background: DP.white,
+      // モバイル時は BottomNav 分の下パディング
+      ...(isMobileActual && { paddingBottom: "calc(56px + env(safe-area-inset-bottom))", boxSizing: "border-box", flexDirection: "column" }),
     }}>
-      {/* 左: グローバルサイドバー */}
-      <GlobalSidebar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        myHospitalIcon={myHospitalIcon}
-        myAvatarUrl={myAvatarUrl}
-        onAvatarUpload={onAvatarUpload}
-        unreadCount={unreadCount}
-        onLogout={onLogout}
-      />
+      {/* 左: グローバルサイドバー（デスクトップ/タブレット時のみ） */}
+      {!isMobileActual && (
+        <GlobalSidebar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          myHospitalIcon={myHospitalIcon}
+          myAvatarUrl={myAvatarUrl}
+          onAvatarUpload={onAvatarUpload}
+          unreadCount={unreadCount}
+          onLogout={onLogout}
+        />
+      )}
 
       {/* 右: ヘッダー + コンテンツ */}
       <div style={{
@@ -178,6 +190,17 @@ export default function SendScreen({
           </div>
         )}
       </div>
+
+      {/* モバイル時: BottomNav（固定） */}
+      {isMobileActual && (
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          unreadCount={unreadCount}
+          myAvatarUrl={myAvatarUrl}
+          onAvatarUpload={onAvatarUpload}
+        />
+      )}
     </div>
   );
 }

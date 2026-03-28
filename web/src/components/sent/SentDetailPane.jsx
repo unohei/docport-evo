@@ -1,5 +1,6 @@
 // SentDetailPane.jsx
 // 送信済み詳細ペイン（DetailPane の送信方向版）
+// 変更点: プレビュー iframe 高さを固定 420px → clamp(300px, 60vh, 800px) に変更
 // - 送信元 → 宛先 の方向表示
 // - 取り消しボタン（UPLOADED かつ期限内のみ）
 // - インラインプレビュー
@@ -329,7 +330,7 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
               borderRadius: 10,
               border: `1px solid ${DP.border}`,
               overflow: "hidden",
-              height: 420,
+              height: "clamp(300px, 60vh, 800px)",
             }}>
               <iframe
                 src={inlineUrl}

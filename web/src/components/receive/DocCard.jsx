@@ -38,7 +38,8 @@ export default function DocCard({ doc, nameOf, iconOf, selected, onClick, isExpi
           <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
             <HospitalAvatar
               name={senderDisplay(doc, nameOf)}
-              iconUrl={iconOf ? iconOf(doc.from_hospital_id) : ""}
+              iconUrl={doc.source === "fax" ? "" : (iconOf ? iconOf(doc.from_hospital_id) : "")}
+              isFax={doc.source === "fax"}
               size={22}
             />
             <div style={{
