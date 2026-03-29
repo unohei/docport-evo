@@ -290,35 +290,31 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
         jwt_token,
     )
 
-    # ---- デバッグログ（403原因特定用） ----
+    # ---- デバッグログ（403原因特定用） ----  # TODO: デバッグ後に削除
     doc = rows[0] if rows else {}
-    logger.info(
-        "[assert_download_access] "
-        "file_key=%s | user_hospital_id=%s | "
-        "doc.from_hospital_id=%s | doc.to_hospital_id=%s | rows_count=%d",
-        file_key,
-        hospital_id,
-        doc.get("from_hospital_id"),
-        doc.get("to_hospital_id"),
-        len(rows),
+    _dbg = (
+        f"[assert_download_access] "
+        f"file_key={file_key} | user_hospital_id={hospital_id} | "
+        f"doc.from_hospital_id={doc.get('from_hospital_id')} | "
+        f"doc.to_hospital_id={doc.get('to_hospital_id')} | rows_count={len(rows)}"
     )
+    logger.warning(_dbg); print(_dbg, flush=True)  # TODO: デバッグ後に削除
 
     # RLS で弾かれた場合も rows が空になるため、存在有無を区別しない（情報漏洩防止）
     if not rows:
-        logger.info("[assert_download_access] → 403: rowsが空（RLSに弾かれたかレコード不存在）")
+        _dbg2 = "[assert_download_access] → 403: rowsが空（RLSに弾かれたかレコード不存在）"
+        logger.warning(_dbg2); print(_dbg2, flush=True)  # TODO: デバッグ後に削除
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
     if (
         doc.get("from_hospital_id") != hospital_id
         and doc.get("to_hospital_id") != hospital_id
     ):
-        logger.info(
-            "[assert_download_access] → 403: hospital_id不一致 "
-            "user=%s doc.from=%s doc.to=%s",
-            hospital_id,
-            doc.get("from_hospital_id"),
-            doc.get("to_hospital_id"),
+        _dbg3 = (
+            f"[assert_download_access] → 403: hospital_id不一致 "
+            f"user={hospital_id} doc.from={doc.get('from_hospital_id')} doc.to={doc.get('to_hospital_id')}"
         )
+        logger.warning(_dbg3); print(_dbg3, flush=True)  # TODO: デバッグ後に削除
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
 
@@ -2383,17 +2379,14 @@ async def send_fax_api(
     except Exception as e:
         logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
 
-    # ---- 権限チェック直前ログ ----
-    logger.info(
-        "[send-fax] 権限チェック開始 "
-        "user_id=%s | user_hospital_id=%s | "
-        "file_key=%s | contact_id=%s | contact_hospital_id=%s",
-        user_id or "None",
-        hospital_id or "None",
-        req.file_key or "None",
-        req.contact_id or "None",
-        contact_hospital_id or "None",
+    # ---- 権限チェック直前ログ ----  # TODO: デバッグ後に削除
+    _dbg_fax = (
+        f"[send-fax] 権限チェック開始 "
+        f"user_id={user_id or 'None'} | user_hospital_id={hospital_id or 'None'} | "
+        f"file_key={req.file_key or 'None'} | contact_id={req.contact_id or 'None'} | "
+        f"contact_hospital_id={contact_hospital_id or 'None'}"
     )
+    logger.warning(_dbg_fax); print(_dbg_fax, flush=True)  # TODO: デバッグ後に削除
 
     _assert_download_access(req.file_key, hospital_id, jwt_token)
     return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
@@ -2421,17 +2414,14 @@ async def send_fax_compat(
     except Exception as e:
         logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
 
-    # ---- 権限チェック直前ログ ----
-    logger.info(
-        "[send-fax] 権限チェック開始 "
-        "user_id=%s | user_hospital_id=%s | "
-        "file_key=%s | contact_id=%s | contact_hospital_id=%s",
-        user_id or "None",
-        hospital_id or "None",
-        req.file_key or "None",
-        req.contact_id or "None",
-        contact_hospital_id or "None",
+    # ---- 権限チェック直前ログ ----  # TODO: デバッグ後に削除
+    _dbg_fax = (
+        f"[send-fax] 権限チェック開始 "
+        f"user_id={user_id or 'None'} | user_hospital_id={hospital_id or 'None'} | "
+        f"file_key={req.file_key or 'None'} | contact_id={req.contact_id or 'None'} | "
+        f"contact_hospital_id={contact_hospital_id or 'None'}"
     )
+    logger.warning(_dbg_fax); print(_dbg_fax, flush=True)  # TODO: デバッグ後に削除
 
     _assert_download_access(req.file_key, hospital_id, jwt_token)
     return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
