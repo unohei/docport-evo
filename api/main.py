@@ -264,18 +264,10 @@ def _get_hospital_id(user_id: str, jwt_token: str) -> str:
         f"profiles?id=eq.{uid_encoded}&select=hospital_id",
         jwt_token,
     )
-    # TODO: デバッグ後に削除
-    _dbg_hid = (
-        f"[_get_hospital_id] user_id={user_id} | rows_count={len(rows)} | "
-        f"hospital_id={rows[0].get('hospital_id') if rows else 'N/A'}"
-    )
-    logger.warning(_dbg_hid); print(_dbg_hid, flush=True)
     if not rows or not rows[0].get("hospital_id"):
-        _dbg_hid2 = f"[_get_hospital_id] → 403: profiles未設定 user_id={user_id}"
-        logger.warning(_dbg_hid2); print(_dbg_hid2, flush=True)  # TODO: デバッグ後に削除
         raise HTTPException(
             status_code=403,
-            detail="DBG_NO_PROFILE",  # TODO: デバッグ後に "プロフィールが見つかりません（hospital_id 未設定）" に戻す
+            detail="プロフィールが見つかりません（hospital_id 未設定）",
         )
     return rows[0]["hospital_id"]
 
@@ -298,32 +290,84 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
         jwt_token,
     )
 
-    # ---- デバッグログ（403原因特定用） ----  # TODO: デバッグ後に削除
-    doc = rows[0] if rows else {}
-    _dbg = (
-        f"[assert_download_access] "
-        f"file_key={file_key} | user_hospital_id={hospital_id} | "
-        f"doc.from_hospital_id={doc.get('from_hospital_id')} | "
-        f"doc.to_hospital_id={doc.get('to_hospital_id')} | rows_count={len(rows)}"
-    )
-    logger.warning(_dbg); print(_dbg, flush=True)  # TODO: デバッグ後に削除
-
     # RLS で弾かれた場合も rows が空になるため、存在有無を区別しない（情報漏洩防止）
+    doc = rows[0] if rows else {}
     if not rows:
-        _dbg2 = "[assert_download_access] → 403: rowsが空（RLSに弾かれたかレコード不存在）"
-        logger.warning(_dbg2); print(_dbg2, flush=True)  # TODO: デバッグ後に削除
-        raise HTTPException(status_code=403, detail="DBG_NO_ROWS")  # TODO: デバッグ後に "ドキュメントへのアクセス権がありません" に戻す
+        raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
     if (
         doc.get("from_hospital_id") != hospital_id
         and doc.get("to_hospital_id") != hospital_id
     ):
-        _dbg3 = (
-            f"[assert_download_access] → 403: hospital_id不一致 "
-            f"user={hospital_id} doc.from={doc.get('from_hospital_id')} doc.to={doc.get('to_hospital_id')}"
-        )
-        logger.warning(_dbg3); print(_dbg3, flush=True)  # TODO: デバッグ後に削除
-        raise HTTPException(status_code=403, detail="DBG_HOSPITAL_MISMATCH")  # TODO: デバッグ後に "ドキュメントへのアクセス権がありません" に戻す
+        raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
+
+
+def _assert_fax_file_key(file_key: str) -> None:
+    """
+    FAX送信専用のファイルアクセスチェック。
+    _assert_download_access（documents レコード前提）の代替として使用する。
+
+    チェック内容:
+    1. file_key のフォーマット検証（パストラバーサル防止）
+    2. R2 に実際にファイルが存在するか確認（head_object）
+
+    設計メモ:
+    - FAX送信時点では documents レコードがまだ存在しないため documents 照合はしない。
+    - hospital_id との紐付けは検証できないが、file_key は presign-upload 時に
+      JWT認証済みユーザーのみが取得できるランダム UUID のため MVP では許容する。
+    # TODO: 将来的に temp_uploads テーブル（file_key, hospital_id, user_id, expires_at）を追加し、
+    #        presign-upload 時に INSERT → ここで hospital_id 一致チェックに昇格させること。
+    """
+    # FAX送信は PDF のみ（CloudFAX API が PDF を前提とするため他形式は拒否）
+    ext = file_key.rsplit(".", 1)[-1].lower() if "." in file_key else ""
+    if not file_key.startswith("documents/") or ext != "pdf":
+        raise HTTPException(status_code=400, detail="FAX送信は PDF ファイルのみ対応しています")
+
+    try:
+        bucket = get_bucket_name()
+        s3     = get_s3_client()
+        s3.head_object(Bucket=bucket, Key=file_key)
+    except Exception as e:
+        # NoSuchKey / 404 系は 403 で返す（存在確認は情報漏洩になるため区別しない）
+        logger.warning("[_assert_fax_file_key] R2 head_object 失敗: file_key=%s err=%s", file_key, e)
+        raise HTTPException(status_code=403, detail="ファイルが見つからないか、アクセスできません")
+
+
+def _get_fax_contact(contact_id: str, hospital_id: str, jwt_token: str) -> dict:
+    """
+    contacts テーブルから FAX送信先を取得し、送信可否を検証する。
+
+    チェック内容:
+    1. レコード存在確認
+    2. hospital_id が呼び出し元と一致すること（他院の contact は使用不可）
+    3. is_active == true であること
+    4. fax_number が設定されていること
+
+    戻り値: {"id", "fax_number", "hospital_id", "is_active"} を含む dict
+
+    # TODO(temp_uploads): 将来的に _assert_fax_file_key もここに統合し、
+    #   temp_uploads.hospital_id と contacts.hospital_id の一致まで検証できるようにする。
+    """
+    cid_enc = urllib.parse.quote(contact_id, safe="")
+    rows = _supabase_get(
+        f"contacts?id=eq.{cid_enc}&select=id,fax_number,hospital_id,is_active",
+        jwt_token,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="FAX送信先が見つかりません")
+
+    contact = rows[0]
+    if contact.get("hospital_id") != hospital_id:
+        raise HTTPException(status_code=403, detail="自院のFAX送信先のみ使用できます")
+
+    if not contact.get("is_active"):
+        raise HTTPException(status_code=400, detail="このFAX送信先は無効です（is_active=false）")
+
+    fax_number = (contact.get("fax_number") or "").strip()
+    if not fax_number:
+        raise HTTPException(status_code=400, detail="FAX番号が登録されていません")
+
+    return contact
 
 
 # ----------------------------
@@ -2006,7 +2050,7 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
             return
 
         logger.info("[fax-ocr] OCR完了: chars=%d document_id=%s", len(raw_text), document_id)
-        normalized = _normalize_text(raw_text)
+        normalized, _ = _normalize_text(raw_text)
 
         # ---- document_type 分類 ----
         doc_type = "不明"
@@ -2236,8 +2280,8 @@ async def cloudfax_outbound_api(request: Request):
 
 class SendFaxRequest(BaseModel):
     file_key:          str
-    contact_id:        str              # contacts.id（ログ用）
-    fax_number:        str              # FAX番号（contacts.fax_number から渡される）
+    contact_id:        str               # contacts.id（サーバ側で fax_number を取得するために使用）
+    fax_number:        Optional[str] = None  # Deprecated: サーバ側で contacts から取得するため無視される
     comment:           Optional[str] = None
     original_filename: Optional[str] = None
 
@@ -2247,6 +2291,7 @@ async def _send_fax_impl(
     hospital_id: str,
     user_id: str,
     jwt_token: str,
+    fax_number: str,   # サーバ側で contacts から解決済みの FAX番号
 ) -> dict:
     """
     CloudFAX API で FAX 送信する共通処理。
@@ -2290,7 +2335,7 @@ async def _send_fax_impl(
     header = (
         f'--{boundary}\r\n'
         f'Content-Disposition: form-data; name="to"\r\n\r\n'
-        f'{req.fax_number}\r\n'
+        f'{fax_number}\r\n'
         f'--{boundary}\r\n'
         f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
         f'Content-Type: application/pdf\r\n\r\n'
@@ -2317,7 +2362,9 @@ async def _send_fax_impl(
         raise HTTPException(status_code=502, detail=f"FAX送信APIエラー: {e}")
 
     transmission_id = send_result.get("transmission_id") or send_result.get("id") or ""
-    logger.info("[send-fax] CloudFAX送信依頼完了: transmission_id=%s to=%s", transmission_id, req.fax_number)
+    logger.info("[send-fax] CloudFAX送信依頼完了: transmission_id=%s to=%s", transmission_id, fax_number)
+    # TODO(transmission_id): documents に transmission_id カラムを追加し、ここで保存すること。
+    #   そうすれば outbound webhook と documents を紐付けられる。
 
     # 3. documents テーブルに記録（source="fax_outbound"）
     # service_role 使用理由: JWT ユーザーのスコープ外テーブル行を書くため（RLS バイパス）
@@ -2326,7 +2373,11 @@ async def _send_fax_impl(
         {
             "from_hospital_id":  hospital_id,
             "to_hospital_id":    hospital_id,   # FAX相手は hospitals 外のため自院IDで代替
-            "to_fax_number":     req.fax_number,
+            "to_fax_number":     fax_number,
+            # TODO(doc_insert_failure): CloudFAX送信成功後にここが失敗した場合、
+            #   FAXは送信済みだが documents レコードが存在しない状態になる。
+            #   MVP では best-effort（失敗をログして続行）とするが、
+            #   将来的には transmission_id を使って冪等 upsert に昇格させること。
             "file_key":          req.file_key,
             "original_filename": req.original_filename,
             "comment":           req.comment,
@@ -2369,44 +2420,15 @@ async def send_fax_api(
     POST /api/send-fax
     JWT認証 + 自院のファイルのみ FAX 送信可能。
     file_key は presign-upload で取得した R2 キー。
-    fax_number は contacts.fax_number（フロント側で contacts から取得して渡す）。
+    fax_number はサーバ側で contacts から取得する（クライアント値は使わない）。
     送信結果は documents に source="fax_outbound" で記録。
     """
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
-
-    # ---- エンドポイント先頭ログ ----  # TODO: デバッグ後に削除
-    _dbg_entry = (
-        f"[send-fax /api] リクエスト受信 "
-        f"user_id={user_id or 'None'} | file_key={req.file_key or 'None'} | "
-        f"contact_id={req.contact_id or 'None'}"
-    )
-    logger.warning(_dbg_entry); print(_dbg_entry, flush=True)  # TODO: デバッグ後に削除
-
     hospital_id = _get_hospital_id(user_id, jwt_token)
-
-    # ---- contacts の hospital_id を取得（ログ用） ----
-    contact_hospital_id = None
-    try:
-        contact_rows = _supabase_get(
-            f"contacts?id=eq.{urllib.parse.quote(req.contact_id, safe='')}&select=hospital_id",
-            jwt_token,
-        )
-        contact_hospital_id = contact_rows[0].get("hospital_id") if contact_rows else None
-    except Exception as e:
-        logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
-
-    # ---- 権限チェック直前ログ ----  # TODO: デバッグ後に削除
-    _dbg_fax = (
-        f"[send-fax] 権限チェック開始 "
-        f"user_id={user_id or 'None'} | user_hospital_id={hospital_id or 'None'} | "
-        f"file_key={req.file_key or 'None'} | contact_id={req.contact_id or 'None'} | "
-        f"contact_hospital_id={contact_hospital_id or 'None'}"
-    )
-    logger.warning(_dbg_fax); print(_dbg_fax, flush=True)  # TODO: デバッグ後に削除
-
-    _assert_download_access(req.file_key, hospital_id, jwt_token)
-    return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
+    contact     = _get_fax_contact(req.contact_id, hospital_id, jwt_token)
+    _assert_fax_file_key(req.file_key)
+    return await _send_fax_impl(req, hospital_id, user_id, jwt_token, contact["fax_number"])
 
 
 @app.post("/send-fax")
@@ -2416,43 +2438,12 @@ async def send_fax_compat(
     user: dict = Depends(verify_jwt),
 ):
     """compat: Vite proxy 経由のローカル開発用（/api/send-fax と同じ処理）"""
-    # TODO: デバッグ後に削除 ↓ エンドポイント到達確認用（到達すれば {"dbg":"DBG_ENTERED_SEND_FAX"} が返る）
-    # raise HTTPException(status_code=403, detail="DBG_ENTERED_SEND_FAX")
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
-
-    # ---- エンドポイント先頭ログ ----  # TODO: デバッグ後に削除
-    _dbg_entry = (
-        f"[send-fax /compat] リクエスト受信 "
-        f"user_id={user_id or 'None'} | file_key={req.file_key or 'None'} | "
-        f"contact_id={req.contact_id or 'None'}"
-    )
-    logger.warning(_dbg_entry); print(_dbg_entry, flush=True)  # TODO: デバッグ後に削除
-
     hospital_id = _get_hospital_id(user_id, jwt_token)
-
-    # ---- contacts の hospital_id を取得（ログ用） ----
-    contact_hospital_id = None
-    try:
-        contact_rows = _supabase_get(
-            f"contacts?id=eq.{urllib.parse.quote(req.contact_id, safe='')}&select=hospital_id",
-            jwt_token,
-        )
-        contact_hospital_id = contact_rows[0].get("hospital_id") if contact_rows else None
-    except Exception as e:
-        logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
-
-    # ---- 権限チェック直前ログ ----  # TODO: デバッグ後に削除
-    _dbg_fax = (
-        f"[send-fax] 権限チェック開始 "
-        f"user_id={user_id or 'None'} | user_hospital_id={hospital_id or 'None'} | "
-        f"file_key={req.file_key or 'None'} | contact_id={req.contact_id or 'None'} | "
-        f"contact_hospital_id={contact_hospital_id or 'None'}"
-    )
-    logger.warning(_dbg_fax); print(_dbg_fax, flush=True)  # TODO: デバッグ後に削除
-
-    _assert_download_access(req.file_key, hospital_id, jwt_token)
-    return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
+    contact     = _get_fax_contact(req.contact_id, hospital_id, jwt_token)
+    _assert_fax_file_key(req.file_key)
+    return await _send_fax_impl(req, hospital_id, user_id, jwt_token, contact["fax_number"])
 
 
 @app.post("/webhook/cloudfax/outbound")
