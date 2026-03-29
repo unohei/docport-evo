@@ -275,7 +275,7 @@ def _get_hospital_id(user_id: str, jwt_token: str) -> str:
         logger.warning(_dbg_hid2); print(_dbg_hid2, flush=True)  # TODO: デバッグ後に削除
         raise HTTPException(
             status_code=403,
-            detail="プロフィールが見つかりません（hospital_id 未設定）",
+            detail="DBG_NO_PROFILE",  # TODO: デバッグ後に "プロフィールが見つかりません（hospital_id 未設定）" に戻す
         )
     return rows[0]["hospital_id"]
 
@@ -312,7 +312,7 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
     if not rows:
         _dbg2 = "[assert_download_access] → 403: rowsが空（RLSに弾かれたかレコード不存在）"
         logger.warning(_dbg2); print(_dbg2, flush=True)  # TODO: デバッグ後に削除
-        raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
+        raise HTTPException(status_code=403, detail="DBG_NO_ROWS")  # TODO: デバッグ後に "ドキュメントへのアクセス権がありません" に戻す
 
     if (
         doc.get("from_hospital_id") != hospital_id
@@ -323,7 +323,7 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
             f"user={hospital_id} doc.from={doc.get('from_hospital_id')} doc.to={doc.get('to_hospital_id')}"
         )
         logger.warning(_dbg3); print(_dbg3, flush=True)  # TODO: デバッグ後に削除
-        raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
+        raise HTTPException(status_code=403, detail="DBG_HOSPITAL_MISMATCH")  # TODO: デバッグ後に "ドキュメントへのアクセス権がありません" に戻す
 
 
 # ----------------------------
@@ -2416,6 +2416,8 @@ async def send_fax_compat(
     user: dict = Depends(verify_jwt),
 ):
     """compat: Vite proxy 経由のローカル開発用（/api/send-fax と同じ処理）"""
+    # TODO: デバッグ後に削除 ↓ エンドポイント到達確認用（到達すれば {"dbg":"DBG_ENTERED_SEND_FAX"} が返る）
+    # raise HTTPException(status_code=403, detail="DBG_ENTERED_SEND_FAX")
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
 
