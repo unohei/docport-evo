@@ -290,15 +290,35 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
         jwt_token,
     )
 
+    # ---- デバッグログ（403原因特定用） ----
+    doc = rows[0] if rows else {}
+    logger.info(
+        "[assert_download_access] "
+        "file_key=%s | user_hospital_id=%s | "
+        "doc.from_hospital_id=%s | doc.to_hospital_id=%s | rows_count=%d",
+        file_key,
+        hospital_id,
+        doc.get("from_hospital_id"),
+        doc.get("to_hospital_id"),
+        len(rows),
+    )
+
     # RLS で弾かれた場合も rows が空になるため、存在有無を区別しない（情報漏洩防止）
     if not rows:
+        logger.info("[assert_download_access] → 403: rowsが空（RLSに弾かれたかレコード不存在）")
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
-    doc = rows[0]
     if (
         doc.get("from_hospital_id") != hospital_id
         and doc.get("to_hospital_id") != hospital_id
     ):
+        logger.info(
+            "[assert_download_access] → 403: hospital_id不一致 "
+            "user=%s doc.from=%s doc.to=%s",
+            hospital_id,
+            doc.get("from_hospital_id"),
+            doc.get("to_hospital_id"),
+        )
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
 
@@ -2351,6 +2371,30 @@ async def send_fax_api(
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
+
+    # ---- contacts の hospital_id を取得（ログ用） ----
+    contact_hospital_id = None
+    try:
+        contact_rows = _supabase_get(
+            f"contacts?id=eq.{urllib.parse.quote(req.contact_id, safe='')}&select=hospital_id",
+            jwt_token,
+        )
+        contact_hospital_id = contact_rows[0].get("hospital_id") if contact_rows else None
+    except Exception as e:
+        logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
+
+    # ---- 権限チェック直前ログ ----
+    logger.info(
+        "[send-fax] 権限チェック開始 "
+        "user_id=%s | user_hospital_id=%s | "
+        "file_key=%s | contact_id=%s | contact_hospital_id=%s",
+        user_id or "None",
+        hospital_id or "None",
+        req.file_key or "None",
+        req.contact_id or "None",
+        contact_hospital_id or "None",
+    )
+
     _assert_download_access(req.file_key, hospital_id, jwt_token)
     return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
 
@@ -2365,6 +2409,30 @@ async def send_fax_compat(
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
+
+    # ---- contacts の hospital_id を取得（ログ用） ----
+    contact_hospital_id = None
+    try:
+        contact_rows = _supabase_get(
+            f"contacts?id=eq.{urllib.parse.quote(req.contact_id, safe='')}&select=hospital_id",
+            jwt_token,
+        )
+        contact_hospital_id = contact_rows[0].get("hospital_id") if contact_rows else None
+    except Exception as e:
+        logger.warning("[send-fax] contacts取得失敗（ログのみ）: %s", e)
+
+    # ---- 権限チェック直前ログ ----
+    logger.info(
+        "[send-fax] 権限チェック開始 "
+        "user_id=%s | user_hospital_id=%s | "
+        "file_key=%s | contact_id=%s | contact_hospital_id=%s",
+        user_id or "None",
+        hospital_id or "None",
+        req.file_key or "None",
+        req.contact_id or "None",
+        contact_hospital_id or "None",
+    )
+
     _assert_download_access(req.file_key, hospital_id, jwt_token)
     return await _send_fax_impl(req, hospital_id, user_id, jwt_token)
 
