@@ -264,7 +264,15 @@ def _get_hospital_id(user_id: str, jwt_token: str) -> str:
         f"profiles?id=eq.{uid_encoded}&select=hospital_id",
         jwt_token,
     )
+    # TODO: デバッグ後に削除
+    _dbg_hid = (
+        f"[_get_hospital_id] user_id={user_id} | rows_count={len(rows)} | "
+        f"hospital_id={rows[0].get('hospital_id') if rows else 'N/A'}"
+    )
+    logger.warning(_dbg_hid); print(_dbg_hid, flush=True)
     if not rows or not rows[0].get("hospital_id"):
+        _dbg_hid2 = f"[_get_hospital_id] → 403: profiles未設定 user_id={user_id}"
+        logger.warning(_dbg_hid2); print(_dbg_hid2, flush=True)  # TODO: デバッグ後に削除
         raise HTTPException(
             status_code=403,
             detail="プロフィールが見つかりません（hospital_id 未設定）",
@@ -2366,6 +2374,15 @@ async def send_fax_api(
     """
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
+
+    # ---- エンドポイント先頭ログ ----  # TODO: デバッグ後に削除
+    _dbg_entry = (
+        f"[send-fax /api] リクエスト受信 "
+        f"user_id={user_id or 'None'} | file_key={req.file_key or 'None'} | "
+        f"contact_id={req.contact_id or 'None'}"
+    )
+    logger.warning(_dbg_entry); print(_dbg_entry, flush=True)  # TODO: デバッグ後に削除
+
     hospital_id = _get_hospital_id(user_id, jwt_token)
 
     # ---- contacts の hospital_id を取得（ログ用） ----
@@ -2401,6 +2418,15 @@ async def send_fax_compat(
     """compat: Vite proxy 経由のローカル開発用（/api/send-fax と同じ処理）"""
     jwt_token   = credentials.credentials
     user_id     = user.get("sub", "")
+
+    # ---- エンドポイント先頭ログ ----  # TODO: デバッグ後に削除
+    _dbg_entry = (
+        f"[send-fax /compat] リクエスト受信 "
+        f"user_id={user_id or 'None'} | file_key={req.file_key or 'None'} | "
+        f"contact_id={req.contact_id or 'None'}"
+    )
+    logger.warning(_dbg_entry); print(_dbg_entry, flush=True)  # TODO: デバッグ後に削除
+
     hospital_id = _get_hospital_id(user_id, jwt_token)
 
     # ---- contacts の hospital_id を取得（ログ用） ----
