@@ -380,7 +380,7 @@ def health_root():
 
 @app.get("/health")
 def health():
-    """Render ウォームアップ用（認証不要）"""
+    """ヘルスチェック（認証不要）。cold start 対策として使用する。"""
     return {"status": "ok"}
 
 

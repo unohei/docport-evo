@@ -114,7 +114,9 @@ async function fetchDocs(col, val) {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
-console.log("API_BASE =", API_BASE);
+// FAX送信は VPS 側 FastAPI を直接叩く。未設定時は API_BASE にフォールバック（ローカル開発用）。
+const FAX_API_BASE = import.meta.env.VITE_FAX_API_BASE || API_BASE;
+console.log("API_BASE =", API_BASE, "FAX_API_BASE =", FAX_API_BASE);
 
 // アップロード許可 MIME → 拡張子マップ（サーバー側 ALLOWED_MIME_EXT と同期を保つこと）
 // フロントはUX用の早期バリデーション専用。最終判断は FastAPI が行う。
@@ -360,7 +362,7 @@ export default function App() {
     let cancelled = false;
     const warmUp = async () => {
       try {
-        console.log("🔥 Warm-up start");
+        console.log("🔥 API warm-up start");
         const health = await fetch(`${API_BASE}/health`, { method: "GET", cache: "no-store" });
         if (!health.ok) {
           console.log("health not found, fallback warm-up");
@@ -689,7 +691,7 @@ export default function App() {
       // ---- FAX送信 ----
       if (recipient.type === "fax") {
         const token = (await supabase.auth.getSession()).data.session?.access_token;
-        const res = await fetch(`${API_BASE}/send-fax`, {
+        const res = await fetch(`${FAX_API_BASE}/send-fax`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
