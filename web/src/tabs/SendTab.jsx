@@ -209,9 +209,15 @@ export default function SendTab({
   allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
 }) {
   const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
-  const isPdfFile  = pdfFile?.type === "application/pdf";
-  const isDocxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const isXlsxFile = pdfFile?.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  // OCR対応MIMEセット（バックエンドの対応拡張子と同期する）
+  const OCR_MIME_SET = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ]);
+  const isOcrFile = OCR_MIME_SET.has(pdfFile?.type);
   const [hoverMode, setHoverMode] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
 
@@ -515,8 +521,8 @@ export default function SendTab({
                 </div>
               )}
 
-              {/* PDF・DOCX・XLSX 以外のファイル: OCR対象外 */}
-              {uploadStatus === "ready" && !isPdfFile && !isDocxFile && !isXlsxFile && (
+              {/* PPTX等OCR非対応ファイル */}
+              {uploadStatus === "ready" && !isOcrFile && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "10px 14px", borderRadius: 10,
@@ -526,7 +532,7 @@ export default function SendTab({
                 }}>
                   <span>OCR対象外</span>
                   <span style={{ fontWeight: 400, opacity: 0.75 }}>
-                    — PDF以外のファイルはテキスト抽出をスキップします。内容を確認の上「置く」を押してください。
+                    — このファイル形式はテキスト抽出に対応していません。内容を確認の上「置く」を押してください。
                   </span>
                 </div>
               )}
@@ -548,7 +554,7 @@ export default function SendTab({
               )}
 
               {/* チェックON + PDF / DOCX / XLSX + 抽出結果あり */}
-              {uploadStatus === "ready" && checkMode && (isPdfFile || isDocxFile || isXlsxFile) && ocrResult && (
+              {uploadStatus === "ready" && checkMode && isOcrFile && ocrResult && (
                 <div>
                   {/* 1. warnings */}
                   {ocrResult.warnings?.length > 0 && (

@@ -608,9 +608,15 @@ export default function App() {
     setPendingFileKey(null);
     setUploadStatus("uploading");
 
-    const isPdf  = file.type === "application/pdf";
-    const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    const isXlsx = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    // OCR対応MIMEリスト（バックエンドの対応拡張子と同期する）
+    const OCR_MIME_SET = new Set([
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]);
+    const canOcr = OCR_MIME_SET.has(file.type);
 
     try {
       // R2 アップロード（content_type を渡して正しい拡張子・MIME で presign）
@@ -618,8 +624,8 @@ export default function App() {
       await putFile(upload_url, file);
       setPendingFileKey(file_key);
 
-      // PDF・DOCX・XLSX 以外: テキスト抽出をスキップして即 ready（チェックモード問わず）
-      if (!isPdf && !isDocx && !isXlsx) {
+      // OCR非対応形式（PPTX等）: テキスト抽出をスキップして即 ready（チェックモード問わず）
+      if (!canOcr) {
         setUploadStatus("ready");
         return;
       }
