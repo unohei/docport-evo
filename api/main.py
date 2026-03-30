@@ -272,12 +272,12 @@ def _get_hospital_id(user_id: str, jwt_token: str) -> str:
     return rows[0]["hospital_id"]
 
 
-def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> Optional[str]:
+def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> dict:
     """
     documents テーブルを user JWT で照会し、
     from_hospital_id OR to_hospital_id がユーザーの病院と一致するか確認する。
     RLS でも弾かれるが、FastAPI 側でも明示チェック（二重防御）。
-    戻り値: original_filename（存在すれば）または None
+    戻り値: {"original_filename": str|None, "structured_json": dict|None, "file_ext": str}
     """
     # パストラバーサル防止（基本バリデーション）
     # 許可拡張子は ALLOWED_MIME_EXT の値セットと一致させる
@@ -287,7 +287,8 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
 
     key_encoded = urllib.parse.quote(file_key, safe="")
     rows = _supabase_get(
-        f"documents?file_key=eq.{key_encoded}&select=from_hospital_id,to_hospital_id,original_filename",
+        f"documents?file_key=eq.{key_encoded}"
+        f"&select=from_hospital_id,to_hospital_id,original_filename,structured_json",
         jwt_token,
     )
 
@@ -302,7 +303,49 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
     ):
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
 
-    return doc.get("original_filename") or None
+    # structured_json は JSONB → dict で返るが、文字列で返る場合も考慮
+    sj = doc.get("structured_json")
+    if isinstance(sj, str):
+        try:
+            sj = json.loads(sj)
+        except Exception:
+            sj = None
+
+    return {
+        "original_filename": doc.get("original_filename") or None,
+        "structured_json":   sj if isinstance(sj, dict) else None,
+        "file_ext":          ext,
+    }
+
+
+_UNSAFE_CHARS_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+def _build_download_filename(doc_meta: dict) -> Optional[str]:
+    """
+    structured_json（v2）からダウンロード用ファイル名を生成する。
+    生成ルール: 紹介状_{referring_hospital}_{referral_date}.{ext}
+    - structured_json が無い / フィールドが全 null の場合は original_filename を返す
+    - OS で使えない文字（\\ / : * ? " < > | 制御文字）は除去する
+    """
+    ext     = doc_meta.get("file_ext") or "pdf"
+    sj      = doc_meta.get("structured_json")
+    fallback = doc_meta.get("original_filename") or None
+
+    if sj and isinstance(sj, dict):
+        hospital = (sj.get("referring_hospital") or "").strip()
+        date     = (sj.get("referral_date")      or "").strip()
+
+        # hospital / date のどちらか一方でも取れていれば生成する
+        if hospital or date:
+            parts = ["紹介状"]
+            if hospital:
+                parts.append(hospital)
+            if date:
+                parts.append(date)
+            raw_name = "_".join(parts) + f".{ext}"
+            return _UNSAFE_CHARS_RE.sub("", raw_name) or fallback
+
+    return fallback
 
 
 def _assert_fax_file_key(file_key: str) -> None:
@@ -489,8 +532,9 @@ def presign_download_api(
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
-    original_filename = _assert_download_access(key, hospital_id, jwt_token)
-    return _presign_download(key, original_filename)
+    doc_meta = _assert_download_access(key, hospital_id, jwt_token)
+    filename = _build_download_filename(doc_meta)
+    return _presign_download(key, filename)
 
 
 @app.post("/presign-upload")
@@ -514,8 +558,9 @@ def presign_download_compat(
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
-    original_filename = _assert_download_access(key, hospital_id, jwt_token)
-    return _presign_download(key, original_filename)
+    doc_meta = _assert_download_access(key, hospital_id, jwt_token)
+    filename = _build_download_filename(doc_meta)
+    return _presign_download(key, filename)
 
 
 # ----------------------------
