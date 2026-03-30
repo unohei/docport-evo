@@ -272,11 +272,12 @@ def _get_hospital_id(user_id: str, jwt_token: str) -> str:
     return rows[0]["hospital_id"]
 
 
-def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> None:
+def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> Optional[str]:
     """
     documents テーブルを user JWT で照会し、
     from_hospital_id OR to_hospital_id がユーザーの病院と一致するか確認する。
     RLS でも弾かれるが、FastAPI 側でも明示チェック（二重防御）。
+    戻り値: original_filename（存在すれば）または None
     """
     # パストラバーサル防止（基本バリデーション）
     # 許可拡張子は ALLOWED_MIME_EXT の値セットと一致させる
@@ -286,7 +287,7 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
 
     key_encoded = urllib.parse.quote(file_key, safe="")
     rows = _supabase_get(
-        f"documents?file_key=eq.{key_encoded}&select=from_hospital_id,to_hospital_id",
+        f"documents?file_key=eq.{key_encoded}&select=from_hospital_id,to_hospital_id,original_filename",
         jwt_token,
     )
 
@@ -300,6 +301,8 @@ def _assert_download_access(file_key: str, hospital_id: str, jwt_token: str) -> 
         and doc.get("to_hospital_id") != hospital_id
     ):
         raise HTTPException(status_code=403, detail="ドキュメントへのアクセス権がありません")
+
+    return doc.get("original_filename") or None
 
 
 def _assert_fax_file_key(file_key: str) -> None:
@@ -437,7 +440,7 @@ def _presign_upload(content_type: str = "application/pdf") -> dict:
     return {"upload_url": url, "file_key": key, "content_type": content_type, "file_ext": ext}
 
 
-def _presign_download(key: str):
+def _presign_download(key: str, original_filename: Optional[str] = None):
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
@@ -445,9 +448,17 @@ def _presign_download(key: str):
         logger.exception("R2クライアント初期化失敗 (download)")
         raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
 
+    params: dict = {"Bucket": bucket, "Key": key}
+    if original_filename:
+        # RFC 5987 エンコード（非ASCII文字を含む場合も安全にダウンロード名を指定する）
+        encoded = urllib.parse.quote(original_filename, safe="")
+        params["ResponseContentDisposition"] = (
+            f"attachment; filename*=UTF-8''{encoded}"
+        )
+
     url = s3.generate_presigned_url(
         ClientMethod="get_object",
-        Params={"Bucket": bucket, "Key": key},
+        Params=params,
         ExpiresIn=60 * 5,
     )
     return {"download_url": url}
@@ -478,8 +489,8 @@ def presign_download_api(
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
-    _assert_download_access(key, hospital_id, jwt_token)
-    return _presign_download(key)
+    original_filename = _assert_download_access(key, hospital_id, jwt_token)
+    return _presign_download(key, original_filename)
 
 
 @app.post("/presign-upload")
@@ -503,8 +514,8 @@ def presign_download_compat(
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
-    _assert_download_access(key, hospital_id, jwt_token)
-    return _presign_download(key)
+    original_filename = _assert_download_access(key, hospital_id, jwt_token)
+    return _presign_download(key, original_filename)
 
 
 # ----------------------------
@@ -730,17 +741,23 @@ def _extract_xlsx_text(xlsx_bytes: bytes) -> tuple[str, list[str]]:
     return text, warnings
 
 
-def _call_openai_ocr(png_list: list[bytes], timeout: float) -> str:
+def _call_openai_ocr(
+    png_list: list[bytes],
+    timeout: float,
+    mime_types: Optional[list[str]] = None,
+) -> str:
     """
     OpenAI Vision API（gpt-4o）でページ画像をまとめてOCRする。
     全ページを1リクエストで送信してテキストを取得する。
+    mime_types: 各画像の MIME タイプ（未指定時は全て image/png）
     """
     content: list[dict] = []
-    for png in png_list:
+    for i, png in enumerate(png_list):
+        mime = (mime_types[i] if mime_types and i < len(mime_types) else "image/png")
         content.append({
             "type": "image_url",
             "image_url": {
-                "url": f"data:image/png;base64,{base64.b64encode(png).decode()}"
+                "url": f"data:{mime};base64,{base64.b64encode(png).decode()}"
             },
         })
     content.append({"type": "text", "text": _OCR_PROMPT})
@@ -1103,11 +1120,11 @@ def _ocr_impl(
         return remaining
 
     # ---- file_key バリデーション（パストラバーサル防止） ----
-    # 対応拡張子: pdf / docx
+    # 対応拡張子: pdf / docx / xlsx / png / jpg
     fkey = body.file_key
     ext = fkey.rsplit(".", 1)[-1].lower() if "." in fkey else ""
-    if not fkey.startswith("documents/") or ext not in {"pdf", "docx", "xlsx"}:
-        raise HTTPException(status_code=400, detail="無効な file_key です（対応: .pdf / .docx / .xlsx）")
+    if not fkey.startswith("documents/") or ext not in {"pdf", "docx", "xlsx", "png", "jpg"}:
+        raise HTTPException(status_code=400, detail="無効な file_key です（対応: .pdf / .docx / .xlsx / .png / .jpg）")
 
     # ---- JWT + hospital_id 確認 ----
     # OCR は「送信前」専用のため documents テーブルにまだレコードが存在しない。
@@ -1163,6 +1180,19 @@ def _ocr_impl(
         # XLSX: openpyxl で全シートをテキスト化（Vision API 不要）
         text, extract_warnings = _extract_xlsx_text(file_bytes)
         source_type = "xlsx"
+
+    elif ext in {"png", "jpg"}:
+        # 画像ファイル: そのまま Vision OCR（PDF化不要）
+        if not OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="APIキーが未設定です（OPENAI_API_KEY を設定してください）",
+            )
+        mime = "image/jpeg" if ext == "jpg" else "image/png"
+        remaining = _remaining()
+        text = _call_openai_ocr([file_bytes], timeout=remaining, mime_types=[mime])
+        text = _strip_code_fences(text)
+        source_type = "image"
 
     else:
         # PDF: pypdfium2 でページ画像化 → Vision OCR
@@ -2058,14 +2088,15 @@ _MAX_FAX_OCR_SECS = 90  # FAX OCRのタイムアウト（秒）
 
 def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
     """
-    FAX受信PDFに対してOCR + document_type分類を実行し、documentsを更新する。
+    FAX受信ファイル（PDF / 画像）に対してOCR + document_type分類を実行し、documentsを更新する。
     - BackgroundTasks から呼ばれる（同期関数）
     - 失敗しても documents 登録は影響しない（best-effort）
     - document_type: "紹介状" | "不明"
     """
     logger.info("[fax-ocr] 開始: document_id=%s file_key=%s", document_id, file_key)
+    file_ext = file_key.rsplit(".", 1)[-1].lower() if "." in file_key else "pdf"
     try:
-        # ---- R2 からPDF取得 ----
+        # ---- R2 からファイル取得 ----
         try:
             bucket = get_bucket_name()
             s3 = get_s3_client()
@@ -2080,40 +2111,58 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
         )
         try:
             with urllib.request.urlopen(presigned_url, timeout=15) as resp:
-                pdf_bytes = resp.read()
+                file_bytes = resp.read()
         except Exception:
-            logger.exception("[fax-ocr] R2からのPDF取得失敗: %s", file_key)
+            logger.exception("[fax-ocr] R2からのファイル取得失敗: %s", file_key)
             return
 
-        if len(pdf_bytes) > _MAX_PDF_SIZE_BYTES:
-            logger.warning("[fax-ocr] PDFサイズ超過 (%d bytes), スキップ", len(pdf_bytes))
+        if len(file_bytes) > _MAX_PDF_SIZE_BYTES:
+            logger.warning("[fax-ocr] ファイルサイズ超過 (%d bytes), スキップ", len(file_bytes))
             return
 
-        # ---- PDF → PNG → OCR ----
-        try:
-            png_list, _ = _render_pdf_to_png_list(pdf_bytes)
-        except Exception:
-            logger.exception("[fax-ocr] PDF画像化失敗: %s", file_key)
-            _supabase_service_patch(
-                f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
-                {"ocr_status": "FAILED"},
-            )
-            return
-
-        logger.info("[fax-ocr] OCR開始: pages=%d document_id=%s", len(png_list), document_id)
+        # ---- ファイル種別ごとに OCR 実行 ----
         _supabase_service_patch(
             f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
             {"ocr_status": "RUNNING"},
         )
-        try:
-            raw_text = _call_openai_ocr(png_list, timeout=_MAX_FAX_OCR_SECS)
-        except Exception:
-            logger.exception("[fax-ocr] OpenAI OCR失敗: %s", file_key)
-            _supabase_service_patch(
-                f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
-                {"ocr_status": "FAILED"},
-            )
-            return
+
+        if file_ext in {"png", "jpg"}:
+            # 画像ファイル: そのまま Vision OCR（PDF化不要）
+            mime = "image/jpeg" if file_ext == "jpg" else "image/png"
+            logger.info("[fax-ocr] 画像OCR開始: document_id=%s mime=%s", document_id, mime)
+            try:
+                raw_text = _call_openai_ocr(
+                    [file_bytes], timeout=_MAX_FAX_OCR_SECS, mime_types=[mime]
+                )
+            except Exception:
+                logger.exception("[fax-ocr] OpenAI OCR失敗(image): %s", file_key)
+                _supabase_service_patch(
+                    f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+                    {"ocr_status": "FAILED"},
+                )
+                return
+        else:
+            # PDF: pypdfium2 でページ画像化 → Vision OCR
+            try:
+                png_list, _ = _render_pdf_to_png_list(file_bytes)
+            except Exception:
+                logger.exception("[fax-ocr] PDF画像化失敗: %s", file_key)
+                _supabase_service_patch(
+                    f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+                    {"ocr_status": "FAILED"},
+                )
+                return
+
+            logger.info("[fax-ocr] OCR開始: pages=%d document_id=%s", len(png_list), document_id)
+            try:
+                raw_text = _call_openai_ocr(png_list, timeout=_MAX_FAX_OCR_SECS)
+            except Exception:
+                logger.exception("[fax-ocr] OpenAI OCR失敗: %s", file_key)
+                _supabase_service_patch(
+                    f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",
+                    {"ocr_status": "FAILED"},
+                )
+                return
 
         logger.info("[fax-ocr] OCR完了: chars=%d document_id=%s", len(raw_text), document_id)
         normalized, _ = _normalize_text(raw_text)
