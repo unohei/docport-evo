@@ -52,14 +52,14 @@ export function buildCardSummary(doc, _hospitalMap) {
 
   // ---- subtitle ----
   // structured_json がある場合のみ表示。なければ null（PDF以外・旧データも非表示）
-  // フォーマット: "患者名 / 疑い病名" または各単体
-  //   patient_name      … 最大12文字
-  //   suspected_diagnosis > chief_complaint … 最大18文字（どちらか一方）
+  // フォーマット: "患者名 / 病名・診断" または各単体
+  //   patient_name … 最大12文字
+  //   diagnosis（v2）> suspected_diagnosis（v1）> chief_complaint … 最大18文字
   let subtitle = null;
   if (s) {
     const parts = [
       trunc(s.patient_name, 12),
-      trunc(s.suspected_diagnosis || s.chief_complaint, 18),
+      trunc(s.diagnosis || s.suspected_diagnosis || s.chief_complaint, 18),
     ].filter(Boolean);
     subtitle = parts.length > 0 ? parts.join(" / ") : null;
   }

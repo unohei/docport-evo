@@ -18,19 +18,24 @@ import ScanCapture from "../components/ScanCapture";
 import { findHospitalCandidates } from "../utils/hospitalMatch";
 import RecipientPicker from "../components/send/RecipientPicker";
 
-// 構造化JSONの表示ラベル（順序保持のため配列）
+// 構造化JSONの表示ラベル（v2スキーマ・順序保持のため配列）
 const STRUCTURED_LABELS = [
-  ["patient_name",         "患者名"],
-  ["patient_id",           "患者ID"],
-  ["birth_date",           "生年月日"],
-  ["referrer_hospital",    "紹介元病院"],
-  ["referrer_doctor",      "紹介元医師"],
-  ["referral_to_hospital", "紹介先病院"],
-  ["referral_date",        "紹介日"],
-  ["chief_complaint",      "主訴"],
-  ["suspected_diagnosis",  "疑い病名"],
-  ["allergies",            "アレルギー"],
-  ["medications",          "処方薬"],
+  ["patient_name",        "患者名"],
+  ["patient_id",          "患者ID"],
+  ["date_of_birth",       "生年月日"],
+  ["gender",              "性別"],
+  ["referring_hospital",  "紹介元病院"],
+  ["referring_doctor",    "紹介元医師"],
+  ["department",          "診療科"],
+  ["target_hospital",     "紹介先病院"],
+  ["referral_date",       "紹介日"],
+  ["chief_complaint",     "主訴"],
+  ["diagnosis",           "病名・診断"],
+  ["purpose_of_referral", "紹介目的"],
+  ["allergy",             "アレルギー"],
+  ["medication",          "処方薬"],
+  ["past_history",        "既往歴"],
+  ["notes",               "備考"],
 ];
 
 const LABEL_MAP = Object.fromEntries(STRUCTURED_LABELS);
@@ -245,7 +250,7 @@ export default function SendTab({
     const structuredPayload = structuredRaw
       ? {
           structured_json: structuredEdit ?? structuredRaw,
-          structured_version: "v1",
+          structured_version: "v2",
           structured_updated_at: new Date().toISOString(),
           structured_updated_by: changedKeys.length > 0 ? "human" : "ai",
           structured_source: "openai",
@@ -269,7 +274,7 @@ export default function SendTab({
 
 
   const hospitalCandidates = useMemo(() => {
-    const targetName = ocrResult?.structured?.referral_to_hospital;
+    const targetName = ocrResult?.structured?.target_hospital;
     return findHospitalCandidates(targetName, hospitals, myHospitalId);
   }, [ocrResult, hospitals, myHospitalId]);
 
@@ -426,14 +431,14 @@ export default function SendTab({
             />
 
             {/* 宛先病院AI候補（OCRから紹介先病院名を読み取れた場合） */}
-            {checkMode && ocrResult?.structured?.referral_to_hospital && hospitalCandidates.length > 0 && (
+            {checkMode && ocrResult?.structured?.target_hospital && hospitalCandidates.length > 0 && (
               <div style={{
                 padding: "8px 12px", borderRadius: 10,
                 background: "rgba(14,165,233,0.06)",
                 border: "1px solid rgba(14,165,233,0.18)",
               }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", marginBottom: 6 }}>
-                  AI候補（紹介状から読み取った宛先: {ocrResult.structured.referral_to_hospital}）
+                  AI候補（紹介状から読み取った宛先: {ocrResult.structured.target_hospital}）
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {hospitalCandidates.map((h) => (

@@ -566,21 +566,45 @@ _STRUCTURE_PROMPT = """\
 - 不明・記載なしの項目は null にしてください
 - テキストに明示されていない情報は推測しないでください
 - 余計な説明文や前置きは不要です。JSONのみ出力してください
+- gender は "male" / "female" / "other" のいずれかで出力してください（不明は null）
+- date_of_birth / referral_date は "YYYY-MM-DD" 形式で出力してください（不明は null）
 
 {
-  "patient_name": null,
-  "patient_id": null,
-  "birth_date": null,
-  "referrer_hospital": null,
-  "referrer_doctor": null,
-  "referral_to_hospital": null,
-  "referral_date": null,
-  "chief_complaint": null,
-  "suspected_diagnosis": null,
-  "allergies": null,
-  "medications": null
+  "patient_name":        null,
+  "patient_id":          null,
+  "date_of_birth":       null,
+  "gender":              null,
+  "referring_hospital":  null,
+  "referring_doctor":    null,
+  "department":          null,
+  "target_hospital":     null,
+  "referral_date":       null,
+  "chief_complaint":     null,
+  "diagnosis":           null,
+  "purpose_of_referral": null,
+  "allergy":             null,
+  "medication":          null,
+  "past_history":        null,
+  "notes":               null
 }
 """
+# --- 将来の HL7/FHIR 変換マッピング（参考）---
+# patient_name        → Patient.name
+# patient_id          → Patient.identifier
+# date_of_birth       → Patient.birthDate
+# gender              → Patient.gender
+# referring_hospital  → Organization (referrer)
+# referring_doctor    → Practitioner (referrer)
+# department          → Practitioner.specialty
+# target_hospital     → Organization (receiver)
+# referral_date       → ServiceRequest.authoredOn
+# chief_complaint     → ServiceRequest.reasonCode
+# diagnosis           → Condition.code
+# purpose_of_referral → ServiceRequest.reasonCode
+# allergy             → AllergyIntolerance
+# medication          → MedicationStatement
+# past_history        → Condition (historical)
+# notes               → Annotation
 
 
 # ----------------------------
@@ -954,6 +978,29 @@ def _generate_alerts(text: str) -> list[dict]:
 # ----------------------------
 # 構造化 内部ヘルパー
 # ----------------------------
+_GENDER_MAP: dict[str, str] = {
+    "男": "male", "男性": "male", "男子": "male", "m": "male",
+    "女": "female", "女性": "female", "女子": "female", "f": "female",
+    "その他": "other", "不明": None,
+}
+
+def _sanitize_structured(data: dict) -> dict:
+    """
+    AIが返した構造化JSONを保存前に軽く正規化する。
+    - 文字列: 前後空白除去、空文字 → null
+    - gender: 日本語表記 / 略称 → "male"/"female"/"other"/null
+    """
+    result = {}
+    for k, v in data.items():
+        if isinstance(v, str):
+            v = v.strip() or None
+        if k == "gender" and isinstance(v, str):
+            lower = v.lower()
+            v = _GENDER_MAP.get(lower, v if v in {"male", "female", "other"} else None)
+        result[k] = v
+    return result
+
+
 def _structure_referral_text(
     text: str,
     timeout: float = _STRUCTURE_TIMEOUT_SECS,
@@ -995,7 +1042,8 @@ def _structure_referral_text(
         end = raw.rfind("}") + 1
         if start < 0 or end <= start:
             return None
-        return json.loads(raw[start:end])
+        parsed = json.loads(raw[start:end])
+        return _sanitize_structured(parsed)
     except Exception:
         return None
 
@@ -2074,7 +2122,9 @@ def _analyze_document_for_fax(document_id: str, file_key: str) -> None:
             "document_type": doc_type,
         }
         if structured:
-            patch_data["structured_json"] = structured
+            patch_data["structured_json"]    = structured
+            patch_data["structured_version"] = "v2"
+            patch_data["structured_source"]  = "openai"
 
         _supabase_service_patch(
             f"documents?id=eq.{urllib.parse.quote(document_id, safe='')}",

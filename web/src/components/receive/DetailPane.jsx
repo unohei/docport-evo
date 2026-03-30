@@ -278,15 +278,34 @@ export default function DetailPane({
   const isCompleted = doc.status === "ARCHIVED";
   const canAssign   = !isCompleted && !doc.owner_user_id;
 
-  // OCR情報を取得（doc直列 > structured_json フォールバック）
-  const sj             = doc.structured_json || {};
+  // v1 → v2 フィールド名の正規化（後方互換）
+  // v1 キー名: birth_date / referrer_hospital / referrer_doctor / referral_to_hospital /
+  //            suspected_diagnosis / allergies / medications
+  // v2 キー名: date_of_birth / referring_hospital / referring_doctor / target_hospital /
+  //            diagnosis / allergy / medication（+ gender / department / purpose_of_referral / past_history / notes）
+  function normalizeStructuredJson(raw) {
+    if (!raw) return {};
+    return {
+      ...raw,
+      date_of_birth:      raw.date_of_birth      ?? raw.birth_date           ?? null,
+      referring_hospital: raw.referring_hospital  ?? raw.referrer_hospital    ?? null,
+      referring_doctor:   raw.referring_doctor    ?? raw.referrer_doctor      ?? null,
+      target_hospital:    raw.target_hospital     ?? raw.referral_to_hospital ?? null,
+      diagnosis:          raw.diagnosis           ?? raw.suspected_diagnosis  ?? null,
+      allergy:            raw.allergy             ?? raw.allergies            ?? null,
+      medication:         raw.medication          ?? raw.medications          ?? null,
+    };
+  }
+
+  // OCR情報を取得（doc直列 > structured_json フォールバック・v1/v2両対応）
+  const sj             = normalizeStructuredJson(doc.structured_json);
   const ocrText        = doc.ocr_text || sj.raw_text || sj.full_text || "";
-  const docType        = doc.document_type || sj.doc_type || sj.document_type || "";
-  const patientName    = sj.patient_name || sj.patient || "";
+  const docType        = doc.document_type || sj.document_type || "";
+  const patientName    = sj.patient_name || "";
   const patientId      = sj.patient_id || "";
-  const deptInfo       = sj.department || sj.dept || "";
-  const referDate      = sj.date || sj.refer_date || "";
-  const sensitiveFlags = sj.warnings || sj.sensitive_flags || [];
+  const deptInfo       = sj.department || "";
+  const referDate      = sj.referral_date || "";
+  const sensitiveFlags = sj.warnings || [];
   const hasOcrInfo     = docType || patientName || patientId || deptInfo || referDate;
 
   return (
