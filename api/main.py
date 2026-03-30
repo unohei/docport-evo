@@ -72,7 +72,7 @@ import pypdfium2 as pdfium
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 
-from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -483,7 +483,11 @@ def _presign_upload(content_type: str = "application/pdf") -> dict:
     return {"upload_url": url, "file_key": key, "content_type": content_type, "file_ext": ext}
 
 
-def _presign_download(key: str, original_filename: Optional[str] = None):
+def _presign_download(key: str, original_filename: Optional[str] = None, mode: str = "inline"):
+    """
+    mode="inline"  (デフォルト): ResponseContentDisposition なし → プレビュー用
+    mode="download": attachment + filename* → 明示的なファイル保存用
+    """
     try:
         bucket = get_bucket_name()
         s3 = get_s3_client()
@@ -492,7 +496,7 @@ def _presign_download(key: str, original_filename: Optional[str] = None):
         raise HTTPException(status_code=500, detail="ストレージ接続エラーが発生しました")
 
     params: dict = {"Bucket": bucket, "Key": key}
-    if original_filename:
+    if mode == "download" and original_filename:
         # RFC 5987 エンコード（非ASCII文字を含む場合も安全にダウンロード名を指定する）
         encoded = urllib.parse.quote(original_filename, safe="")
         params["ResponseContentDisposition"] = (
@@ -525,16 +529,21 @@ def presign_upload_api(
 @app.get("/api/presign-download")
 def presign_download_api(
     key: str,
+    mode: str = Query("inline", pattern="^(inline|download)$"),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
-    """JWT 検証 + documents の hospital_id チェック後に署名 URL を発行"""
+    """
+    JWT 検証 + documents の hospital_id チェック後に署名 URL を発行。
+    mode=inline (デフォルト): Content-Disposition なし → プレビュー用
+    mode=download: attachment + 意味のあるファイル名 → 明示的ダウンロード用
+    """
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
     doc_meta = _assert_download_access(key, hospital_id, jwt_token)
-    filename = _build_download_filename(doc_meta)
-    return _presign_download(key, filename)
+    filename = _build_download_filename(doc_meta) if mode == "download" else None
+    return _presign_download(key, filename, mode)
 
 
 @app.post("/presign-upload")
@@ -551,6 +560,7 @@ def presign_upload_compat(
 @app.get("/presign-download")
 def presign_download_compat(
     key: str,
+    mode: str = Query("inline", pattern="^(inline|download)$"),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     user: dict = Depends(verify_jwt),
 ):
@@ -559,8 +569,8 @@ def presign_download_compat(
     user_id = user.get("sub", "")
     hospital_id = _get_hospital_id(user_id, jwt_token)
     doc_meta = _assert_download_access(key, hospital_id, jwt_token)
-    filename = _build_download_filename(doc_meta)
-    return _presign_download(key, filename)
+    filename = _build_download_filename(doc_meta) if mode == "download" else None
+    return _presign_download(key, filename, mode)
 
 
 # ----------------------------
