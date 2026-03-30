@@ -10,27 +10,9 @@ import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
 import { getPreviewKey, isPreviewable } from "../../utils/preview";
 import HospitalAvatar from "../common/HospitalAvatar";
+import { normalizeStructuredJson } from "../../utils/structuredFormat";
+import StructuredCopyPanel from "../common/StructuredCopyPanel";
 
-function InfoRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-      <span style={{
-        fontSize: 12,
-        fontWeight: 800,
-        color: DP.textSub,
-        minWidth: 72,
-        flexShrink: 0,
-        paddingTop: 1,
-      }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 13, color: DP.text, fontWeight: 600, lineHeight: 1.5 }}>
-        {value}
-      </span>
-    </div>
-  );
-}
 
 function SectionTitle({ children }) {
   return (
@@ -126,31 +108,10 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
   const sc         = docStatusColor(doc, isExpired);
   const sl         = docStatusLabel(doc, isExpired);
 
-  // v1 → v2 フィールド名の正規化（DetailPane と同じロジック）
-  function normalizeStructuredJson(raw) {
-    if (!raw) return {};
-    return {
-      ...raw,
-      date_of_birth:      raw.date_of_birth      ?? raw.birth_date           ?? null,
-      referring_hospital: raw.referring_hospital  ?? raw.referrer_hospital    ?? null,
-      referring_doctor:   raw.referring_doctor    ?? raw.referrer_doctor      ?? null,
-      target_hospital:    raw.target_hospital     ?? raw.referral_to_hospital ?? null,
-      diagnosis:          raw.diagnosis           ?? raw.suspected_diagnosis  ?? null,
-      allergy:            raw.allergy             ?? raw.allergies            ?? null,
-      medication:         raw.medication          ?? raw.medications          ?? null,
-    };
-  }
-
-  // OCR情報（v1/v2両対応）
-  const sj             = normalizeStructuredJson(doc.structured_json);
+  // OCR情報を取得（v1/v2両対応）
+  const sj             = normalizeStructuredJson(doc.structured_json) ?? {};
   const ocrText        = doc.ocr_text || sj.raw_text || sj.full_text || "";
-  const docType        = doc.document_type || sj.document_type || "";
-  const patientName    = sj.patient_name || "";
-  const patientId      = sj.patient_id || "";
-  const deptInfo       = sj.department || "";
-  const referDate      = sj.referral_date || "";
   const sensitiveFlags = sj.warnings || [];
-  const hasOcrInfo     = docType || patientName || patientId || deptInfo || referDate;
 
   return (
     <div style={{
@@ -246,24 +207,11 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
           </div>
         )}
 
-        {/* OCR構造化情報 */}
-        {hasOcrInfo && (
+        {/* 構造化データ（カルテ貼り付け / JSON コピー） */}
+        {doc.structured_json && (
           <section>
-            <SectionTitle>OCR 取得情報</SectionTitle>
-            <div style={{
-              background: DP.surface,
-              borderRadius: 10,
-              padding: "12px 14px",
-              border: `1px solid ${DP.border}`,
-              display: "grid",
-              gap: 9,
-            }}>
-              <InfoRow label="書類種別" value={docType} />
-              <InfoRow label="患者名"   value={patientName} />
-              <InfoRow label="患者ID"   value={patientId} />
-              <InfoRow label="診療科"   value={deptInfo} />
-              <InfoRow label="日付"     value={referDate} />
-            </div>
+            <SectionTitle>構造化データ</SectionTitle>
+            <StructuredCopyPanel rawSj={doc.structured_json} />
           </section>
         )}
 

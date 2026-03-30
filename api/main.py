@@ -636,14 +636,31 @@ def _render_pdf_to_png_list(pdf_bytes: bytes) -> tuple[list[bytes], int]:
 def _extract_docx_text(docx_bytes: bytes) -> tuple[str, list[str]]:
     """
     python-docx で DOCX 本文テキストを抽出する。
-    - 段落テキストを順に連結（表・ヘッダー・フッターは含まない）
+    - 段落テキスト（本文）と表テキスト（表形式の紹介状に対応）を連結
+    - 段落内テキストの後に表テキストを続ける（表は "セル | セル" 形式）
+    - ヘッダー・フッターは含まない
     - 失敗時は空文字 + 警告を返す（graceful degradation: 500 にしない）
     """
     try:
         from docx import Document as DocxDocument  # noqa: PLC0415
         doc = DocxDocument(io.BytesIO(docx_bytes))
-        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-        return "\n".join(paragraphs), []
+        lines: list[str] = []
+
+        # 段落テキスト（表外の本文）
+        for p in doc.paragraphs:
+            if p.text.strip():
+                lines.append(p.text)
+
+        # 表テキスト（紹介状のフォームで氏名・診断などが表に入るケースに対応）
+        # 各行を "セルA | セルB | ..." 形式に整形。結合セルは内容が重複する場合があるが
+        # normalize 処理で吸収される範囲のためここでは dedup しない（MVP）
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    lines.append(" | ".join(cells))
+
+        return "\n".join(lines), []
     except Exception as e:
         return "", [f"DOCX抽出失敗: {e}。内容を確認の上、送信可否を判断してください。"]
 
