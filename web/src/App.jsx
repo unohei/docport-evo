@@ -289,6 +289,8 @@ export default function App() {
 
   // login
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginMode, setLoginMode] = useState("password"); // "password" | "magic"
 
   // filters
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
@@ -497,6 +499,12 @@ export default function App() {
     });
     if (error) alert(error.message);
     else alert("メール送信しました（届いたリンクを開いてログイン）");
+  };
+
+  const signInWithPassword = async () => {
+    if (!email || !password) return alert("メールアドレスとパスワードを入力してください");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message);
   };
 
   const logout = async () => {
@@ -941,26 +949,70 @@ export default function App() {
   }
 
   if (!session) {
+    const tabStyle = (active) => ({
+      padding: "8px 20px", fontWeight: 700, fontSize: 14, cursor: "pointer",
+      borderRadius: "8px 8px 0 0", border: "1px solid rgba(15,23,42,0.12)",
+      borderBottom: active ? "1px solid #fff" : "1px solid rgba(15,23,42,0.12)",
+      background: active ? "#fff" : "rgba(248,250,252,0.8)",
+      color: active ? THEME.primary : THEME.text,
+      marginBottom: -1,
+    });
     return (
       <Root>
         <div style={{ padding: 24 }}>
-          <div style={{ maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
+          <div style={{ maxWidth: 400, margin: "0 auto", textAlign: "center" }}>
             <img
               src={DocPortLogo} alt="DocPort"
               style={{ width: logoLoginSize, height: logoLoginSize, marginBottom: 14, opacity: 0.95 }}
             />
-            <h1 style={{ marginBottom: 8, fontWeight: 800, color: THEME.text }}>DocPort</h1>
-            <p style={{ marginTop: 0, opacity: 0.7, color: THEME.text }}>送らない共有。置くだけ連携。</p>
-            <div style={{ marginTop: 24, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+            <h1 style={{ marginBottom: 4, fontWeight: 800, color: THEME.text }}>DocPort</h1>
+            <p style={{ marginTop: 0, marginBottom: 24, opacity: 0.7, color: THEME.text }}>送らない共有。置くだけ連携。</p>
+
+            {/* タブ */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 0, marginBottom: 0 }}>
+              <button style={tabStyle(loginMode === "password")} onClick={() => setLoginMode("password")}>
+                パスワードログイン
+              </button>
+              <button style={tabStyle(loginMode === "magic")} onClick={() => setLoginMode("magic")}>
+                マジックリンク
+              </button>
+            </div>
+
+            {/* パネル */}
+            <div style={{
+              border: "1px solid rgba(15,23,42,0.12)", borderRadius: "0 8px 8px 8px",
+              background: "#fff", padding: "24px 20px",
+            }}>
               <TextInput
                 value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="email" style={{ flex: 1, minWidth: 220, maxWidth: 320 }}
+                placeholder="メールアドレス"
+                style={{ width: "100%", boxSizing: "border-box", marginBottom: 10 }}
               />
-              <PrimaryButton onClick={sendMagicLink} style={{ minWidth: 160 }}>Send Link</PrimaryButton>
+
+              {loginMode === "password" ? (
+                <>
+                  <TextInput
+                    type="password"
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="パスワード"
+                    style={{ width: "100%", boxSizing: "border-box", marginBottom: 14 }}
+                    onKeyDown={(e) => e.key === "Enter" && signInWithPassword()}
+                  />
+                  <PrimaryButton onClick={signInWithPassword} style={{ width: "100%" }}>
+                    ログイン
+                  </PrimaryButton>
+                </>
+              ) : (
+                <>
+                  <PrimaryButton onClick={sendMagicLink} style={{ width: "100%", marginBottom: 10 }}>
+                    マジックリンクを送る
+                  </PrimaryButton>
+                  <p style={{ margin: 0, fontSize: 12, opacity: 0.65, color: THEME.text }}>
+                    ※ メールのリンクを開くとログインできます
+                  </p>
+                </>
+              )}
             </div>
-            <p style={{ marginTop: 12, fontSize: 13, opacity: 0.7, color: THEME.text }}>
-              ※ メールのリンクを開くとログインできます
-            </p>
           </div>
         </div>
       </Root>
