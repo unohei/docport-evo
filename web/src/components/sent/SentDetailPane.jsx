@@ -74,7 +74,7 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
     setInlineLoading(true);
     fetchPreviewUrl(doc)
       .then(url  => { if (!cancelled) { setInlineUrl(url); setInlineError(""); } })
-      .catch(e   => { if (!cancelled) { setInlineUrl(""); setInlineError(e?.message ?? "URLの取得に失敗しました"); } })
+      .catch(e   => { console.error("[SentDetailPane] fetchPreviewUrl failed:", e?.message); if (!cancelled) { setInlineUrl(""); setInlineError(e?.message ?? "URLの取得に失敗しました"); } })
       .finally(() => { if (!cancelled) setInlineLoading(false); });
     return () => { cancelled = true; };
   }, [doc?.id, fetchPreviewUrl]);

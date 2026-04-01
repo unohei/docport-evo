@@ -598,11 +598,14 @@ export default function App() {
 
   const getPresignedDownload = async (fileKey) => {
     const token = session?.access_token;
-    const res = await fetch(
-      `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}`,
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-    );
-    if (!res.ok) throw new Error(await res.text());
+    const url = `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}`;
+    console.log("[presign-download] GET", url, token ? "JWT=ok" : "JWT=MISSING");
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error("[presign-download] error", res.status, body);
+      throw new Error(`HTTP ${res.status}: ${body}`);
+    }
     return res.json();
   };
 
@@ -872,7 +875,9 @@ export default function App() {
   // DetailPane インラインプレビュー用（モーダルを開かずURLだけ返す）
   const fetchPreviewUrl = async (doc) => {
     if (!doc?.file_key) throw new Error("file_key not found");
-    const { download_url } = await getPresignedDownload(getPreviewKey(doc));
+    const previewKey = getPreviewKey(doc);
+    console.log("[fetchPreviewUrl] doc.id=", doc?.id, "previewKey=", previewKey);
+    const { download_url } = await getPresignedDownload(previewKey);
     if (!download_url) throw new Error("download_url が取得できませんでした");
     return download_url;
   };
