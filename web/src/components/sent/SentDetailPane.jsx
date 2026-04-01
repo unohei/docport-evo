@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
-import { getPreviewKey, isPreviewable } from "../../utils/preview";
+import { getPreviewKey, isPreviewable, getExtFromKey } from "../../utils/preview";
 import HospitalAvatar from "../common/HospitalAvatar";
 import { normalizeStructuredJson } from "../../utils/structuredFormat";
 import StructuredCopyPanel from "../common/StructuredCopyPanel";
@@ -59,19 +59,22 @@ function ActionButton({ children, variant = "ghost", disabled = false, onClick }
 export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, cancelDocument, fetchPreviewUrl }) {
   const [inlineUrl,     setInlineUrl]     = useState("");
   const [inlineLoading, setInlineLoading] = useState(false);
+  const [inlineError,   setInlineError]   = useState("");
   const [copied,        setCopied]        = useState(false);
 
   useEffect(() => {
     if (!doc || !fetchPreviewUrl || doc.status === "CANCELLED") {
       setInlineUrl("");
+      setInlineError("");
       return;
     }
     let cancelled = false;
     setInlineUrl("");
+    setInlineError("");
     setInlineLoading(true);
     fetchPreviewUrl(doc)
-      .then(url  => { if (!cancelled) setInlineUrl(url); })
-      .catch(()  => { if (!cancelled) setInlineUrl(""); })
+      .then(url  => { if (!cancelled) { setInlineUrl(url); setInlineError(""); } })
+      .catch(e   => { if (!cancelled) { setInlineUrl(""); setInlineError(e?.message ?? "URLの取得に失敗しました"); } })
       .finally(() => { if (!cancelled) setInlineLoading(false); });
     return () => { cancelled = true; };
   }, [doc?.id, fetchPreviewUrl]);
@@ -289,18 +292,38 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
               <span style={{ fontSize: 12, color: DP.textSub }}>読み込み中...</span>
             </div>
           ) : inlineUrl && isPreviewable(getPreviewKey(doc)) ? (
-            <div style={{
-              borderRadius: 10,
-              border: `1px solid ${DP.border}`,
-              overflow: "hidden",
-              height: "clamp(300px, 60vh, 800px)",
-            }}>
-              <iframe
-                src={inlineUrl}
-                style={{ width: "100%", height: "100%", border: "none" }}
-                title="ファイルプレビュー"
-              />
-            </div>
+            /* 画像（png/jpg/jpeg/webp）は <img>、PDF は <iframe> で描画 */
+            ["png", "jpg", "jpeg", "webp"].includes(getExtFromKey(getPreviewKey(doc))) ? (
+              <div style={{
+                borderRadius: 10,
+                border: `1px solid ${DP.border}`,
+                overflow: "hidden",
+                height: "clamp(300px, 60vh, 800px)",
+                background: "#F8F9FA",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <img
+                  src={inlineUrl}
+                  alt="ファイルプレビュー"
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }}
+                />
+              </div>
+            ) : (
+              <div style={{
+                borderRadius: 10,
+                border: `1px solid ${DP.border}`,
+                overflow: "hidden",
+                height: "clamp(300px, 60vh, 800px)",
+              }}>
+                <iframe
+                  src={inlineUrl}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                  title="ファイルプレビュー"
+                />
+              </div>
+            )
           ) : inlineUrl ? (
             <div style={{
               background: "#F1F5F9",
@@ -331,6 +354,18 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
               >
                 ダウンロードして確認
               </a>
+            </div>
+          ) : inlineError ? (
+            <div style={{
+              background: "#FEF2F2",
+              borderRadius: 10,
+              border: "1px solid #FECACA",
+              padding: "14px 16px",
+              fontSize: 11,
+              color: "#B91C1C",
+            }}>
+              プレビューの読み込みに失敗しました。ネットワークまたは権限をご確認ください。
+              <div style={{ marginTop: 4, opacity: 0.7, wordBreak: "break-all" }}>{inlineError}</div>
             </div>
           ) : doc.status === "CANCELLED" ? (
             <div style={{
