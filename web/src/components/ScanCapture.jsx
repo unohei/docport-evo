@@ -21,6 +21,7 @@ export default function ScanCapture({
   const outCanvasRef     = useRef(null);
   const overlayRef       = useRef(null);
   const streamRef        = useRef(null);
+  const pendingPngRef    = useRef(null);   // PDF化用PNG dataURL（stage遷移後のcanvas差し替え対策）
   const fallbackInputRef = useRef(null);
 
   const rafRef              = useRef(null);
@@ -632,9 +633,8 @@ export default function ScanCapture({
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  async function canvasToPdfFile(canvas, outName) {
-    const dataUrl  = canvas.toDataURL("image/png");
-    const pngBytes = await fetch(dataUrl).then((r) => r.arrayBuffer());
+  async function pngDataUrlToPdfFile(pngDataUrl, outName) {
+    const pngBytes = await fetch(pngDataUrl).then((r) => r.arrayBuffer());
     const pdf = await PDFDocument.create();
     const img = await pdf.embedPng(pngBytes);
     const page = pdf.addPage([img.width, img.height]);
@@ -775,6 +775,8 @@ export default function ScanCapture({
 
       const outName = buildFilename(filenameBase);
       setPendingName(outName);
+      // PDF化用にPNG dataURLを保存（stage遷移後にoutCanvasRefが空canvasに差し替わるため）
+      pendingPngRef.current = outCanvas.toDataURL("image/png");
       setPreviewUrl(outCanvas.toDataURL("image/jpeg", 0.92));
       console.log("[Scan] processing step: preview ready");
 
@@ -834,6 +836,7 @@ export default function ScanCapture({
 
       const outName = buildFilename(filenameBase);
       setPendingName(outName);
+      pendingPngRef.current = outCanvas.toDataURL("image/png");
       setPreviewUrl(outCanvas.toDataURL("image/jpeg", 0.92));
       setStage("preview");
     } catch (e) {
@@ -857,14 +860,14 @@ export default function ScanCapture({
 
   const confirmPlace = async () => {
     if (submitting) return;
-    const outCanvas = outCanvasRef.current;
-    if (!outCanvas || !pendingName) return;
+    const pngDataUrl = pendingPngRef.current;
+    if (!pngDataUrl || !pendingName) return;
     setSubmitting(true);
     setErr("");
     const t0 = performance.now();
     try {
       console.log("[Scan] processing step: pdf create");
-      const file = await canvasToPdfFile(outCanvas, pendingName);
+      const file = await pngDataUrlToPdfFile(pngDataUrl, pendingName);
       const ms = Math.round(performance.now() - t0);
       console.log(`[DocPort:Perf] PDF created in ${ms}ms`);
       perfRef.current.pdfMs = ms;
@@ -882,6 +885,7 @@ export default function ScanCapture({
     setErr("");
     setPreviewUrl("");
     setPendingName("");
+    pendingPngRef.current = null;
     lastQuadNormRef.current = null;
     setShowFallback(false);
     await startCamera();

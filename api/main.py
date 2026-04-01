@@ -233,11 +233,13 @@ def _supabase_get(path: str, jwt_token: str) -> list:
     service_role キーは使わない。
     """
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        logger.error("[_supabase_get] SUPABASE_URL or SUPABASE_ANON_KEY is not set")
         raise HTTPException(
             status_code=500,
             detail="SUPABASE_URL / SUPABASE_ANON_KEY が未設定です",
         )
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{path}"
+    logger.info("[_supabase_get] START url=%s", url.split("?")[0])
     req = urllib.request.Request(
         url,
         headers={
@@ -247,28 +249,37 @@ def _supabase_get(path: str, jwt_token: str) -> list:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read())
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+            logger.info("[_supabase_get] OK rows=%d path=%s", len(data), path.split("?")[0])
+            return data
     except urllib.error.HTTPError as e:
-        logger.error("Supabase user GET エラー (%d): path=%s", e.code, path)
+        body_snippet = e.read()[:200].decode(errors="replace") if hasattr(e, "read") else ""
+        logger.error("[_supabase_get] HTTPError code=%d path=%s body=%s", e.code, path.split("?")[0], body_snippet)
         raise HTTPException(status_code=502, detail="データベース接続エラーが発生しました")
+    except urllib.error.URLError as e:
+        logger.error("[_supabase_get] URLError (timeout or network) reason=%s path=%s", e.reason, path.split("?")[0])
+        raise HTTPException(status_code=502, detail="データベース接続タイムアウトが発生しました")
     except Exception:
-        logger.exception("Supabase user GET 接続エラー: path=%s", path)
+        logger.exception("[_supabase_get] unexpected error path=%s", path.split("?")[0])
         raise HTTPException(status_code=502, detail="データベース接続エラーが発生しました")
 
 
 def _get_hospital_id(user_id: str, jwt_token: str) -> str:
     """profiles テーブルから呼び出し元ユーザーの hospital_id を取得する"""
+    logger.info("[_get_hospital_id] START user_id=%s", user_id)
     uid_encoded = urllib.parse.quote(user_id, safe="")
     rows = _supabase_get(
         f"profiles?id=eq.{uid_encoded}&select=hospital_id",
         jwt_token,
     )
     if not rows or not rows[0].get("hospital_id"):
+        logger.warning("[_get_hospital_id] hospital_id not found for user_id=%s", user_id)
         raise HTTPException(
             status_code=403,
             detail="プロフィールが見つかりません（hospital_id 未設定）",
         )
+    logger.info("[_get_hospital_id] OK hospital_id=%s", rows[0]["hospital_id"])
     return rows[0]["hospital_id"]
 
 
