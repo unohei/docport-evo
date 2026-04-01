@@ -288,23 +288,7 @@ export default function GlobalSidebar({
         )}
         {/* ユーザーアバター（未実装: デモ非表示）
         <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} /> */}
-        <button
-          onClick={onLogout}
-          title="ログアウト"
-          style={{
-            width: 52, height: 30,
-            borderRadius: 9,
-            border: "1px solid rgba(255,255,255,0.15)",
-            background: "transparent",
-            color: "rgba(255,255,255,0.45)",
-            cursor: "pointer",
-            fontSize: 10,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-          }}
-        >
-          ログアウト
-        </button>
+        <NavIcon emoji="🚪" label="ログアウト" active={false} onClick={onLogout} />
       </div>
     </div>
   );

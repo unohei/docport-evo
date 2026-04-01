@@ -117,7 +117,7 @@ export default function ReceiveScreen({
   addDepartment,
 }) {
   const isMobile = useMediaQuery("(max-width: 639px)");
-  const isTablet = useMediaQuery("(max-width: 1023px)");
+  const isTablet = useMediaQuery("(max-width: 899px)");
 
   const [activeLane,  setActiveLane]  = useState("new");
   const [selectedDoc, setSelectedDoc] = useState(null);
