@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from "react";
 import { DP, senderDisplay, recipientDisplay } from "./receiveConstants";
-import { getPreviewKey, isPreviewable } from "../../utils/preview";
+import { getPreviewKey, isPreviewable, getExtFromKey } from "../../utils/preview";
 import HospitalAvatar from "../common/HospitalAvatar";
 import { normalizeStructuredJson } from "../../utils/structuredFormat";
 import StructuredCopyPanel from "../common/StructuredCopyPanel";
@@ -483,12 +483,25 @@ export default function DetailPane({
               border: `1px solid ${DP.border}`,
               overflow: "hidden",
               height: "clamp(300px, 60vh, 800px)",
+              background: "#F8F9FA",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}>
-              <iframe
-                src={inlineUrl}
-                style={{ width: "100%", height: "100%", border: "none" }}
-                title="ファイルプレビュー"
-              />
+              {/* 画像（png/jpg/jpeg/webp）は <img>、PDF は <iframe> で描画 */}
+              {["png", "jpg", "jpeg", "webp"].includes(getExtFromKey(getPreviewKey(doc))) ? (
+                <img
+                  src={inlineUrl}
+                  alt="ファイルプレビュー"
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }}
+                />
+              ) : (
+                <iframe
+                  src={inlineUrl}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                  title="ファイルプレビュー"
+                />
+              )}
             </div>
           ) : inlineUrl ? (
             <div style={{

@@ -42,7 +42,7 @@ import {
 import FaxInboundList from "./tabs/FaxInboundList";
 import ReceiveScreen from "./screens/ReceiveScreen";
 import SendScreen from "./screens/SendScreen";
-import { getPreviewKey, isPreviewable } from "./utils/preview";
+import { getPreviewKey, isPreviewable, getExtFromKey } from "./utils/preview";
 import { logEvent, setAuditHospitalId } from "./utils/audit";
 
 function fmt(dt) {
@@ -131,7 +131,7 @@ const ALLOWED_MIME_EXT = {
 
 // ---- Preview Modal ----
 // previewable: true → iframe表示、false → ダウンロード促進UI
-function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, previewable }) {
+function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, previewable, isImage }) {
   if (!isOpen) return null;
 
   return (
@@ -224,8 +224,14 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
             </div>
           ) : url ? (
             previewable ? (
-              /* PDF / 画像: そのまま iframe 表示 */
-              <iframe title="pdf-preview" src={url} style={{ width: "100%", height: "100%", border: "none" }} />
+              /* 画像は <img>、PDF は <iframe> */
+              isImage ? (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8F9FA" }}>
+                  <img src={url} alt="プレビュー" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
+                </div>
+              ) : (
+                <iframe title="pdf-preview" src={url} style={{ width: "100%", height: "100%", border: "none" }} />
+              )
             ) : (
               /* Office等プレビュー未対応: ダウンロード促進 UI */
               <div style={{
@@ -305,6 +311,7 @@ export default function App() {
   const [previewError, setPreviewError] = useState("");
   // プレビュー可能フラグ（pdf/画像 → true、Office等 → false でDL促進UIに切替）
   const [previewable, setPreviewable] = useState(true);
+  const [previewIsImage, setPreviewIsImage] = useState(false);
 
   // OCR / upload state（v3.0: ocrLoading → uploadStatus に置換）
   // 'idle' | 'uploading' | 'ocr_running' | 'ready' | 'error'
@@ -817,9 +824,11 @@ export default function App() {
       // preview_file_key があればそちらを優先（変換済みPDF等）。なければ file_key。
       const previewKey = getPreviewKey(doc);
       const canPreview = isPreviewable(previewKey);
+      const extIsImage = ["png", "jpg", "jpeg", "webp"].includes(getExtFromKey(previewKey));
 
       setPreviewDoc(doc);
       setPreviewable(canPreview);
+      setPreviewIsImage(extIsImage);
       setPreviewLoading(true);
       setPreviewError("");
       setPreviewUrl("");
@@ -1097,7 +1106,7 @@ export default function App() {
           title={previewDoc ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}` : ""}
           metaLeft={previewDoc ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}` : ""}
           url={previewUrl} loading={previewLoading} error={previewError}
-          previewable={previewable}
+          previewable={previewable} isImage={previewIsImage}
         />
       </Root>
     );
@@ -1208,7 +1217,7 @@ export default function App() {
         isOpen={!!previewDoc} onClose={closePreview}
         title={previewTitle} metaLeft={previewMetaLeft}
         url={previewUrl} loading={previewLoading} error={previewError}
-        previewable={previewable}
+        previewable={previewable} isImage={previewIsImage}
       />
     </Root>
   );
