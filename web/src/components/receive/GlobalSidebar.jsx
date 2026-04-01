@@ -179,9 +179,9 @@ export function BottomNav({
         active={activeTab === "send" || activeTab === "sent"}
         onClick={() => onTabChange("send")}
       />
-      <NavIcon emoji="📝" label="下書き" active={false} disabled />
-      <NavIcon emoji="⚙️" label="設定"   active={false} disabled />
-      <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} />
+      {/* 下書き（未実装: デモ非表示）<NavIcon emoji="📝" label="下書き" active={false} disabled /> */}
+      {/* 設定（未実装: デモ非表示）<NavIcon emoji="⚙️" label="設定" active={false} disabled /> */}
+      {/* ユーザー（未実装: デモ非表示）<AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} /> */}
     </div>
   );
 }
@@ -250,20 +250,20 @@ export default function GlobalSidebar({
           active={activeTab === "send"}
           onClick={() => onTabChange("send")}
         />
-        {/* 下書き（未実装: stub） */}
+        {/* 下書き（未実装: デモ非表示）
         <NavIcon
           emoji="📝"
           label="下書き（準備中）"
           active={activeTab === "draft"}
           disabled
-        />
-        {/* 設定（未実装: stub） */}
+        /> */}
+        {/* 設定（未実装: デモ非表示）
         <NavIcon
           emoji="⚙️"
           label="設定（準備中）"
           active={activeTab === "settings"}
           disabled
-        />
+        /> */}
       </div>
 
       {/* ボトム: 病院アイコン + ログアウト */}
@@ -286,22 +286,24 @@ export default function GlobalSidebar({
             }}
           />
         )}
-        <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} />
+        {/* ユーザーアバター（未実装: デモ非表示）
+        <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} /> */}
         <button
           onClick={onLogout}
           title="ログアウト"
           style={{
-            width: 34, height: 34,
+            width: 52, height: 30,
             borderRadius: 9,
             border: "1px solid rgba(255,255,255,0.15)",
             background: "transparent",
             color: "rgba(255,255,255,0.45)",
             cursor: "pointer",
-            fontSize: 11,
-            fontWeight: 800,
+            fontSize: 10,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
           }}
         >
-          出
+          ログアウト
         </button>
       </div>
     </div>
