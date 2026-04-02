@@ -30,9 +30,9 @@ body {
   display: block;
   min-width: 320px;
 
-  background-color: #f8fbff;
+  background-color: #f4f8fd;
   background-image:
-    linear-gradient(180deg, #f8fbff 0%, #e6f0fa 100%),
+    linear-gradient(180deg, #f4f8fd 0%, #e6f0fa 100%),
     linear-gradient(#d9e6ef 1px, transparent 1px),
     linear-gradient(90deg, #d9e6ef 1px, transparent 1px);
   background-blend-mode: normal, normal, normal;
@@ -63,4 +63,9 @@ button {
 @keyframes loginFadeUp {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes waveFlow {
+  0%   { transform: translateX(0); }
+  50%  { transform: translateX(-10px); }
+  100% { transform: translateX(0); }
 }

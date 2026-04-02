@@ -1027,9 +1027,11 @@ export default function App() {
               />
               <p style={{
                 margin: 0,
-                fontSize: 13,
-                color: "#6b7280",
-                letterSpacing: "0.02em",
+                fontSize: 17,
+                fontWeight: 600,
+                color: "#334155",
+                letterSpacing: "0.04em",
+                lineHeight: 1.6,
               }}>
                 送らない共有。置くだけ連携。
               </p>
@@ -1132,10 +1134,40 @@ export default function App() {
             </div>
 
             {/* 波装飾 */}
-            <div style={{ marginTop: 16, opacity: 0.18, pointerEvents: "none", userSelect: "none" }}>
-              <svg viewBox="0 0 420 40" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", display: "block" }}>
-                <path d="M0,20 C70,0 140,40 210,20 C280,0 350,40 420,20" stroke="#3b82f6" strokeWidth="1.5" fill="none"/>
-                <path d="M0,28 C70,8 140,48 210,28 C280,8 350,48 420,28" stroke="#60a5fa" strokeWidth="1" fill="none"/>
+            <div style={{ marginTop: 16, opacity: 0.28, pointerEvents: "none", userSelect: "none", overflow: "hidden" }}>
+              <svg viewBox="0 0 420 52" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", display: "block" }}>
+                <defs>
+                  <linearGradient id="waveGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#3b82f6"/>
+                    <stop offset="100%" stopColor="#60a5fa"/>
+                  </linearGradient>
+                  <linearGradient id="waveGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#60a5fa"/>
+                    <stop offset="100%" stopColor="#93c5fd"/>
+                  </linearGradient>
+                  <linearGradient id="waveGrad3" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#93c5fd"/>
+                    <stop offset="100%" stopColor="#bfdbfe"/>
+                  </linearGradient>
+                </defs>
+                {/* 波1：最前面・濃いめ */}
+                <path
+                  d="M0,18 C70,2 140,38 210,18 C280,2 350,38 420,18"
+                  stroke="url(#waveGrad1)" strokeWidth="1.8" fill="none"
+                  style={{ animation: "waveFlow 6s ease-in-out infinite" }}
+                />
+                {/* 波2：中間 */}
+                <path
+                  d="M0,28 C70,10 140,46 210,28 C280,10 350,46 420,28"
+                  stroke="url(#waveGrad2)" strokeWidth="1.3" fill="none"
+                  style={{ animation: "waveFlow 8s ease-in-out infinite" }}
+                />
+                {/* 波3：最後面・薄め */}
+                <path
+                  d="M0,38 C70,20 140,52 210,38 C280,20 350,52 420,38"
+                  stroke="url(#waveGrad3)" strokeWidth="1" fill="none"
+                  style={{ animation: "waveFlow 10s ease-in-out infinite" }}
+                />
               </svg>
             </div>
           </div>
