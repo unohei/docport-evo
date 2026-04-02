@@ -30,11 +30,13 @@ body {
   display: block;
   min-width: 320px;
 
-  background-color: #f8fbfd; /* 少しだけ青み */
+  background-color: #f8fbff;
   background-image:
-    linear-gradient(#e6edf2 1px, transparent 1px),
-    linear-gradient(90deg, #e6edf2 1px, transparent 1px);
-  background-size: 24px 24px;
+    linear-gradient(180deg, #f8fbff 0%, #e6f0fa 100%),
+    linear-gradient(#d9e6ef 1px, transparent 1px),
+    linear-gradient(90deg, #d9e6ef 1px, transparent 1px);
+  background-blend-mode: normal, normal, normal;
+  background-size: 100% 100%, 24px 24px, 24px 24px;
 }
 
 /* 横幅の揺れ（スクロールバー出入り）対策：PCで効く */
@@ -51,4 +53,14 @@ button {
 /* OCRスピナー用 */
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ログイン画面アニメーション */
+@keyframes loginFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes loginFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

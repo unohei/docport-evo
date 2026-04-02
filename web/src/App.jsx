@@ -972,69 +972,171 @@ export default function App() {
   }
 
   if (!session) {
-    const tabStyle = (active) => ({
-      padding: "8px 20px", fontWeight: 700, fontSize: 14, cursor: "pointer",
-      borderRadius: "8px 8px 0 0", border: "1px solid rgba(15,23,42,0.12)",
-      borderBottom: active ? "1px solid #fff" : "1px solid rgba(15,23,42,0.12)",
-      background: active ? "#fff" : "rgba(248,250,252,0.8)",
-      color: active ? THEME.primary : THEME.text,
-      marginBottom: -1,
+    const loginTabStyle = (active) => ({
+      padding: "8px 22px",
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: "pointer",
+      borderRadius: 10,
+      border: "none",
+      background: active ? "#3b82f6" : "transparent",
+      color: active ? "#fff" : "#6b7280",
+      transition: "all 160ms ease",
     });
+    const loginInputStyle = {
+      width: "100%", boxSizing: "border-box",
+      height: 46, fontSize: 14,
+      border: "1px solid #d1d5db",
+      borderRadius: 10,
+      outline: "none",
+      transition: "border-color 160ms ease, box-shadow 160ms ease",
+    };
+    const loginBtnStyle = {
+      width: "100%", height: 46, fontSize: 15,
+      fontWeight: 700, cursor: "pointer",
+      borderRadius: 10, border: "none",
+      background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+      color: "#fff",
+      boxShadow: "0 4px 14px rgba(59,130,246,0.35)",
+      transition: "transform 120ms ease, box-shadow 120ms ease",
+    };
     return (
       <Root>
-        <div style={{ padding: 24 }}>
-          <div style={{ maxWidth: 400, margin: "0 auto", textAlign: "center" }}>
-            <img
-              src={DocPortLogoFull} alt="DocPort"
-              style={{ width: "100%", maxWidth: 200, height: "auto", display: "block", margin: "0 auto 24px" }}
-            />
-            {/* <h1 style={{ marginBottom: 4, fontWeight: 800, color: THEME.text }}>DocPort</h1> */}
-            <p style={{ marginTop: 0, marginBottom: 24, opacity: 0.7, color: THEME.text }}>送らない共有。置くだけ連携。</p>
-
-            {/* タブ */}
-            <div style={{ display: "flex", justifyContent: "center", gap: 0, marginBottom: 0 }}>
-              <button style={tabStyle(loginMode === "password")} onClick={() => setLoginMode("password")}>
-                パスワードログイン
-              </button>
-              <button style={tabStyle(loginMode === "magic")} onClick={() => setLoginMode("magic")}>
-                マジックリンク
-              </button>
+        {/* ---- ログイン画面 ---- */}
+        <div style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "40px 16px",
+        }}>
+          <div style={{
+            width: "100%",
+            maxWidth: 420,
+            animation: "loginFadeUp 0.4s ease both",
+          }}>
+            {/* ロゴ + サブテキスト */}
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <img
+                src={DocPortLogoFull} alt="DocPort"
+                style={{
+                  width: "100%", maxWidth: 240, height: "auto",
+                  display: "block", margin: "0 auto 14px",
+                  animation: "loginFadeIn 0.5s ease both",
+                }}
+              />
+              <p style={{
+                margin: 0,
+                fontSize: 13,
+                color: "#6b7280",
+                letterSpacing: "0.02em",
+              }}>
+                送らない共有。置くだけ連携。
+              </p>
             </div>
 
-            {/* パネル */}
+            {/* カード */}
             <div style={{
-              border: "1px solid rgba(15,23,42,0.12)", borderRadius: "0 8px 8px 8px",
-              background: "#fff", padding: "24px 20px",
+              background: "#fff",
+              borderRadius: 16,
+              border: "1px solid #e5e7eb",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+              overflow: "hidden",
             }}>
-              <TextInput
-                value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="メールアドレス"
-                style={{ width: "100%", boxSizing: "border-box", marginBottom: 10 }}
-              />
+              {/* タブ */}
+              <div style={{
+                display: "flex",
+                gap: 4,
+                padding: "12px 12px 0",
+                background: "#f9fafb",
+                borderBottom: "1px solid #e5e7eb",
+              }}>
+                <button style={loginTabStyle(loginMode === "password")} onClick={() => setLoginMode("password")}>
+                  パスワードログイン
+                </button>
+                <button style={loginTabStyle(loginMode === "magic")} onClick={() => setLoginMode("magic")}>
+                  マジックリンク
+                </button>
+              </div>
 
-              {loginMode === "password" ? (
-                <>
-                  <TextInput
-                    type="password"
-                    value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="パスワード"
-                    style={{ width: "100%", boxSizing: "border-box", marginBottom: 14 }}
-                    onKeyDown={(e) => e.key === "Enter" && signInWithPassword()}
-                  />
-                  <PrimaryButton onClick={signInWithPassword} style={{ width: "100%" }}>
-                    ログイン
-                  </PrimaryButton>
-                </>
-              ) : (
-                <>
-                  <PrimaryButton onClick={sendMagicLink} style={{ width: "100%", marginBottom: 10 }}>
-                    マジックリンクを送る
-                  </PrimaryButton>
-                  <p style={{ margin: 0, fontSize: 12, opacity: 0.65, color: THEME.text }}>
-                    ※ メールのリンクを開くとログインできます
-                  </p>
-                </>
-              )}
+              {/* フォーム */}
+              <div style={{ padding: "28px 24px 24px" }}>
+                <TextInput
+                  value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="メールアドレス"
+                  style={{ ...loginInputStyle, marginBottom: 12 }}
+                  onFocus={e => {
+                    e.target.style.borderColor = "#3b82f6";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = "#d1d5db";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+
+                {loginMode === "password" ? (
+                  <>
+                    <TextInput
+                      type="password"
+                      value={password} onChange={(e) => setPassword(e.target.value)}
+                      placeholder="パスワード"
+                      style={{ ...loginInputStyle, marginBottom: 20 }}
+                      onKeyDown={(e) => e.key === "Enter" && signInWithPassword()}
+                      onFocus={e => {
+                        e.target.style.borderColor = "#3b82f6";
+                        e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+                      }}
+                      onBlur={e => {
+                        e.target.style.borderColor = "#d1d5db";
+                        e.target.style.boxShadow = "none";
+                      }}
+                    />
+                    <button
+                      onClick={signInWithPassword}
+                      style={loginBtnStyle}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = "translateY(-1px)";
+                        e.currentTarget.style.boxShadow = "0 6px 18px rgba(59,130,246,0.42)";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 14px rgba(59,130,246,0.35)";
+                      }}
+                    >
+                      ログイン
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={sendMagicLink}
+                      style={{ ...loginBtnStyle, marginBottom: 12 }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = "translateY(-1px)";
+                        e.currentTarget.style.boxShadow = "0 6px 18px rgba(59,130,246,0.42)";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 14px rgba(59,130,246,0.35)";
+                      }}
+                    >
+                      マジックリンクを送る
+                    </button>
+                    <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", textAlign: "center" }}>
+                      ※ メールのリンクを開くとログインできます
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 波装飾 */}
+            <div style={{ marginTop: 16, opacity: 0.18, pointerEvents: "none", userSelect: "none" }}>
+              <svg viewBox="0 0 420 40" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", display: "block" }}>
+                <path d="M0,20 C70,0 140,40 210,20 C280,0 350,40 420,20" stroke="#3b82f6" strokeWidth="1.5" fill="none"/>
+                <path d="M0,28 C70,8 140,48 210,28 C280,8 350,48 420,28" stroke="#60a5fa" strokeWidth="1" fill="none"/>
+              </svg>
             </div>
           </div>
         </div>
