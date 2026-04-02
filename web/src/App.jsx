@@ -24,7 +24,8 @@ console.log("App.jsx LOADED: sky-blue + deepsea buttons (responsive)");
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
-import DocPortLogo from "./assets/logo/logo.png";
+import DocPortLogoFull from "./assets/logo/docport_full_logo.svg";
+import DocPortLogoIcon from "./assets/logo/docport_logo_icon_only.svg";
 
 import Root from "./components/Root";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -332,8 +333,7 @@ export default function App() {
   // breakpoints
   const isMobile = useMediaQuery("(max-width: 820px)");
   const isNarrow = useMediaQuery("(max-width: 1024px)");
-  const logoLoginSize = isMobile ? 72 : 180;
-  const logoTopbarSize = isMobile ? 28 : 80;
+  const logoTopbarSize = isMobile ? 28 : 36;
   const hospitalIconTopbarSize = isMobile ? 22 : 34;
 
   useEffect(() => {
@@ -948,7 +948,7 @@ export default function App() {
         <div style={{ padding: 24 }}>
           <div style={{ maxWidth: 520, margin: "0 auto" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <img src={DocPortLogo} alt="DocPort" style={{ width: 44, height: 44, opacity: 0.95 }} />
+              <img src={DocPortLogoIcon} alt="DocPort" style={{ width: 36, height: 36, opacity: 0.95 }} />
               <div>
                 <div style={{ fontWeight: 800, fontSize: 18, color: THEME.text }}>ログイン完了</div>
                 <div style={{ fontSize: 12, opacity: 0.7, color: THEME.text }}>
@@ -985,10 +985,10 @@ export default function App() {
         <div style={{ padding: 24 }}>
           <div style={{ maxWidth: 400, margin: "0 auto", textAlign: "center" }}>
             <img
-              src={DocPortLogo} alt="DocPort"
-              style={{ width: logoLoginSize, height: logoLoginSize, marginBottom: 14, opacity: 0.95 }}
+              src={DocPortLogoFull} alt="DocPort"
+              style={{ width: "100%", maxWidth: 200, height: "auto", display: "block", margin: "0 auto 24px" }}
             />
-            <h1 style={{ marginBottom: 4, fontWeight: 800, color: THEME.text }}>DocPort</h1>
+            {/* <h1 style={{ marginBottom: 4, fontWeight: 800, color: THEME.text }}>DocPort</h1> */}
             <p style={{ marginTop: 0, marginBottom: 24, opacity: 0.7, color: THEME.text }}>送らない共有。置くだけ連携。</p>
 
             {/* タブ */}
@@ -1155,11 +1155,11 @@ export default function App() {
         }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <img
-              src={DocPortLogo} alt="DocPort"
+              src={DocPortLogoIcon} alt="DocPort"
               style={{ width: logoTopbarSize, height: logoTopbarSize, opacity: 0.92, flexShrink: 0 }}
             />
             <div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: THEME.text }}>DocPort</div>
+              {/* <div style={{ fontSize: 22, fontWeight: 800, color: THEME.text }}>DocPort</div> */}
               <div style={{
                 display: "flex", alignItems: "center", gap: 8,
                 fontSize: 12, opacity: 0.7, color: THEME.text, flexWrap: "wrap",

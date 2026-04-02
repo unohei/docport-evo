@@ -4,7 +4,7 @@
 // 変更点: BottomNav をnamed exportとして追加（モバイル時に使用）
 
 import { useRef, useState } from "react";
-import DocPortLogo  from "../../assets/logo/logo.png";
+import DocPortLogoIcon from "../../assets/logo/docport_logo_icon_only.svg";
 import ReceiveIcon  from "../../assets/logo/receive_box.svg";
 import { DP } from "./receiveConstants";
 
@@ -224,7 +224,7 @@ export default function GlobalSidebar({
           marginBottom: 10,
         }}
       >
-        <img src={DocPortLogo} alt="DocPort" style={{ width: 36, height: 36 }} />
+        <img src={DocPortLogoIcon} alt="DocPort" style={{ width: 32, height: 32 }} />
       </button>
 
       {/* メインナビ */}
