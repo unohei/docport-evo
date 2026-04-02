@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { loadOpenCV } from "../utils/loadOpenCV";
+import CameraIcon from "../assets/logo/camera.svg";
 
 export default function ScanCapture({
   onDone,
@@ -1015,7 +1016,8 @@ export default function ScanCapture({
                 fontSize: 14,
               }}
             >
-              📷 カメラを起動
+              <img src={CameraIcon} alt="" style={{ width: 20, height: 20, flexShrink: 0, verticalAlign: "middle", marginRight: 6 }} />
+              カメラを起動
             </button>
           )}
 

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180">
+  <rect width="256" height="180" fill="none"/>
+
+  <!-- トレイ -->
+  <g stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 116 L52 78 H204 L232 116 L232 150 H24 Z" fill="#fff"/>
+    <path d="M24 116 H98 L112 132 H144 L158 116 H232"/>
+  </g>
+
+  <!-- 上向き矢印 -->
+  <g stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M128 92 V42"/>
+    <path d="M108 62 L128 42 L148 62"/>
+  </g>
+</svg>

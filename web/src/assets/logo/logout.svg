@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180">
+  <rect width="256" height="180" fill="none"/>
+
+  <!-- ドア枠 -->
+  <rect x="70" y="30" width="110" height="120"
+        fill="#fff"
+        stroke="#000"
+        stroke-width="4"
+        rx="6"/>
+
+  <!-- ドア（開いてる感じ） -->
+  <path d="M110 50 L160 45 L160 135 L110 140 Z"
+        fill="#fff"
+        stroke="#000"
+        stroke-width="4"
+        stroke-linejoin="round"/>
+
+  <!-- ドアノブ -->
+  <circle cx="145" cy="95" r="4" fill="#000"/>
+</svg>

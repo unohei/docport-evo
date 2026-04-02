@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180" role="img" aria-label="クリップ">
+  <rect width="256" height="180" fill="none"/>
+  <g stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M156 58 V120 Q156 146 130 146 Q104 146 104 120 V68 Q104 50 122 50 Q140 50 140 68 V116 Q140 128 128 128 Q116 128 116 116 V78"/>
+  </g>
+</svg>

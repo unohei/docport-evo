@@ -14,6 +14,8 @@ import {
   TextInput,
 } from "../components/ui/primitives";
 import FileDrop from "../components/FileDrop";
+import ClipIcon   from "../assets/logo/clip.svg";
+import CameraIcon from "../assets/logo/camera.svg";
 import ScanCapture from "../components/ScanCapture";
 import { findHospitalCandidates } from "../utils/hospitalMatch";
 import RecipientPicker from "../components/send/RecipientPicker";
@@ -285,7 +287,7 @@ export default function SendTab({
   }, [ocrResult, hospitals, myHospitalId]);
 
   // ---- SegButton（置く方法セレクタ用） ----
-  const SegButton = ({ active, hovered, icon, children, ...props }) => {
+  const SegButton = ({ active, hovered, icon, iconSrc, children, ...props }) => {
     const isHot = !!active || !!hovered;
     return (
       <button
@@ -306,7 +308,10 @@ export default function SendTab({
           position: "relative",
         }}
       >
-        <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
+        {iconSrc
+          ? <img src={iconSrc} alt="" style={{ width: 22, height: 22, flexShrink: 0 }} />
+          : <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
+        }
         <span>{children}</span>
         <span
           aria-hidden="true"
@@ -385,14 +390,14 @@ export default function SendTab({
               <SegButton
                 active={true} hovered={hoverMode === "drop"}
                 onMouseEnter={() => setHoverMode("drop")} onMouseLeave={() => setHoverMode(null)}
-                onClick={() => {}} icon="📎"
+                onClick={() => {}} iconSrc={ClipIcon}
               >
                 ドラッグで置く
               </SegButton>
               <SegButton
                 active={false} hovered={hoverMode === "scan"}
                 onMouseEnter={() => setHoverMode("scan")} onMouseLeave={() => setHoverMode(null)}
-                onClick={() => setScanOpen(true)} icon="📷"
+                onClick={() => setScanOpen(true)} iconSrc={CameraIcon}
               >
                 スキャンで置く
               </SegButton>

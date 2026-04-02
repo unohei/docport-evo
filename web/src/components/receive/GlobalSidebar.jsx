@@ -6,6 +6,8 @@
 import { useRef, useState } from "react";
 import DocPortLogoIcon from "../../assets/logo/docport_logo_icon_only.svg";
 import ReceiveIcon  from "../../assets/logo/receive_box.svg";
+import SendIcon     from "../../assets/logo/send_box.svg";
+import LogoutIcon   from "../../assets/logo/logout.svg";
 import { DP } from "./receiveConstants";
 
 // ---- ユーザーアバターボタン（クリックで画像変更） ----
@@ -174,7 +176,7 @@ export function BottomNav({
         onClick={() => onTabChange("inbox")}
       />
       <NavIcon
-        emoji="📤"
+        iconSrc={SendIcon}
         label="送信"
         active={activeTab === "send" || activeTab === "sent"}
         onClick={() => onTabChange("send")}
@@ -245,7 +247,7 @@ export default function GlobalSidebar({
         />
         {/* 送信 */}
         <NavIcon
-          emoji="📤"
+          iconSrc={SendIcon}
           label="送信"
           active={activeTab === "send"}
           onClick={() => onTabChange("send")}
@@ -288,7 +290,7 @@ export default function GlobalSidebar({
         )}
         {/* ユーザーアバター（未実装: デモ非表示）
         <AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} /> */}
-        <NavIcon emoji="🚪" label="ログアウト" active={false} onClick={onLogout} />
+        <NavIcon iconSrc={LogoutIcon} label="ログアウト" active={false} onClick={onLogout} />
       </div>
     </div>
   );
