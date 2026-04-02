@@ -55,6 +55,7 @@ export default function SendScreen({
   isExpired,
   cancelDocument,
   fetchPreviewUrl,
+  fetchDownloadUrl,
 }) {
   const isSent = activeTab === "sent";
   // prop で渡される isMobile を優先、なければ自己判定
@@ -188,6 +189,7 @@ export default function SendScreen({
               isExpired={isExpired}
               cancelDocument={cancelDocument}
               fetchPreviewUrl={fetchPreviewUrl}
+              fetchDownloadUrl={fetchDownloadUrl}
               isMobile={isMobileActual}
             />
           </div>

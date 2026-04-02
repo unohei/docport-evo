@@ -15,6 +15,7 @@ export default function SentHistoryPanel({
   isExpired,
   cancelDocument,
   fetchPreviewUrl,
+  fetchDownloadUrl,
   isMobile = false,
 }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -73,6 +74,7 @@ export default function SentHistoryPanel({
                 isExpired={isExpired}
                 cancelDocument={cancelDocument}
                 fetchPreviewUrl={fetchPreviewUrl}
+                fetchDownloadUrl={fetchDownloadUrl}
               />
             </div>
           </>

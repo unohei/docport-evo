@@ -113,6 +113,7 @@ export default function ReceiveScreen({
   hospitalMembers,
   myUserId,
   fetchPreviewUrl,
+  fetchDownloadUrl,
   departments,
   addDepartment,
 }) {
@@ -153,6 +154,7 @@ export default function ReceiveScreen({
     hospitalMembers,
     myUserId,
     fetchPreviewUrl,
+    fetchDownloadUrl,
     departments,
   };
   const cardProps = {

@@ -596,9 +596,9 @@ export default function App() {
     setMyAvatarUrl(publicUrl + "?t=" + Date.now()); // キャッシュバスター
   };
 
-  const getPresignedDownload = async (fileKey) => {
+  const getPresignedDownload = async (fileKey, mode = "inline") => {
     const token = session?.access_token;
-    const url = `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}`;
+    const url = `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}&mode=${mode}`;
     console.log("[presign-download] GET", url, token ? "JWT=ok" : "JWT=MISSING");
     const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     if (!res.ok) {
@@ -877,7 +877,16 @@ export default function App() {
     if (!doc?.file_key) throw new Error("file_key not found");
     const previewKey = getPreviewKey(doc);
     console.log("[fetchPreviewUrl] doc.id=", doc?.id, "previewKey=", previewKey);
-    const { download_url } = await getPresignedDownload(previewKey);
+    const { download_url } = await getPresignedDownload(previewKey, "inline");
+    if (!download_url) throw new Error("download_url が取得できませんでした");
+    return download_url;
+  };
+
+  // DetailPane 明示ダウンロード用（mode=download → 構造化データ由来のファイル名で保存）
+  const fetchDownloadUrl = async (doc) => {
+    if (!doc?.file_key) throw new Error("file_key not found");
+    const previewKey = getPreviewKey(doc);
+    const { download_url } = await getPresignedDownload(previewKey, "download");
     if (!download_url) throw new Error("download_url が取得できませんでした");
     return download_url;
   };
@@ -1074,6 +1083,7 @@ export default function App() {
           isExpired={isExpired}
           cancelDocument={cancelDocument}
           fetchPreviewUrl={fetchPreviewUrl}
+          fetchDownloadUrl={fetchDownloadUrl}
         />
       </Root>
     );
@@ -1103,6 +1113,7 @@ export default function App() {
           hospitalMembers={hospitalMembers}
           myUserId={session?.user?.id ?? null}
           fetchPreviewUrl={fetchPreviewUrl}
+          fetchDownloadUrl={fetchDownloadUrl}
           departments={departments}
           addDepartment={addDepartment}
         />

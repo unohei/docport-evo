@@ -228,6 +228,7 @@ export default function DetailPane({
   hospitalMembers,
   myUserId,
   fetchPreviewUrl,
+  fetchDownloadUrl,
   departments = [],
 }) {
   const [copied,       setCopied]      = useState(false);
@@ -235,6 +236,8 @@ export default function DetailPane({
   const [inlineUrl,    setInlineUrl]   = useState("");
   const [inlineLoading, setInlineLoading] = useState(false);
   const [inlineError,  setInlineError]  = useState("");
+  const [dlLoading,    setDlLoading]   = useState(false);
+  const [dlError,      setDlError]     = useState("");
 
   useEffect(() => {
     if (!doc || !fetchPreviewUrl || doc.status === "CANCELLED") {
@@ -467,7 +470,43 @@ export default function DetailPane({
 
         {/* ファイルプレビュー（インライン） */}
         <section>
-          <SectionTitle>ファイルプレビュー</SectionTitle>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <SectionTitle style={{ margin: 0 }}>ファイルプレビュー</SectionTitle>
+            {inlineUrl && fetchDownloadUrl && (
+              <button
+                onClick={async () => {
+                  setDlLoading(true);
+                  setDlError("");
+                  try {
+                    const url = await fetchDownloadUrl(doc);
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  } catch (e) {
+                    setDlError("ダウンロードに失敗しました");
+                  } finally {
+                    setDlLoading(false);
+                  }
+                }}
+                disabled={dlLoading}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${DP.borderActive}`,
+                  background: DP.skyLight,
+                  color: DP.blue,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: dlLoading ? "not-allowed" : "pointer",
+                  opacity: dlLoading ? 0.6 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                {dlLoading ? "取得中…" : "↓ ダウンロード"}
+              </button>
+            )}
+          </div>
+          {dlError && (
+            <div style={{ fontSize: 11, color: "#B91C1C", marginBottom: 6 }}>{dlError}</div>
+          )}
           {inlineLoading ? (
             <div style={{
               background: "#F1F5F9",
