@@ -1016,7 +1016,7 @@ export default function ScanCapture({
                 fontSize: 14,
               }}
             >
-              <img src={CameraIcon} alt="" style={{ width: 20, height: 20, flexShrink: 0, verticalAlign: "middle", marginRight: 6 }} />
+              <img src={CameraIcon} alt="" style={{ width: 26, height: 26, flexShrink: 0, verticalAlign: "middle", marginRight: 8 }} />
               カメラを起動
             </button>
           )}
