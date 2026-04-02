@@ -76,7 +76,7 @@ export function PrimaryButton({ children, style, ...props }) {
         padding: "10px 16px",
         borderRadius: 12,
         border: `1px solid rgba(14,165,233,0.6)`,
-        background: THEME.primary,
+        background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
         color: "#fff",
         cursor: "pointer",
         fontWeight: 900,

@@ -19,16 +19,16 @@ function InfoRow({ label, value }) {
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
       <span style={{
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 800,
-        color: DP.textSub,
-        minWidth: 72,
+        color: DP.text,
+        minWidth: 80,
         flexShrink: 0,
         paddingTop: 1,
       }}>
         {label}
       </span>
-      <span style={{ fontSize: 13, color: DP.text, fontWeight: 600, lineHeight: 1.5 }}>
+      <span style={{ fontSize: 14, color: DP.textSub, fontWeight: 500, lineHeight: 1.65 }}>
         {value}
       </span>
     </div>

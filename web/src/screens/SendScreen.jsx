@@ -109,10 +109,6 @@ export default function SendScreen({
           }}>
             送信
           </div>
-          <div style={{ fontSize: 12, color: DP.textSub, marginBottom: 10 }}>
-            書類を置いて相手の受け取りBOXに届ける
-          </div>
-
           {/* タブ */}
           <div style={{ display: "flex", gap: 0 }}>
             {[
