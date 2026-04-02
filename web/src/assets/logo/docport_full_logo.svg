@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title>DocPort full logo refined</title>
+  <desc>Refined hand-tuned SVG logo for DocPort with unified blue palette and smoother curves.</desc>
+  <defs>
+    <linearGradient id="dp-main" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0C4B9B"/>
+      <stop offset="100%" stop-color="#0A2F73"/>
+    </linearGradient>
+    <linearGradient id="dp-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#33A6F2"/>
+      <stop offset="100%" stop-color="#1E96E8"/>
+    </linearGradient>
+    <linearGradient id="dp-paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D7DDE5"/>
+    </linearGradient>
+    <linearGradient id="dp-fold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8EDF3"/>
+      <stop offset="100%" stop-color="#BCC6D2"/>
+    </linearGradient>
+    <mask id="accent-ring">
+      <rect width="1024" height="1024" fill="black"/>
+      <path d="M286 403c46-96 147-145 266-145 117 0 219 47 268 145v183H286z" fill="white"/>
+      <path d="M342 391c39-69 109-104 210-104 96 0 168 31 212 102v153H342z" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- outer arch -->
+  <path d="M247 404C295 253 441 179 549 179c109 0 252 75 301 225h-29C776 281 674 208 549 208S321 281 276 404z"
+        fill="#0A458F"/>
+
+  <!-- accent only on outer edge of second arch -->
+  <path d="M286 403c46-96 147-145 266-145 117 0 219 47 268 145v183H286z"
+        fill="url(#dp-accent)" mask="url(#accent-ring)"/>
+
+  <!-- second arch body -->
+  <path d="M286 403c46-96 147-145 266-145 117 0 219 47 268 145v183H286z"
+        fill="url(#dp-main)"/>
+
+  <!-- inner dome -->
+  <path d="M342 391c39-69 109-104 210-104 96 0 168 31 212 102v153H342z"
+        fill="#072D72"/>
+
+  <!-- digital blocks -->
+  <g fill="url(#dp-accent)">
+    <rect x="700" y="420" width="39" height="39" rx="2"/>
+    <rect x="749" y="401" width="49" height="49" rx="2"/>
+    <rect x="809" y="392" width="54" height="54" rx="2"/>
+    <rect x="719" y="469" width="34" height="34" rx="2"/>
+    <rect x="768" y="460" width="44" height="44" rx="2"/>
+    <rect x="699" y="519" width="30" height="30" rx="2"/>
+    <rect x="748" y="520" width="34" height="34" rx="2"/>
+    <rect x="681" y="558" width="19" height="19" rx="2"/>
+    <rect x="720" y="568" width="17" height="17" rx="2"/>
+  </g>
+
+  <!-- document -->
+  <g transform="translate(430,360)">
+    <path d="M0 0h160l50 50v130c0 71-85 145-197 166V0z" fill="url(#dp-paper)"/>
+    <path d="M160 0v50h50z" fill="#EEF2F6"/>
+    <path d="M160 0l50 50h-50z" fill="url(#dp-fold)"/>
+    <rect x="30" y="60" width="110" height="10" rx="3" fill="#96A6B8"/>
+    <rect x="30" y="100" width="130" height="10" rx="3" fill="#96A6B8"/>
+    <rect x="30" y="140" width="130" height="10" rx="3" fill="#96A6B8"/>
+    <rect x="30" y="180" width="130" height="10" rx="3" fill="#96A6B8"/>
+  </g>
+
+  <!-- waves -->
+  <path d="M181 580c82-29 179-19 260 11 80 30 170 34 260 10 58-16 123-20 199-6-72 10-124 28-198 44-97 20-193 12-280-19-88-31-169-40-241-11z"
+        fill="#0B4EA5"/>
+  <path d="M220 610c71-28 140-29 211 0 79 32 152 36 230 20 55-11 115-12 179 10-64 0-113 10-178 29-91 26-184 21-261-10-81-32-121-37-181-49z"
+        fill="#1E96E8"/>
+  <path d="M249 640c71 11 121 31 201 61 79 29 166 34 249 10 54-16 108-31 170-35-48 15-89 34-160 54-99 29-198 29-280 1-71-25-121-50-180-91z"
+        fill="#0A5BB8"/>
+
+  <!-- centered wordmark -->
+  <g font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-weight="700" font-size="134" text-anchor="middle">
+    <text x="512" y="820">
+      <tspan fill="#0A2F73">Doc</tspan><tspan fill="#1E96E8">Port</tspan>
+    </text>
+  </g>
+</svg>
