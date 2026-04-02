@@ -70,7 +70,7 @@ export default function SendScreen({
       overflow: "hidden",
       background: DP.white,
       // モバイル時は BottomNav 分の下パディング
-      ...(isMobileActual && { paddingBottom: "calc(56px + env(safe-area-inset-bottom))", boxSizing: "border-box", flexDirection: "column" }),
+      ...(isMobileActual && { paddingBottom: "calc(64px + env(safe-area-inset-bottom))", boxSizing: "border-box", flexDirection: "column" }),
     }}>
       {/* 左: グローバルサイドバー（デスクトップ/タブレット時のみ） */}
       {!isMobileActual && (
@@ -204,6 +204,7 @@ export default function SendScreen({
           unreadCount={unreadCount}
           myAvatarUrl={myAvatarUrl}
           onAvatarUpload={onAvatarUpload}
+          onLogout={onLogout}
         />
       )}
     </div>

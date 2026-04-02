@@ -1,20 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180">
-  <rect width="256" height="180" fill="none"/>
-
-  <!-- ドア枠 -->
-  <rect x="70" y="30" width="110" height="120"
-        fill="#fff"
-        stroke="#000"
-        stroke-width="4"
-        rx="6"/>
-
-  <!-- ドア（開いてる感じ） -->
-  <path d="M110 50 L160 45 L160 135 L110 140 Z"
-        fill="#fff"
-        stroke="#000"
-        stroke-width="4"
-        stroke-linejoin="round"/>
-
-  <!-- ドアノブ -->
-  <circle cx="145" cy="95" r="4" fill="#000"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- ログアウト（Feather sign-out）: ドアから右へ出る矢印 -->
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+  <polyline points="16 17 21 12 16 7"/>
+  <line x1="21" y1="12" x2="9" y2="12"/>
 </svg>

@@ -107,7 +107,7 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
         height: 44,
         borderRadius: 12,
         border: "none",
-        background: active ? "rgba(255,255,255,0.18)" : "transparent",
+        background: active ? "rgba(255,255,255,0.22)" : "transparent",
         cursor: disabled ? "default" : "pointer",
         display: "flex",
         alignItems: "center",
@@ -116,10 +116,12 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
         fontSize: 20,
         opacity: disabled ? 0.30 : 1,
         transition: "background 140ms ease",
+        WebkitTapHighlightColor: "transparent",
+        boxShadow: active ? "inset 0 0 0 1px rgba(255,255,255,0.18)" : "none",
       }}
     >
       {iconSrc
-        ? <img src={iconSrc} alt={label} style={{ width: 26, height: 26, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.65 }} />
+        ? <img src={iconSrc} alt={label} style={{ width: 26, height: 26, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.60 }} />
         : <span style={{ lineHeight: 1 }}>{emoji}</span>
       }
       {badge > 0 && (
@@ -146,44 +148,128 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
 }
 
 // ---- BottomNav（モバイル用・画面下部固定ナビ） ----
+// 変更点: ラベル表示 / ログアウトボタン追加 / 高さ64px / アクティブ状態強化
 export function BottomNav({
   activeTab,
   onTabChange,
-  myAvatarUrl,
-  onAvatarUpload,
+  myAvatarUrl,    // 将来のアバター用に保持
+  onAvatarUpload, // 将来のアバター用に保持
   unreadCount,
+  onLogout,       // モバイルでログアウトを可能にする
 }) {
+  const navItems = [
+    { key: "inbox",  iconSrc: ReceiveIcon, label: "受信", badge: unreadCount, activeKeys: ["inbox"] },
+    { key: "send",   iconSrc: SendIcon,    label: "送信", badge: null,         activeKeys: ["send", "sent"] },
+  ];
+
+  const btnBase = {
+    flex: 1,
+    height: 64,
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    position: "relative",
+    WebkitTapHighlightColor: "transparent",
+    transition: "background 140ms ease",
+  };
+
   return (
     <div style={{
       position: "fixed",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 56,
+      bottom: 0, left: 0, right: 0,
       background: DP.navy,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-around",
       borderTop: "1px solid rgba(255,255,255,0.08)",
       zIndex: 200,
+      display: "flex",
+      alignItems: "center",
       paddingBottom: "env(safe-area-inset-bottom)",
     }}>
-      <NavIcon
-        iconSrc={ReceiveIcon}
-        label="受信"
-        active={activeTab === "inbox"}
-        badge={unreadCount}
-        onClick={() => onTabChange("inbox")}
-      />
-      <NavIcon
-        iconSrc={SendIcon}
-        label="送信"
-        active={activeTab === "send" || activeTab === "sent"}
-        onClick={() => onTabChange("send")}
-      />
-      {/* 下書き（未実装: デモ非表示）<NavIcon emoji="📝" label="下書き" active={false} disabled /> */}
-      {/* 設定（未実装: デモ非表示）<NavIcon emoji="⚙️" label="設定" active={false} disabled /> */}
-      {/* ユーザー（未実装: デモ非表示）<AvatarButton avatarUrl={myAvatarUrl} onAvatarUpload={onAvatarUpload} /> */}
+      {navItems.map(item => {
+        const active = item.activeKeys.includes(activeTab);
+        return (
+          <button
+            key={item.key}
+            onClick={() => onTabChange(item.key)}
+            style={{
+              ...btnBase,
+              background: active ? "rgba(255,255,255,0.14)" : "transparent",
+              borderTop: active ? "2px solid rgba(14,165,233,0.85)" : "2px solid transparent",
+            }}
+          >
+            <img
+              src={item.iconSrc}
+              alt={item.label}
+              style={{
+                width: 26, height: 26,
+                filter: "brightness(0) invert(1)",
+                opacity: active ? 1 : 0.55,
+              }}
+            />
+            <span style={{
+              fontSize: 10,
+              fontWeight: active ? 800 : 600,
+              color: active ? "#fff" : "rgba(255,255,255,0.55)",
+              letterSpacing: 0.3,
+              lineHeight: 1,
+            }}>
+              {item.label}
+            </span>
+            {item.badge > 0 && (
+              <span style={{
+                position: "absolute",
+                top: 6,
+                left: "calc(50% + 4px)",
+                minWidth: 16, height: 16,
+                borderRadius: 999,
+                background: "#EF4444",
+                color: "#fff",
+                fontSize: 9,
+                fontWeight: 800,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0 3px",
+                lineHeight: 1,
+              }}>
+                {item.badge > 9 ? "9+" : item.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+
+      {/* ログアウト（onLogout が渡された場合のみ表示） */}
+      {onLogout && (
+        <button
+          onClick={onLogout}
+          style={{
+            ...btnBase,
+            flex: "none",
+            width: 68,
+            background: "transparent",
+            borderTop: "2px solid transparent",
+          }}
+        >
+          <img
+            src={LogoutIcon}
+            alt="ログアウト"
+            style={{ width: 22, height: 22, filter: "brightness(0) invert(1)", opacity: 0.50 }}
+          />
+          <span style={{
+            fontSize: 9,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.50)",
+            letterSpacing: 0.2,
+            lineHeight: 1,
+          }}>
+            退出
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -209,25 +295,22 @@ export default function GlobalSidebar({
       gap: 2,
       borderRight: "1px solid rgba(255,255,255,0.06)",
     }}>
-      {/* ロゴ — ホーム兼用 */}
-      <button
-        onClick={() => onTabChange("inbox")}
-        title="ホーム"
+      {/* ロゴ — ホーム戻りは MVP では非表示（クリック無効） */}
+      <div
         style={{
           width: 48, height: 48,
           borderRadius: 13,
-          border: "none",
           background: "rgba(255,255,255,0.10)",
-          cursor: "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           padding: 5,
           marginBottom: 10,
+          flexShrink: 0,
         }}
       >
         <img src={DocPortLogoIcon} alt="DocPort" style={{ width: 32, height: 32 }} />
-      </button>
+      </div>
 
       {/* メインナビ */}
       <div style={{

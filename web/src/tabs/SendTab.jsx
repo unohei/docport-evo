@@ -309,7 +309,7 @@ export default function SendTab({
         }}
       >
         {iconSrc
-          ? <img src={iconSrc} alt="" style={{ width: 30, height: 30, flexShrink: 0 }} />
+          ? <img src={iconSrc} alt="" style={{ width: 32, height: 32, flexShrink: 0 }} />
           : <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
         }
         <span>{children}</span>

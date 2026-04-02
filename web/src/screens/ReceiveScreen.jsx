@@ -187,7 +187,7 @@ export default function ReceiveScreen({
         width: "100vw",
         background: DP.white,
         // BottomNav の高さ分を確保（safe-area-inset-bottom も含む）
-        paddingBottom: "calc(56px + env(safe-area-inset-bottom))",
+        paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
       }}>
         {/* トップバー */}
@@ -251,6 +251,7 @@ export default function ReceiveScreen({
           unreadCount={unreadCount}
           myAvatarUrl={myAvatarUrl}
           onAvatarUpload={onAvatarUpload}
+          onLogout={onLogout}
         />
       </div>
     );

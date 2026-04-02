@@ -1,9 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180" role="img" aria-label="カメラ">
-  <rect width="256" height="180" fill="none"/>
-  <g stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M52 70 H86 L98 54 H158 L170 70 H204 Q216 70 216 82 V126 Q216 138 204 138 H52 Q40 138 40 126 V82 Q40 70 52 70 Z" fill="#fff"/>
-    <circle cx="128" cy="104" r="28"/>
-    <circle cx="128" cy="104" r="10"/>
-    <rect x="182" y="82" width="12" height="10" rx="2" fill="#fff"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- カメラ（Feather camera）: レンズ付きカメラ -->
+  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+  <circle cx="12" cy="13" r="4"/>
 </svg>
