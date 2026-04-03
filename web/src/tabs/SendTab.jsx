@@ -772,20 +772,61 @@ export default function SendTab({
                             <div
                               key={key}
                               style={{
-                                display: "flex", alignItems: "center", gap: 8,
-                                padding: "5px 10px",
+                                display: "flex",
+                                flexDirection: isMobile ? "column" : "row",
+                                alignItems: isMobile ? "stretch" : "center",
+                                gap: isMobile ? 4 : 8,
+                                padding: isMobile ? "7px 10px" : "5px 10px",
                                 borderBottom: i < STRUCTURED_LABELS.length - 1
                                   ? "1px solid rgba(15,23,42,0.06)" : "none",
                                 background: rowBg,
                                 transition: "background 200ms ease",
                               }}
                             >
-                              <span style={{
-                                width: 88, flexShrink: 0,
-                                fontWeight: 700, opacity: 0.55, color: THEME.text,
-                              }}>
-                                {label}
-                              </span>
+                              {/* ラベル行: モバイル時は badge + reset も同居させる */}
+                              {isMobile ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{
+                                    flex: 1, fontSize: 11,
+                                    fontWeight: 700, opacity: 0.55, color: THEME.text,
+                                  }}>
+                                    {label}
+                                  </span>
+                                  {isChanged && (
+                                    <>
+                                      <span style={{
+                                        fontSize: 9, fontWeight: 800,
+                                        padding: "2px 5px", borderRadius: 4,
+                                        background: "rgba(234,179,8,0.20)",
+                                        color: "#854d0e", whiteSpace: "nowrap",
+                                      }}>
+                                        人が修正
+                                      </span>
+                                      <button
+                                        onClick={() => handleFieldReset(key)}
+                                        title="AI抽出値に戻す"
+                                        style={{
+                                          padding: "2px 7px", borderRadius: 4,
+                                          border: "1px solid rgba(15,23,42,0.15)",
+                                          background: "rgba(255,255,255,0.85)",
+                                          fontSize: 10, fontWeight: 700,
+                                          color: THEME.text, cursor: "pointer",
+                                          whiteSpace: "nowrap", opacity: 0.75,
+                                        }}
+                                      >
+                                        元に戻す
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{
+                                  width: 88, flexShrink: 0,
+                                  fontWeight: 700, opacity: 0.55, color: THEME.text,
+                                }}>
+                                  {label}
+                                </span>
+                              )}
 
                               <input
                                 type="text"
@@ -809,7 +850,8 @@ export default function SendTab({
                                 }}
                               />
 
-                              {isChanged && (
+                              {/* PC時のみ badge + reset をインライン表示 */}
+                              {!isMobile && isChanged && (
                                 <>
                                   <span style={{
                                     fontSize: 9, fontWeight: 800,

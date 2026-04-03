@@ -177,12 +177,12 @@ export default function SendScreen({
             overflowY: "auto",
             overflowX: "hidden",
             background: DP.surface,
-            padding: isMobile ? "20px 12px" : "24px 36px",
+            padding: isMobileActual ? "20px 12px" : "24px 36px",
           }}>
-            <div style={{ maxWidth: 740, margin: "0 auto" }}>
+            <div style={{ maxWidth: 740, margin: "0 auto", width: "100%" }}>
               <SendTab
                 headerTitle={{ display: "none" }}
-                isMobile={isMobile}
+                isMobile={isMobileActual}
                 myHospitalId={myHospitalId}
                 hospitals={hospitals}
                 contacts={contacts}
