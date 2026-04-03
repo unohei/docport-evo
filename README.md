@@ -1,7 +1,3 @@
-<p align="left">
-  <img src="screenshots/ログイン.png" width="70%" />
-</p>
-
 # DocPort
 
 ## 送らない共有。置くだけ連携。
