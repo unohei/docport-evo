@@ -294,7 +294,7 @@ export default function SendTab({
         {...props}
         aria-pressed={active ? "true" : "false"}
         style={{
-          flex: 1, minWidth: 160,
+          flex: "1 1 130px", minWidth: 0,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
           padding: isMobile ? "12px 12px" : "14px 14px",
           borderRadius: 14,
@@ -383,7 +383,7 @@ export default function SendTab({
           {/* ---- 置く方法セレクタ + FileDrop ---- */}
           <Card>
             <div style={{
-              display: "flex", gap: 10, padding: 10,
+              display: "flex", gap: 10, padding: 10, flexWrap: "wrap",
               borderRadius: 16, border: "1px solid rgba(15,23,42,0.10)",
               background: "rgba(255,255,255,0.65)",
             }}>
@@ -851,7 +851,7 @@ export default function SendTab({
               marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap",
               alignItems: "center", justifyContent: "space-between",
             }}>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
+              <div style={{ fontSize: 12, opacity: 0.7, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                 選択中: <b>{pdfFile?.name}</b>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

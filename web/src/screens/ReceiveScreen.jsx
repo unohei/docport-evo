@@ -12,6 +12,7 @@ import BusinessLanePanel from "../components/receive/BusinessLanePanel";
 import CardListPanel     from "../components/receive/CardListPanel";
 import DetailPane        from "../components/receive/DetailPane";
 import { DP }            from "../components/receive/receiveConstants";
+import LogoutIcon        from "../assets/logo/logout.svg";
 
 // ---- モバイル用レーンフィルタ（横スクロールタブ） ----
 function MobileLaneFilter({ docs, departments, activeLane, onLaneChange }) {
@@ -197,6 +198,7 @@ export default function ReceiveScreen({
           height: 48,
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           padding: "0 14px",
           gap: 10,
         }}>
@@ -222,6 +224,32 @@ export default function ReceiveScreen({
             <span style={{ color: "#fff", fontWeight: 800, fontSize: 15 }}>
               受信ボックス
             </span>
+          )}
+
+          {/* ログアウトボタン（右上・誤操作防止のため主要導線と分離） */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="ログアウト"
+              style={{
+                width: 36, height: 36,
+                border: "none",
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.08)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              <img
+                src={LogoutIcon}
+                alt="ログアウト"
+                style={{ width: 20, height: 20, filter: "brightness(0) invert(1)", opacity: 0.65 }}
+              />
+            </button>
           )}
         </div>
 
@@ -251,7 +279,6 @@ export default function ReceiveScreen({
           unreadCount={unreadCount}
           myAvatarUrl={myAvatarUrl}
           onAvatarUpload={onAvatarUpload}
-          onLogout={onLogout}
         />
       </div>
     );

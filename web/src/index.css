@@ -47,6 +47,11 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* モバイルでの横はみ出し防止 */
+body {
+  overflow-x: hidden;
+}
+
 /* ボタンは App.jsx 側でスタイルしてるので、グローバルは極力触らない */
 button {
   font-family: inherit;

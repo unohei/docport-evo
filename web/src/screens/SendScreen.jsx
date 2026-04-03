@@ -16,6 +16,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import SendTab           from "../tabs/SendTab";
 import SentHistoryPanel  from "../components/sent/SentHistoryPanel";
 import { DP }            from "../components/receive/receiveConstants";
+import LogoutIcon        from "../assets/logo/logout.svg";
 
 export default function SendScreen({
   // ナビゲーション
@@ -101,13 +102,44 @@ export default function SendScreen({
           flexShrink: 0,
         }}>
           <div style={{
-            fontSize: 20,
-            fontWeight: 900,
-            color: DP.navy,
-            letterSpacing: -0.3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
             marginBottom: 2,
           }}>
-            送信
+            <div style={{
+              fontSize: 20,
+              fontWeight: 900,
+              color: DP.navy,
+              letterSpacing: -0.3,
+            }}>
+              送信
+            </div>
+            {/* ログアウトボタン（右上・モバイル専用） */}
+            {isMobileActual && onLogout && (
+              <button
+                onClick={onLogout}
+                title="ログアウト"
+                style={{
+                  width: 34, height: 34,
+                  border: `1px solid ${DP.border}`,
+                  borderRadius: 8,
+                  background: "rgba(15,23,42,0.04)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <img
+                  src={LogoutIcon}
+                  alt="ログアウト"
+                  style={{ width: 18, height: 18, opacity: 0.50 }}
+                />
+              </button>
+            )}
           </div>
           {/* タブ */}
           <div style={{ display: "flex", gap: 0 }}>
@@ -142,7 +174,8 @@ export default function SendScreen({
         {!isSent && (
           <div style={{
             flex: 1,
-            overflow: "auto",
+            overflowY: "auto",
+            overflowX: "hidden",
             background: DP.surface,
             padding: isMobile ? "20px 12px" : "24px 36px",
           }}>
@@ -200,7 +233,6 @@ export default function SendScreen({
           unreadCount={unreadCount}
           myAvatarUrl={myAvatarUrl}
           onAvatarUpload={onAvatarUpload}
-          onLogout={onLogout}
         />
       )}
     </div>

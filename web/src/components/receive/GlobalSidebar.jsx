@@ -241,34 +241,7 @@ export function BottomNav({
         );
       })}
 
-      {/* ログアウト（onLogout が渡された場合のみ表示） */}
-      {onLogout && (
-        <button
-          onClick={onLogout}
-          style={{
-            ...btnBase,
-            flex: "none",
-            width: 68,
-            background: "transparent",
-            borderTop: "2px solid transparent",
-          }}
-        >
-          <img
-            src={LogoutIcon}
-            alt="ログアウト"
-            style={{ width: 22, height: 22, filter: "brightness(0) invert(1)", opacity: 0.50 }}
-          />
-          <span style={{
-            fontSize: 9,
-            fontWeight: 600,
-            color: "rgba(255,255,255,0.50)",
-            letterSpacing: 0.2,
-            lineHeight: 1,
-          }}>
-            退出
-          </span>
-        </button>
-      )}
+      {/* ログアウトはモバイルトップバーに移動したため BottomNav からは除去 */}
     </div>
   );
 }
