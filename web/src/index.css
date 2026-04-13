@@ -86,3 +86,16 @@ button {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(31, 58, 109, 0.13) !important;
 }
+
+/* ===================================================
+   暗い背景用インプット（サイドバー連携トップバー）
+   placeholder / focus スタイルのみ。ロジック影響なし。
+   =================================================== */
+.dp-input-dark::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+.dp-input-dark:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}

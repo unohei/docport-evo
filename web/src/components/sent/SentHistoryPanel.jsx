@@ -17,9 +17,14 @@ export default function SentHistoryPanel({
   fetchPreviewUrl,
   fetchDownloadUrl,
   isMobile = false,
+  // searchQuery が渡された場合はトップバー側の値を使い、内部の検索UIを非表示にする
+  // 省略時は内部 state を使用（後方互換）
+  searchQuery,
 }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
-  const [q, setQ] = useState("");
+  const [internalQ, setInternalQ] = useState("");
+  const isControlled = searchQuery !== undefined;
+  const q = isControlled ? searchQuery : internalQ;
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -91,25 +96,28 @@ export default function SentHistoryPanel({
                 <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>送信済み</span>
                 <span style={{ fontSize: 13, color: DP.textSub, fontWeight: 600 }}>{filtered.length}件</span>
               </div>
-              <div style={{ position: "relative" }}>
-                <input
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  placeholder="病院名・書類名で検索"
-                  style={{
-                    width: "100%",
-                    padding: "7px 10px 7px 28px",
-                    borderRadius: 8,
-                    border: `1px solid ${DP.border}`,
-                    outline: "none",
-                    fontSize: 12,
-                    color: DP.text,
-                    background: "#F1F5F9",
-                    boxSizing: "border-box",
-                  }}
-                />
-                <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 12, opacity: 0.4, pointerEvents: "none" }}>🔍</span>
-              </div>
+              {/* 検索インプット: トップバー側で管理している場合は非表示 */}
+              {!isControlled && (
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={internalQ}
+                    onChange={e => setInternalQ(e.target.value)}
+                    placeholder="病院名・書類名で検索"
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px 7px 28px",
+                      borderRadius: 8,
+                      border: `1px solid ${DP.border}`,
+                      outline: "none",
+                      fontSize: 12,
+                      color: DP.text,
+                      background: "#F1F5F9",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 12, opacity: 0.4, pointerEvents: "none" }}>🔍</span>
+                </div>
+              )}
             </div>
             {/* カード一覧 */}
             <div style={{ flex: 1, overflow: "auto", padding: "8px 10px", display: "grid", gap: 6, alignContent: "start" }}>
@@ -168,36 +176,38 @@ export default function SentHistoryPanel({
               {filtered.length}件
             </span>
           </div>
-          {/* 検索 */}
-          <div style={{ position: "relative" }}>
-            <input
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              placeholder="病院名・書類名で検索"
-              style={{
-                width: "100%",
-                padding: "7px 10px 7px 28px",
-                borderRadius: 8,
-                border: `1px solid ${DP.border}`,
-                outline: "none",
+          {/* 検索インプット: トップバー側で管理している場合は非表示 */}
+          {!isControlled && (
+            <div style={{ position: "relative" }}>
+              <input
+                value={internalQ}
+                onChange={e => setInternalQ(e.target.value)}
+                placeholder="病院名・書類名で検索"
+                style={{
+                  width: "100%",
+                  padding: "7px 10px 7px 28px",
+                  borderRadius: 8,
+                  border: `1px solid ${DP.border}`,
+                  outline: "none",
+                  fontSize: 12,
+                  color: DP.text,
+                  background: "#F1F5F9",
+                  boxSizing: "border-box",
+                }}
+              />
+              <span style={{
+                position: "absolute",
+                left: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
                 fontSize: 12,
-                color: DP.text,
-                background: "#F1F5F9",
-                boxSizing: "border-box",
-              }}
-            />
-            <span style={{
-              position: "absolute",
-              left: 8,
-              top: "50%",
-              transform: "translateY(-50%)",
-              fontSize: 12,
-              opacity: 0.4,
-              pointerEvents: "none",
-            }}>
-              🔍
-            </span>
-          </div>
+                opacity: 0.4,
+                pointerEvents: "none",
+              }}>
+                🔍
+              </span>
+            </div>
+          )}
         </div>
 
         {/* カード一覧 */}

@@ -123,6 +123,8 @@ export default function ReceiveScreen({
 
   const [activeLane,  setActiveLane]  = useState("new");
   const [selectedDoc, setSelectedDoc] = useState(null);
+  // PC/タブレット用トップバー検索クエリ（モバイルは CardListPanel 内部 state を使用）
+  const [q, setQ] = useState("");
 
   // レーン別ドキュメント絞り込み
   const laneDocs = useMemo(() => {
@@ -284,7 +286,7 @@ export default function ReceiveScreen({
     );
   }
 
-  // ---- タブレットレイアウト（BusinessLanePanel 非表示、2ペイン） ----
+  // ---- タブレットレイアウト（BusinessLanePanel 非表示、2ペイン + トップバー） ----
   if (isTablet) {
     return (
       <div style={{
@@ -295,30 +297,47 @@ export default function ReceiveScreen({
         background: DP.white,
       }}>
         <GlobalSidebar {...sidebarProps} />
-        <CardListPanel {...cardProps} />
-        {selectedDoc
-          ? <DetailPane {...detailProps} />
-          : (
-            <div style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: DP.white,
-              color: DP.textSub,
-              flexDirection: "column",
-              gap: 12,
-            }}>
-              <span style={{ fontSize: 44, opacity: 0.25 }}>📄</span>
-              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>書類を選択してください</p>
+        {/* 右エリア: トップバー + コンテンツ */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+          {/* トップバー */}
+          <div style={{
+            height: 48, flexShrink: 0,
+            background: DP.navy,
+            display: "flex", alignItems: "center",
+            padding: "0 16px", gap: 12,
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+          }}>
+            <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
+            <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="病院名・書類名で検索"
+                className="dp-input-dark"
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+              />
             </div>
-          )
-        }
+          </div>
+          {/* コンテンツ */}
+          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            <CardListPanel {...cardProps} searchQuery={q} />
+            {selectedDoc
+              ? <DetailPane {...detailProps} />
+              : (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: DP.white, color: DP.textSub, flexDirection: "column", gap: 12 }}>
+                  <span style={{ fontSize: 44, opacity: 0.25 }}>📄</span>
+                  <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>書類を選択してください</p>
+                </div>
+              )
+            }
+          </div>
+        </div>
       </div>
     );
   }
 
-  // ---- PC レイアウト（4カラム構成） ----
+  // ---- PC レイアウト（サイドバー + トップバー + 3カラム構成） ----
   return (
     <div style={{
       display: "flex",
@@ -329,18 +348,43 @@ export default function ReceiveScreen({
     }}>
       <GlobalSidebar {...sidebarProps} />
 
-      <BusinessLanePanel
-        docs={docs}
-        activeLane={activeLane}
-        onLaneChange={handleLaneChange}
-        myHospitalName={myHospitalName}
-        departments={departments}
-        addDepartment={addDepartment}
-      />
+      {/* 右エリア: トップバー + コンテンツ3カラム */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        {/* トップバー: サイドバーと同色で "L字" のブランドフレームを形成 */}
+        <div style={{
+          height: 48, flexShrink: 0,
+          background: DP.navy,
+          display: "flex", alignItems: "center",
+          padding: "0 16px", gap: 12,
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}>
+          <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
+          <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="病院名・書類名で検索"
+              className="dp-input-dark"
+              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+            />
+          </div>
+        </div>
 
-      <CardListPanel {...cardProps} />
-
-      <DetailPane {...detailProps} />
+        {/* コンテンツ3カラム */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          <BusinessLanePanel
+            docs={docs}
+            activeLane={activeLane}
+            onLaneChange={handleLaneChange}
+            myHospitalName={myHospitalName}
+            departments={departments}
+            addDepartment={addDepartment}
+          />
+          <CardListPanel {...cardProps} searchQuery={q} />
+          <DetailPane {...detailProps} />
+        </div>
+      </div>
     </div>
   );
 }
