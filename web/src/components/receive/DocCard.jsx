@@ -14,6 +14,7 @@ export default function DocCard({ doc, nameOf, iconOf, selected, onClick, isExpi
   return (
     <button
       onClick={onClick}
+      className="dp-card-hover"
       style={{
         width: "100%",
         textAlign: "left",
@@ -26,7 +27,7 @@ export default function DocCard({ doc, nameOf, iconOf, selected, onClick, isExpi
         display: "grid",
         gap: 7,
         boxShadow: selected
-          ? "0 0 0 2px rgba(21,101,192,0.15)"
+          ? "0 0 0 2px rgba(74,144,226,0.18)"
           : "0 1px 3px rgba(0,0,0,0.05)",
         transition: "all 130ms ease",
       }}

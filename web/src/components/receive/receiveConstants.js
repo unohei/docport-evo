@@ -2,13 +2,14 @@
 // 受信画面コンポーネント群で共有する定数・ヘルパー
 
 // ---- カラーパレット（ロゴ配色準拠: navy / blue / skyLight の3トーン） ----
+// UI改善: ロゴのメインネイビー(#1F3A6D)・アクセントブルー(#4A90E2)に統一
 export const DP = {
-  navy:        "#0E2A5C",
-  blue:        "#1565C0",
-  skyLight:    "#E8F4FD",
-  surface:     "#F0F6FF",
-  border:      "rgba(14, 42, 92, 0.12)",
-  borderActive:"rgba(21, 101, 192, 0.35)",
+  navy:        "#1F3A6D",                   // ロゴメインネイビー（旧 #0E2A5C）
+  blue:        "#4A90E2",                   // ロゴアクセントブルー（旧 #1565C0）
+  skyLight:    "#EBF3FD",                   // 選択状態背景（旧 #E8F4FD）
+  surface:     "#F5F9FF",                   // サイドパネル背景（旧 #F0F6FF）
+  border:      "rgba(31, 58, 109, 0.12)",   // 新ネイビー基準（旧 rgba(14,42,92,0.12)）
+  borderActive:"rgba(74, 144, 226, 0.42)",  // 新ブルー基準（旧 rgba(21,101,192,0.35)）
   text:        "#0F172A",
   textSub:     "rgba(15, 23, 42, 0.55)",
   white:       "#FFFFFF",

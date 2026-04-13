@@ -196,7 +196,7 @@ export function BottomNav({
             style={{
               ...btnBase,
               background: active ? "rgba(255,255,255,0.14)" : "transparent",
-              borderTop: active ? "2px solid rgba(14,165,233,0.85)" : "2px solid transparent",
+              borderTop: active ? "2px solid rgba(74,144,226,0.85)" : "2px solid transparent",
             }}
           >
             <img

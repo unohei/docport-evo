@@ -1,14 +1,15 @@
 import React from "react";
 
 /* ===== Theme ===== */
+// UI改善: ロゴカラー基準に統一（メインネイビー#1F3A6D、アクセントブルー#4A90E2）
 export const THEME = {
-  bg: "#F5F8FC",
-  topbar: "rgba(245,248,252,0.9)",
+  bg: "#F5F9FF",                     // 旧 #F5F8FC - ブランドブルー寄りに
+  topbar: "rgba(245,249,255,0.9)",   // 旧 rgba(245,248,252,0.9)
   text: "#0F172A",
 
-  // ★ SendTabと統一（Sky系）
-  primary: "#0ea5e9", // sky-500
-  primaryText: "#0369a1",
+  // ロゴアクセントブルーに統一（旧 sky-500 #0ea5e9）
+  primary: "#4A90E2",
+  primaryText: "#1F3A6D",            // ロゴメインネイビー（旧 #0369a1）
   border: "rgba(15,23,42,0.15)",
 };
 
@@ -75,12 +76,12 @@ export function PrimaryButton({ children, style, ...props }) {
       style={{
         padding: "10px 16px",
         borderRadius: 12,
-        border: `1px solid rgba(14,165,233,0.6)`,
-        background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
+        border: `1px solid rgba(74,144,226,0.55)`,
+        background: "linear-gradient(135deg, #4A90E2 0%, #2A65C0 100%)",
         color: "#fff",
         cursor: "pointer",
         fontWeight: 900,
-        boxShadow: "0 8px 20px rgba(14,165,233,0.25)",
+        boxShadow: "0 8px 20px rgba(74,144,226,0.28)",
         transition: "all 160ms ease",
         ...style,
       }}
@@ -114,9 +115,9 @@ export function SecondaryButton({ children, style, ...props }) {
 
 /* ===== SidebarButton（SendTabと完全統一） ===== */
 export function SidebarButton({ children, active, badge, style, ...props }) {
-  const accentBg = "rgba(14,165,233,0.14)";
-  const accentBorder = "rgba(14,165,233,0.45)";
-  const accentText = "#0369a1";
+  const accentBg = "rgba(74,144,226,0.11)";
+  const accentBorder = "rgba(74,144,226,0.42)";
+  const accentText = "#1F3A6D";
 
   return (
     <button
@@ -137,7 +138,7 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
         gap: 8,
         minWidth: 0,
         boxShadow: active
-          ? "0 10px 24px rgba(2,132,199,0.18)"
+          ? "0 10px 24px rgba(74,144,226,0.18)"
           : "0 2px 8px rgba(15,23,42,0.06)",
         transition:
           "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease",
@@ -157,7 +158,7 @@ export function SidebarButton({ children, active, badge, style, ...props }) {
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: 999,
-            background: active ? "rgba(2,132,199,0.75)" : "rgba(15,23,42,0.08)",
+            background: active ? "rgba(74,144,226,0.75)" : "rgba(15,23,42,0.08)",
             color: active ? "#fff" : THEME.text,
             whiteSpace: "nowrap",
           }}
