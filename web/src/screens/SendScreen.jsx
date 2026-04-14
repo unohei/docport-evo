@@ -97,102 +97,110 @@ export default function SendScreen({
         overflow: "hidden",
         minWidth: 0,
       }}>
-        {/* ---- ヘッダー + タブストリップ（常時固定）
-              サイドバーと同色（DP.navy）でつながったブランドフレームを形成 ---- */}
+        {/* ---- トップバー（DP.navy / 高さ48px固定）
+              サイドバーと同色でL字のブランドフレームを形成 ---- */}
         <div style={{
-          background: DP.navy,
+          height: 48,
           flexShrink: 0,
+          background: DP.navy,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 20px",
+          gap: 12,
         }}>
-          {/* タイトル行: スクリーン名 + 検索（送信済みタブ時） + ログアウト（モバイル） */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "12px 20px 0",
-            gap: 12,
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "rgba(255,255,255,0.50)",
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            flexShrink: 0,
+            userSelect: "none",
           }}>
-            <span style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "rgba(255,255,255,0.50)",
-              letterSpacing: "0.07em",
-              textTransform: "uppercase",
-              flexShrink: 0,
-              userSelect: "none",
-            }}>
-              送信
-            </span>
+            送信
+          </span>
 
-            {/* 検索: 送信済みタブ + PC/タブレット時のみ表示 */}
-            {isSent && !isMobileActual && (
-              <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-                <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
-                <input
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  placeholder="病院名・書類名で検索"
-                  className="dp-input-dark"
-                  style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
-                />
-              </div>
-            )}
+          {/* 検索: 送信済みタブ時にPC・タブレット・スマホすべてで表示 */}
+          {isSent ? (
+            <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="病院名・書類名で検索"
+                className="dp-input-dark"
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+              />
+            </div>
+          ) : (
+            <div style={{ flex: 1 }} />
+          )}
 
-            {/* ログアウトボタン（モバイル専用） */}
-            {isMobileActual && onLogout && (
-              <button
-                onClick={onLogout}
-                title="ログアウト"
-                style={{
-                  width: 34, height: 34,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,0.08)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  marginLeft: "auto",
-                  WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                <img
-                  src={LogoutIcon}
-                  alt="ログアウト"
-                  style={{ width: 18, height: 18, filter: "brightness(0) invert(1)", opacity: 0.65 }}
-                />
-              </button>
-            )}
-          </div>
+          {/* ログアウトボタン（モバイル専用） */}
+          {isMobileActual && onLogout && (
+            <button
+              onClick={onLogout}
+              title="ログアウト"
+              style={{
+                width: 34, height: 34,
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.08)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              <img
+                src={LogoutIcon}
+                alt="ログアウト"
+                style={{ width: 18, height: 18, filter: "brightness(0) invert(1)", opacity: 0.65 }}
+              />
+            </button>
+          )}
+        </div>
+        {/* フローライン: トップバーとタブ領域の間に配置 */}
+        <div className="dp-flow-line" />
 
-          {/* タブ: 暗背景に合わせて白テキスト */}
-          <div style={{ display: "flex", gap: 0, padding: "4px 20px 0" }}>
-            {[
-              { key: "send", label: "送信する" },
-              { key: "sent", label: "送信済み" },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => onTabChange(key)}
-                style={{
-                  padding: "8px 18px",
-                  fontSize: 14,
-                  fontWeight: activeTab === key ? 700 : 400,
-                  color: activeTab === key ? "#fff" : "rgba(255,255,255,0.45)",
-                  background: "none",
-                  border: "none",
-                  borderBottom: activeTab === key
-                    ? "2px solid rgba(255,255,255,0.85)"
-                    : "2px solid transparent",
-                  marginBottom: -1,
-                  cursor: "pointer",
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* フローライン: トップバーの下に流れるアニメーション */}
-          <div className="dp-flow-line" />
+        {/* ---- タブ領域（トップバーと明確に分離した別レイヤー）
+              background: DP.surface でトップバーのDP.navyと視覚的に分離 ---- */}
+        <div style={{
+          background: DP.surface,
+          borderBottom: `1px solid ${DP.border}`,
+          flexShrink: 0,
+          padding: "0 20px",
+          display: "flex",
+          gap: 0,
+        }}>
+          {[
+            { key: "send", label: "送信する" },
+            { key: "sent", label: "送信済み" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => onTabChange(key)}
+              style={{
+                padding: "10px 18px",
+                fontSize: 14,
+                fontWeight: activeTab === key ? 700 : 500,
+                color: activeTab === key ? DP.blue : DP.textSub,
+                background: "none",
+                border: "none",
+                borderBottom: activeTab === key
+                  ? `2px solid ${DP.blue}`
+                  : "2px solid transparent",
+                marginBottom: -1,
+                cursor: "pointer",
+                transition: "color 140ms ease, border-color 140ms ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* ---- 送信するタブ: スクロール可能フォーム ---- */}
@@ -245,8 +253,8 @@ export default function SendScreen({
               fetchPreviewUrl={fetchPreviewUrl}
               fetchDownloadUrl={fetchDownloadUrl}
               isMobile={isMobileActual}
-              // PC/タブレット: トップバー検索と連動。モバイル: undefined → 内部 state を使用
-              searchQuery={isMobileActual ? undefined : q}
+              // トップバー検索と連動（スマホ含む全サイズ）
+              searchQuery={q}
             />
           </div>
         )}

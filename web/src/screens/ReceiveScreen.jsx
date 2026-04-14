@@ -193,66 +193,90 @@ export default function ReceiveScreen({
         paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
       }}>
-        {/* トップバー */}
-        <div style={{
-          flexShrink: 0,
-          background: DP.navy,
-          height: 48,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 14px",
-          gap: 10,
-        }}>
-          {showDetail ? (
-            <button
-              onClick={() => setSelectedDoc(null)}
-              style={{
-                color: "rgba(255,255,255,0.90)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 700,
-                padding: "4px 0",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              ← 一覧に戻る
-            </button>
-          ) : (
-            <span style={{ color: "#fff", fontWeight: 800, fontSize: 15 }}>
-              受信ボックス
-            </span>
-          )}
+        {/* トップバー + フローライン */}
+        <div style={{ flexShrink: 0, background: DP.navy, display: "flex", flexDirection: "column" }}>
+          <div style={{
+            height: 48,
+            display: "flex",
+            alignItems: "center",
+            padding: "0 14px",
+            gap: 10,
+          }}>
+            {showDetail ? (
+              <button
+                onClick={() => setSelectedDoc(null)}
+                style={{
+                  color: "rgba(255,255,255,0.90)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  padding: "4px 0",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flex: 1,
+                }}
+              >
+                ← 一覧に戻る
+              </button>
+            ) : (
+              <>
+                {/* 受信ラベル */}
+                <span style={{
+                  color: "rgba(255,255,255,0.50)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  flexShrink: 0,
+                  userSelect: "none",
+                }}>
+                  受信
+                </span>
+                {/* 検索ボックス（スマホでもトップバー内に表示） */}
+                <div style={{ flex: 1, position: "relative" }}>
+                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+                  <input
+                    value={q}
+                    onChange={e => setQ(e.target.value)}
+                    placeholder="病院名・書類名で検索"
+                    className="dp-input-dark"
+                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+                  />
+                </div>
+              </>
+            )}
 
-          {/* ログアウトボタン（右上・誤操作防止のため主要導線と分離） */}
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              title="ログアウト"
-              style={{
-                width: 36, height: 36,
-                border: "none",
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.08)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              <img
-                src={LogoutIcon}
-                alt="ログアウト"
-                style={{ width: 20, height: 20, filter: "brightness(0) invert(1)", opacity: 0.65 }}
-              />
-            </button>
-          )}
+            {/* ログアウトボタン（右上・誤操作防止のため主要導線と分離） */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="ログアウト"
+                style={{
+                  width: 36, height: 36,
+                  border: "none",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <img
+                  src={LogoutIcon}
+                  alt="ログアウト"
+                  style={{ width: 20, height: 20, filter: "brightness(0) invert(1)", opacity: 0.65 }}
+                />
+              </button>
+            )}
+          </div>
+          {/* フローライン: PC/タブレットと統一 */}
+          <div className="dp-flow-line" />
         </div>
 
         {/* コンテンツ（flex-1） */}
@@ -268,7 +292,7 @@ export default function ReceiveScreen({
                 onLaneChange={handleLaneChange}
               />
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <CardListPanel {...cardProps} fullWidth />
+                <CardListPanel {...cardProps} searchQuery={q} fullWidth />
               </div>
             </>
           )}
