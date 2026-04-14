@@ -1,33 +1,59 @@
 // ConversationDetailPane.jsx
 // 選択されたグループの「連携履歴タイムライン」+ 既存 DetailPane の組み合わせ
 //
-// 変更点 (v2):
-// - buildTimelineEntries() で書類イベント + 擬似アクションイベントを生成
-// - アクションエントリ（アサイン・完了・キャンセル等）をインライン表示
-// - 病院モード / 患者モード 両対応ヘッダー
-//
-// PC/タブレット: タイムライン(280px) + DetailPane(flex-1) の横2カラム
-// モバイル: タイムライン全画面 → doc選択で DetailPane に切り替え
+// 変更点 (v3):
+// - buildTimelineEntries(): 時系列スキャンによる「返信」判定を追加（isReply フラグ）
+// - TimelineDocEntry: 返信時は「返信 →」ラベル + ↩ アイコンで区別
+// - グループヘッダー: currentStatus バッジを追加（現在地表示）
 
 import { useState } from "react";
 import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
 import DetailPane from "../receive/DetailPane";
 
+// ---- 現在地レベル別カラー ----
+const STATUS_COLORS = {
+  cancel:      { text: "#991B1B", bg: "rgba(239,68,68,0.12)"  },
+  complete:    { text: "#047857", bg: "rgba(4,120,87,0.12)"   },
+  in_progress: { text: "#B45309", bg: "rgba(180,83,9,0.12)"   },
+  waiting:     { text: "#1D4ED8", bg: "rgba(29,78,216,0.10)"  },
+  pending:     { text: DP.textSub, bg: "rgba(15,23,42,0.07)" },
+};
+
+// ---- アクションタイプ別カラー ----
+const ACTION_COLORS = {
+  assign:      { text: "#B45309", dot: "#D97706", bg: "rgba(180,83,9,0.07)"  },
+  complete:    { text: "#047857", dot: "#059669", bg: "rgba(4,120,87,0.07)"  },
+  in_progress: { text: "#B45309", dot: "#D97706", bg: "rgba(180,83,9,0.07)"  },
+  cancel:      { text: "#991B1B", dot: "#EF4444", bg: "rgba(239,68,68,0.07)" },
+};
+
 // ---- タイムラインエントリ生成（表示専用・DB変更なし） ----
-// docs（created_at 降順）から kind="doc" + kind="action" のエントリ列を生成
+// 返信判定: 時系列順（古い順）でスキャンし、受信後の送信を「返信」とみなす
 function buildTimelineEntries(docs, myHospitalId) {
+  // 時系列順（古い順）でスキャンして返信IDを収集
+  const replyDocIds = new Set();
+  let hasSeenIncoming = false;
+  for (const doc of [...docs].reverse()) { // oldest first
+    if (doc.to_hospital_id === myHospitalId) {
+      hasSeenIncoming = true;
+    } else if (doc.from_hospital_id === myHospitalId && hasSeenIncoming) {
+      replyDocIds.add(doc.id);
+    }
+  }
+
   const entries = [];
-  for (const doc of docs) {
-    const isSent = doc.from_hospital_id === myHospitalId;
-    // 書類イベント（選択可）
-    entries.push({ kind: "doc", doc, isSent });
+  for (const doc of docs) { // newest first（表示順はそのまま）
+    const isSent  = doc.from_hospital_id === myHospitalId;
+    const isReply = isSent && replyDocIds.has(doc.id);
+    entries.push({ kind: "doc", doc, isSent, isReply });
+
     // アサイン擬似イベント
     if (doc.assigned_to) {
       entries.push({ kind: "action", subtype: "assign",
                      label: `アサイン：${doc.assigned_to}`, doc });
     }
-    // ステータス派生イベント（排他的: 最終状態のみ表示）
+    // ステータス派生イベント（排他的・最終状態のみ）
     if (doc.status === "ARCHIVED") {
       entries.push({ kind: "action", subtype: "complete", label: "完了", doc });
     } else if (doc.status === "IN_PROGRESS") {
@@ -39,15 +65,7 @@ function buildTimelineEntries(docs, myHospitalId) {
   return entries;
 }
 
-// アクションタイプ別のカラー定義
-const ACTION_COLORS = {
-  assign:      { text: "#B45309", dot: "#D97706", bg: "rgba(180,83,9,0.07)"  },
-  complete:    { text: "#047857", dot: "#059669", bg: "rgba(4,120,87,0.07)"  },
-  in_progress: { text: "#B45309", dot: "#D97706", bg: "rgba(180,83,9,0.07)"  },
-  cancel:      { text: "#991B1B", dot: "#EF4444", bg: "rgba(239,68,68,0.07)" },
-};
-
-// ---- アクションエントリ（擬似イベント表示用・選択不可） ----
+// ---- アクションエントリ（擬似イベント・選択不可） ----
 function TimelineActionEntry({ entry }) {
   const c = ACTION_COLORS[entry.subtype] ?? { text: DP.textSub, dot: DP.border, bg: "transparent" };
   return (
@@ -57,7 +75,6 @@ function TimelineActionEntry({ entry }) {
       borderBottom: `1px solid ${DP.border}`,
       background: c.bg,
     }}>
-      {/* コネクタドット */}
       <span style={{
         display: "inline-block",
         width: 7, height: 7, borderRadius: "50%",
@@ -72,9 +89,17 @@ function TimelineActionEntry({ entry }) {
 
 // ---- 書類エントリ（選択可） ----
 function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) {
-  const { doc, isSent } = entry;
+  const { doc, isSent, isReply } = entry;
   const sc = docStatusColor(doc, isExpired);
   const sl = docStatusLabel(doc, isExpired);
+
+  // 方向アイコン: 返信は ↩（ブルー）、送信は ↑（ブルー）、受信は ↓（ネイビー）
+  const icon    = isReply ? "↩" : (isSent ? "↑" : "↓");
+  const iconBg  = isSent ? DP.blue : DP.navy;
+  // 方向ラベル: 返信かどうかで変える
+  const dirLabel = isSent
+    ? `${isReply ? "返信" : "送信"} → ${nameOf(doc.to_hospital_id)}`
+    : `受信 ← ${nameOf(doc.from_hospital_id)}`;
 
   return (
     <button
@@ -94,24 +119,22 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      {/* 方向アイコン（送信: ↑ブルー / 受信: ↓ネイビー） */}
+      {/* 方向アイコン */}
       <div style={{
         width: 26, height: 26, borderRadius: "50%",
-        background: isSent ? DP.blue : DP.navy,
+        background: iconBg,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 12, color: "#fff",
         flexShrink: 0, marginTop: 1,
       }}>
-        {isSent ? "↑" : "↓"}
+        {icon}
       </div>
 
       {/* 内容 */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* 方向ラベル */}
         <div style={{ fontSize: 11, color: DP.textSub, marginBottom: 1 }}>
-          {isSent
-            ? `送信 → ${nameOf(doc.to_hospital_id)}`
-            : `受信 ← ${nameOf(doc.from_hospital_id)}`}
+          {dirLabel}
         </div>
         {/* 絶対日時 + 経過時間 */}
         <div style={{ fontSize: 11, color: DP.textSub, marginBottom: 3, opacity: 0.75 }}>
@@ -158,7 +181,6 @@ function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, on
       display: "flex", flexDirection: "column",
       overflow: "hidden",
     }}>
-      {/* ヘッダー */}
       <div style={{
         padding: "8px 14px 7px",
         fontSize: 11, fontWeight: 800, color: DP.textSub,
@@ -168,9 +190,8 @@ function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, on
       }}>
         連携履歴 · {group.totalCount}件
       </div>
-      {/* エントリ一覧 */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {entries.map((entry, idx) =>
+        {entries.map((entry) =>
           entry.kind === "action" ? (
             <TimelineActionEntry key={`action-${entry.doc.id}-${entry.subtype}`} entry={entry} />
           ) : (
@@ -195,7 +216,7 @@ function groupMainLabel(group, nameOf) {
   return group.patientLabel ?? nameOf(group.peerHospitalId);
 }
 function groupAvatarIcon(group, iconOf) {
-  if (group.patientLabel) return "";  // 患者モード: アイコンなし（イニシャル表示）
+  if (group.patientLabel) return "";
   return iconOf ? iconOf(group.peerHospitalId) : "";
 }
 function groupSubLabel(group, nameOf) {
@@ -203,6 +224,24 @@ function groupSubLabel(group, nameOf) {
     return group.peerHospitalIds.map(id => nameOf(id)).filter(Boolean).join("・");
   }
   return null;
+}
+
+// ---- 現在地バッジ ----
+function CurrentStatusBadge({ currentStatus }) {
+  if (!currentStatus) return null;
+  const c = STATUS_COLORS[currentStatus.level] ?? STATUS_COLORS.pending;
+  return (
+    <span style={{
+      display: "inline-block",
+      fontSize: 11, fontWeight: 700,
+      padding: "2px 9px", borderRadius: 999,
+      color: c.text, background: c.bg,
+      marginLeft: 8,
+      verticalAlign: "middle",
+    }}>
+      現在：{currentStatus.label}
+    </span>
+  );
 }
 
 // ---- メイン export ----
@@ -239,9 +278,9 @@ export default function ConversationDetailPane({
     );
   }
 
-  const mainLabel = groupMainLabel(group, nameOf);
+  const mainLabel  = groupMainLabel(group, nameOf);
   const avatarIcon = groupAvatarIcon(group, iconOf);
-  const subLabel = groupSubLabel(group, nameOf);
+  const subLabel   = groupSubLabel(group, nameOf);
 
   // ---- モバイル ----
   if (isMobile) {
@@ -290,11 +329,14 @@ export default function ConversationDetailPane({
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <HospitalAvatar name={mainLabel} iconUrl={avatarIcon} size={26} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>
-              {mainLabel}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>
+                {mainLabel}
+              </span>
+              <CurrentStatusBadge currentStatus={group.currentStatus} />
             </div>
-            <div style={{ fontSize: 11, color: DP.textSub, marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: DP.textSub, marginTop: 2 }}>
               {subLabel && <span>{subLabel} · </span>}
               {group.totalCount}件
               {group.recvCount > 0 && ` · 受信${group.recvCount}`}
@@ -334,9 +376,12 @@ export default function ConversationDetailPane({
         display: "flex", alignItems: "center", gap: 12,
       }}>
         <HospitalAvatar name={mainLabel} iconUrl={avatarIcon} size={30} />
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>
-            {mainLabel}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>
+              {mainLabel}
+            </span>
+            <CurrentStatusBadge currentStatus={group.currentStatus} />
           </div>
           <div style={{ fontSize: 12, color: DP.textSub, marginTop: 2 }}>
             {subLabel && <span>{subLabel} · </span>}

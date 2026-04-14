@@ -1,12 +1,20 @@
 // ConversationCard.jsx
 // 「1つのやりとり（連携）」を1枚で表現するカード
 //
-// 変更点 (v2):
-// - group.patientLabel がある場合は患者単位モードで表示
-// - 患者モード: 患者名メイン + 関連病院名をサブ表示
+// 変更点 (v3):
+// - group.currentStatus を使って「現在地」を小さなラベルで表示
 
 import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
+
+// 現在地レベル別カラー（ConversationDetailPane と同一定義）
+const STATUS_COLORS = {
+  cancel:      { text: "#991B1B", bg: "rgba(239,68,68,0.12)"  },
+  complete:    { text: "#047857", bg: "rgba(4,120,87,0.12)"   },
+  in_progress: { text: "#B45309", bg: "rgba(180,83,9,0.12)"   },
+  waiting:     { text: "#1D4ED8", bg: "rgba(29,78,216,0.10)"  },
+  pending:     { text: DP.textSub, bg: "rgba(15,23,42,0.07)" },
+};
 
 export default function ConversationCard({
   group,
@@ -16,19 +24,15 @@ export default function ConversationCard({
   onClick,
   isExpired,
 }) {
-  const { latestDoc, sentCount, recvCount, hasReply, patientLabel, peerHospitalId, peerHospitalIds } = group;
+  const { latestDoc, sentCount, recvCount, hasReply,
+          patientLabel, peerHospitalId, peerHospitalIds,
+          currentStatus } = group;
 
   const isPatientMode = !!patientLabel;
 
-  // 表示ラベル: 患者モードなら患者名、病院モードなら病院名
-  const mainLabel = isPatientMode
-    ? patientLabel
-    : nameOf(peerHospitalId);
-
-  // アバターアイコン: 患者モードはイニシャル表示のみ（iconUrlなし）
+  const mainLabel  = isPatientMode ? patientLabel : nameOf(peerHospitalId);
   const avatarIcon = isPatientMode ? "" : (iconOf ? iconOf(peerHospitalId) : "");
 
-  // 患者モード時の副ラベル: 関連病院名
   const hospitalSubLabel = isPatientMode && peerHospitalIds?.length
     ? peerHospitalIds.map(id => nameOf(id)).filter(Boolean).join("・")
     : null;
@@ -37,6 +41,8 @@ export default function ConversationCard({
     ? docStatusColor(latestDoc, isExpired)
     : { text: DP.textSub, bg: "rgba(15,23,42,0.06)" };
   const sl = latestDoc ? docStatusLabel(latestDoc, isExpired) : "-";
+
+  const stc = currentStatus ? (STATUS_COLORS[currentStatus.level] ?? STATUS_COLORS.pending) : null;
 
   return (
     <button
@@ -52,7 +58,7 @@ export default function ConversationCard({
         background: selected ? DP.skyLight : DP.white,
         cursor: "pointer",
         display: "grid",
-        gap: 7,
+        gap: 5,
         boxShadow: selected
           ? "0 0 0 2px rgba(74,144,226,0.18)"
           : "0 1px 3px rgba(0,0,0,0.05)",
@@ -85,18 +91,31 @@ export default function ConversationCard({
         )}
       </div>
 
+      {/* 現在地ラベル */}
+      {stc && (
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{
+            display: "inline-block",
+            fontSize: 10, fontWeight: 700,
+            padding: "1px 7px", borderRadius: 999,
+            color: stc.text, background: stc.bg,
+          }}>
+            現在：{currentStatus.label}
+          </span>
+        </div>
+      )}
+
       {/* 患者モード: 関連病院名サブ表示 */}
       {hospitalSubLabel && (
         <div style={{
           fontSize: 11, color: DP.textSub, opacity: 0.85,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          marginTop: -3,
         }}>
           {hospitalSubLabel}
         </div>
       )}
 
-      {/* Row2: 最新書類名 */}
+      {/* 最新書類名 */}
       <div style={{
         fontSize: 13, color: DP.text, opacity: 0.78,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -104,7 +123,7 @@ export default function ConversationCard({
         {latestDoc?.original_filename || latestDoc?.document_type || "書類"}
       </div>
 
-      {/* Row3: ステータスバッジ + 件数バッジ + 経過時間 */}
+      {/* ステータスバッジ + 件数バッジ + 経過時間 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <span style={{

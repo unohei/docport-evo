@@ -1,10 +1,9 @@
 // useConversationGroups.js
 // inboxDocs + sentDocs を「相手病院単位 or 患者単位」でグループ化する表示専用フック
 //
-// 変更点 (v2):
-// - GROUPING_MODES に PATIENT を追加（structured_json.patient_name / patient_id をキーに）
-// - グループに patientLabel / peerHospitalIds / mode フィールドを追加
-// - 既存の peerHospitalId / docs / latestDoc 等は変更なし（後方互換）
+// 変更点 (v3):
+// - deriveCurrentStatus() を追加（会話全体の現在地を推定）
+// - group オブジェクトに currentStatus フィールドを追加
 
 import { useMemo } from "react";
 
@@ -12,6 +11,38 @@ export const GROUPING_MODES = {
   HOSPITAL: "hospital",  // 相手病院単位（デフォルト）
   PATIENT:  "patient",   // 患者単位（structured_json.patient_name / patient_id）
 };
+
+// ---- 現在地推定（DB変更なし・表示専用） ----
+// 優先順位: キャンセル > 完了 > アサイン対応中 > 返信待ち > 未対応
+export function deriveCurrentStatus(docs, myHospitalId) {
+  if (!docs || !docs.length) return null;
+  // docs は created_at 降順（newest first）
+
+  // キャンセル: いずれかの書類がCANCELLED
+  if (docs.some(d => d.status === "CANCELLED")) {
+    return { label: "キャンセル", level: "cancel" };
+  }
+  // 完了: 全書類がARCHIVED
+  if (docs.every(d => d.status === "ARCHIVED")) {
+    return { label: "完了", level: "complete" };
+  }
+  // アサイン済み: 未完了の書類にassigned_toが設定されている
+  const activeAssigned = docs.find(
+    d => d.assigned_to && d.status !== "ARCHIVED" && d.status !== "CANCELLED",
+  );
+  if (activeAssigned) {
+    return { label: `${activeAssigned.assigned_to}で対応中`, level: "in_progress" };
+  }
+  // 返信待ち: 最新書類が自院送信かつ相手からの受信が存在する
+  const latestDoc = docs[0];
+  const isSent    = latestDoc?.from_hospital_id === myHospitalId;
+  const hasIncoming = docs.some(d => d.to_hospital_id === myHospitalId);
+  if (isSent && hasIncoming) {
+    return { label: "返信待ち", level: "waiting" };
+  }
+  // 未対応（デフォルト）
+  return { label: "未対応", level: "pending" };
+}
 
 // ---- grouping key 生成 ----
 function keyOf(doc, myHospitalId, mode) {
@@ -21,7 +52,6 @@ function keyOf(doc, myHospitalId, mode) {
     const pid  = sj?.patient_id?.trim();
     return name || pid || "患者不明";
   }
-  // HOSPITAL: 自院から見た「相手病院」IDをキーに
   const peer =
     doc.from_hospital_id === myHospitalId
       ? doc.to_hospital_id
@@ -39,7 +69,6 @@ export function useConversationGroups(
   return useMemo(() => {
     if (!myHospitalId) return [];
 
-    // 受信 + 送信を合算し、ID重複を除去
     const seen    = new Set();
     const allDocs = [];
     for (const doc of [...(inboxDocs ?? []), ...(sentDocs ?? [])]) {
@@ -49,7 +78,6 @@ export function useConversationGroups(
       }
     }
 
-    // keyOf で Map にグループ化
     const map = new Map();
     for (const doc of allDocs) {
       const k = keyOf(doc, myHospitalId, mode);
@@ -57,7 +85,6 @@ export function useConversationGroups(
       map.get(k).push(doc);
     }
 
-    // 各グループを整理（ドキュメントは created_at 降順）
     const groups = Array.from(map.entries()).map(([key, docs]) => {
       const sorted = [...docs].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at),
@@ -65,33 +92,29 @@ export function useConversationGroups(
       const sent = docs.filter(d => d.from_hospital_id === myHospitalId);
       const recv = docs.filter(d => d.to_hospital_id   === myHospitalId);
 
-      // 関連病院一覧（自院を除く）: 患者モードで複数病院が絡む場合の副表示用
       const peerHospitalIds = [
         ...new Set(
-          docs.flatMap(d =>
-            [d.from_hospital_id, d.to_hospital_id].filter(Boolean),
-          ),
+          docs.flatMap(d => [d.from_hospital_id, d.to_hospital_id].filter(Boolean)),
         ),
       ].filter(id => id !== myHospitalId);
 
       return {
         id:             key,
-        // 病院モード: key = 相手病院ID  /  患者モード: 代表病院ID（参照用）
         peerHospitalId: mode === GROUPING_MODES.HOSPITAL ? key : (peerHospitalIds[0] ?? null),
-        // 患者モード専用ラベル（病院モードでは null）
         patientLabel:   mode === GROUPING_MODES.PATIENT  ? key : null,
-        peerHospitalIds,   // 関連病院ID一覧（患者モードの病院名副表示用）
-        mode,              // カード・詳細パネルの表示切替に使用
-        docs:          sorted,
-        latestDoc:     sorted[0] ?? null,
-        sentCount:     sent.length,
-        recvCount:     recv.length,
-        totalCount:    docs.length,
-        hasReply:      sent.length > 0 && recv.length > 0,
+        peerHospitalIds,
+        mode,
+        docs:           sorted,
+        latestDoc:      sorted[0] ?? null,
+        sentCount:      sent.length,
+        recvCount:      recv.length,
+        totalCount:     docs.length,
+        hasReply:       sent.length > 0 && recv.length > 0,
+        // 現在地（表示専用・DB変更なし）
+        currentStatus:  deriveCurrentStatus(sorted, myHospitalId),
       };
     });
 
-    // グループ自体も最新書類の日時で降順ソート
     return groups.sort(
       (a, b) =>
         new Date(b.latestDoc?.created_at ?? 0) -
