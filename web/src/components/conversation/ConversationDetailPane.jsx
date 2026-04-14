@@ -1,10 +1,9 @@
 // ConversationDetailPane.jsx
 // 選択されたグループの「連携履歴タイムライン」+ 既存 DetailPane の組み合わせ
 //
-// 変更点 (v3):
-// - buildTimelineEntries(): 時系列スキャンによる「返信」判定を追加（isReply フラグ）
-// - TimelineDocEntry: 返信時は「返信 →」ラベル + ↩ アイコンで区別
-// - グループヘッダー: currentStatus バッジを追加（現在地表示）
+// 変更点 (v4):
+// - DetailPane に myHospitalId を渡す（送信書類のボタン非表示に対応）
+// - buildTimelineEntries: assigned_to → assigned_department（正しいDBフィールド名）
 
 import { useState } from "react";
 import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
@@ -29,12 +28,11 @@ const ACTION_COLORS = {
 };
 
 // ---- タイムラインエントリ生成（表示専用・DB変更なし） ----
-// 返信判定: 時系列順（古い順）でスキャンし、受信後の送信を「返信」とみなす
 function buildTimelineEntries(docs, myHospitalId) {
   // 時系列順（古い順）でスキャンして返信IDを収集
   const replyDocIds = new Set();
   let hasSeenIncoming = false;
-  for (const doc of [...docs].reverse()) { // oldest first
+  for (const doc of [...docs].reverse()) {
     if (doc.to_hospital_id === myHospitalId) {
       hasSeenIncoming = true;
     } else if (doc.from_hospital_id === myHospitalId && hasSeenIncoming) {
@@ -43,15 +41,15 @@ function buildTimelineEntries(docs, myHospitalId) {
   }
 
   const entries = [];
-  for (const doc of docs) { // newest first（表示順はそのまま）
+  for (const doc of docs) {
     const isSent  = doc.from_hospital_id === myHospitalId;
     const isReply = isSent && replyDocIds.has(doc.id);
     entries.push({ kind: "doc", doc, isSent, isReply });
 
-    // アサイン擬似イベント
-    if (doc.assigned_to) {
+    // アサイン擬似イベント（assigned_department が正しいフィールド名）
+    if (doc.assigned_department) {
       entries.push({ kind: "action", subtype: "assign",
-                     label: `アサイン：${doc.assigned_to}`, doc });
+                     label: `アサイン：${doc.assigned_department}`, doc });
     }
     // ステータス派生イベント（排他的・最終状態のみ）
     if (doc.status === "ARCHIVED") {
@@ -76,8 +74,7 @@ function TimelineActionEntry({ entry }) {
       background: c.bg,
     }}>
       <span style={{
-        display: "inline-block",
-        width: 7, height: 7, borderRadius: "50%",
+        display: "inline-block", width: 7, height: 7, borderRadius: "50%",
         background: c.dot, flexShrink: 0,
       }} />
       <span style={{ fontSize: 11, color: c.text, fontWeight: 700 }}>
@@ -93,10 +90,8 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
   const sc = docStatusColor(doc, isExpired);
   const sl = docStatusLabel(doc, isExpired);
 
-  // 方向アイコン: 返信は ↩（ブルー）、送信は ↑（ブルー）、受信は ↓（ネイビー）
-  const icon    = isReply ? "↩" : (isSent ? "↑" : "↓");
-  const iconBg  = isSent ? DP.blue : DP.navy;
-  // 方向ラベル: 返信かどうかで変える
+  const icon     = isReply ? "↩" : (isSent ? "↑" : "↓");
+  const iconBg   = isSent ? DP.blue : DP.navy;
   const dirLabel = isSent
     ? `${isReply ? "返信" : "送信"} → ${nameOf(doc.to_hospital_id)}`
     : `受信 ← ${nameOf(doc.from_hospital_id)}`;
@@ -105,49 +100,30 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
     <button
       onClick={onClick}
       style={{
-        width: "100%",
-        padding: "11px 14px",
+        width: "100%", padding: "11px 14px",
         background: selected ? DP.skyLight : "transparent",
-        border: "none",
-        borderBottom: `1px solid ${DP.border}`,
-        textAlign: "left",
-        cursor: "pointer",
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start",
-        transition: "background 120ms ease",
-        WebkitTapHighlightColor: "transparent",
+        border: "none", borderBottom: `1px solid ${DP.border}`,
+        textAlign: "left", cursor: "pointer",
+        display: "flex", gap: 10, alignItems: "flex-start",
+        transition: "background 120ms ease", WebkitTapHighlightColor: "transparent",
       }}
     >
-      {/* 方向アイコン */}
       <div style={{
-        width: 26, height: 26, borderRadius: "50%",
-        background: iconBg,
+        width: 26, height: 26, borderRadius: "50%", background: iconBg,
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 12, color: "#fff",
-        flexShrink: 0, marginTop: 1,
+        fontSize: 12, color: "#fff", flexShrink: 0, marginTop: 1,
       }}>
         {icon}
       </div>
-
-      {/* 内容 */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* 方向ラベル */}
-        <div style={{ fontSize: 11, color: DP.textSub, marginBottom: 1 }}>
-          {dirLabel}
-        </div>
-        {/* 絶対日時 + 経過時間 */}
+        <div style={{ fontSize: 11, color: DP.textSub, marginBottom: 1 }}>{dirLabel}</div>
         <div style={{ fontSize: 11, color: DP.textSub, marginBottom: 3, opacity: 0.75 }}>
           {fmt(doc.created_at)}
           <span style={{ marginLeft: 5, opacity: 0.7 }}>({elapsed(doc.created_at)})</span>
         </div>
-        {/* 書類名 */}
         <div style={{
-          fontSize: 13,
-          fontWeight: selected ? 800 : 600,
-          color: DP.text,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          marginBottom: 4,
+          fontSize: 13, fontWeight: selected ? 800 : 600, color: DP.text,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 4,
         }}>
           {doc.original_filename || doc.document_type || "書類"}
           {doc.original_filename && doc.document_type && (
@@ -156,11 +132,9 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
             </span>
           )}
         </div>
-        {/* ステータスバッジ */}
         <span style={{
-          display: "inline-block",
-          fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 999,
-          color: sc.text, background: sc.bg,
+          display: "inline-block", fontSize: 11, fontWeight: 800,
+          padding: "2px 7px", borderRadius: 999, color: sc.text, background: sc.bg,
         }}>
           {sl}
         </span>
@@ -172,21 +146,15 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
 // ---- タイムライン列 ----
 function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, onDocSelect }) {
   const entries = buildTimelineEntries(group.docs, myHospitalId);
-
   return (
     <div style={{
-      width: 280, flexShrink: 0,
-      borderRight: `1px solid ${DP.border}`,
-      background: "#F8FAFC",
-      display: "flex", flexDirection: "column",
-      overflow: "hidden",
+      width: 280, flexShrink: 0, borderRight: `1px solid ${DP.border}`,
+      background: "#F8FAFC", display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
       <div style={{
-        padding: "8px 14px 7px",
-        fontSize: 11, fontWeight: 800, color: DP.textSub,
+        padding: "8px 14px 7px", fontSize: 11, fontWeight: 800, color: DP.textSub,
         textTransform: "uppercase", letterSpacing: "0.06em",
-        borderBottom: `1px solid ${DP.border}`,
-        background: DP.white, flexShrink: 0,
+        borderBottom: `1px solid ${DP.border}`, background: DP.white, flexShrink: 0,
       }}>
         連携履歴 · {group.totalCount}件
       </div>
@@ -197,10 +165,7 @@ function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, on
           ) : (
             <TimelineDocEntry
               key={`doc-${entry.doc.id}`}
-              entry={entry}
-              nameOf={nameOf}
-              fmt={fmt}
-              isExpired={isExpired}
+              entry={entry} nameOf={nameOf} fmt={fmt} isExpired={isExpired}
               selected={selectedDoc?.id === entry.doc.id}
               onClick={() => onDocSelect(selectedDoc?.id === entry.doc.id ? null : entry.doc)}
             />
@@ -212,9 +177,7 @@ function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, on
 }
 
 // ---- グループヘッダー用ヘルパー ----
-function groupMainLabel(group, nameOf) {
-  return group.patientLabel ?? nameOf(group.peerHospitalId);
-}
+function groupMainLabel(group, nameOf) { return group.patientLabel ?? nameOf(group.peerHospitalId); }
 function groupAvatarIcon(group, iconOf) {
   if (group.patientLabel) return "";
   return iconOf ? iconOf(group.peerHospitalId) : "";
@@ -232,12 +195,10 @@ function CurrentStatusBadge({ currentStatus }) {
   const c = STATUS_COLORS[currentStatus.level] ?? STATUS_COLORS.pending;
   return (
     <span style={{
-      display: "inline-block",
-      fontSize: 11, fontWeight: 700,
+      display: "inline-block", fontSize: 11, fontWeight: 700,
       padding: "2px 9px", borderRadius: 999,
       color: c.text, background: c.bg,
-      marginLeft: 8,
-      verticalAlign: "middle",
+      marginLeft: 8, verticalAlign: "middle",
     }}>
       現在：{currentStatus.label}
     </span>
@@ -263,12 +224,10 @@ export default function ConversationDetailPane({
 }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
 
-  // グループ未選択
   if (!group) {
     return (
       <div style={{
-        flex: 1,
-        display: "flex", flexDirection: "column",
+        flex: 1, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center",
         background: DP.white, color: DP.textSub, gap: 12, minWidth: 0,
       }}>
@@ -282,14 +241,23 @@ export default function ConversationDetailPane({
   const avatarIcon = groupAvatarIcon(group, iconOf);
   const subLabel   = groupSubLabel(group, nameOf);
 
+  // DetailPane に渡す共通 props
+  const detailPaneProps = {
+    nameOf, iconOf, fmt,
+    onArchive, onAssign,
+    hospitalMembers, myUserId,
+    fetchPreviewUrl, fetchDownloadUrl,
+    departments,
+    myHospitalId,  // ← 送受信判定のために渡す
+  };
+
   // ---- モバイル ----
   if (isMobile) {
     if (selectedDoc) {
       return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
           <div style={{
-            padding: "8px 14px",
-            borderBottom: `1px solid ${DP.border}`,
+            padding: "8px 14px", borderBottom: `1px solid ${DP.border}`,
             background: DP.surface, flexShrink: 0,
           }}>
             <button
@@ -304,36 +272,23 @@ export default function ConversationDetailPane({
             </button>
           </div>
           <div style={{ flex: 1, overflow: "hidden" }}>
-            <DetailPane
-              doc={selectedDoc}
-              nameOf={nameOf} iconOf={iconOf} fmt={fmt}
-              onArchive={onArchive} onAssign={onAssign}
-              hospitalMembers={hospitalMembers} myUserId={myUserId}
-              fetchPreviewUrl={fetchPreviewUrl} fetchDownloadUrl={fetchDownloadUrl}
-              departments={departments}
-            />
+            <DetailPane doc={selectedDoc} {...detailPaneProps} />
           </div>
         </div>
       );
     }
 
-    // タイムライン全画面（モバイル）
     const mobileEntries = buildTimelineEntries(group.docs, myHospitalId);
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        {/* グループヘッダー */}
         <div style={{
-          padding: "12px 16px", flexShrink: 0,
-          borderBottom: `1px solid ${DP.border}`,
-          background: DP.surface,
-          display: "flex", alignItems: "center", gap: 10,
+          padding: "12px 16px", flexShrink: 0, borderBottom: `1px solid ${DP.border}`,
+          background: DP.surface, display: "flex", alignItems: "center", gap: 10,
         }}>
           <HospitalAvatar name={mainLabel} iconUrl={avatarIcon} size={26} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>
-                {mainLabel}
-              </span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>{mainLabel}</span>
               <CurrentStatusBadge currentStatus={group.currentStatus} />
             </div>
             <div style={{ fontSize: 11, color: DP.textSub, marginTop: 2 }}>
@@ -345,7 +300,6 @@ export default function ConversationDetailPane({
             </div>
           </div>
         </div>
-        {/* タイムライン */}
         <div style={{ flex: 1, overflowY: "auto" }}>
           {mobileEntries.map((entry) =>
             entry.kind === "action" ? (
@@ -353,8 +307,7 @@ export default function ConversationDetailPane({
             ) : (
               <TimelineDocEntry
                 key={`doc-${entry.doc.id}`}
-                entry={entry}
-                nameOf={nameOf} fmt={fmt} isExpired={isExpired}
+                entry={entry} nameOf={nameOf} fmt={fmt} isExpired={isExpired}
                 selected={selectedDoc?.id === entry.doc.id}
                 onClick={() => setSelectedDoc(entry.doc)}
               />
@@ -368,19 +321,14 @@ export default function ConversationDetailPane({
   // ---- PC / タブレット ----
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-      {/* グループヘッダー */}
       <div style={{
-        padding: "14px 20px", flexShrink: 0,
-        borderBottom: `1px solid ${DP.border}`,
-        background: DP.surface,
-        display: "flex", alignItems: "center", gap: 12,
+        padding: "14px 20px", flexShrink: 0, borderBottom: `1px solid ${DP.border}`,
+        background: DP.surface, display: "flex", alignItems: "center", gap: 12,
       }}>
         <HospitalAvatar name={mainLabel} iconUrl={avatarIcon} size={30} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>
-              {mainLabel}
-            </span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>{mainLabel}</span>
             <CurrentStatusBadge currentStatus={group.currentStatus} />
           </div>
           <div style={{ fontSize: 12, color: DP.textSub, marginTop: 2 }}>
@@ -392,26 +340,13 @@ export default function ConversationDetailPane({
           </div>
         </div>
       </div>
-
-      {/* 本体: タイムライン(左280px) + DetailPane(右flex-1) */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <Timeline
-          group={group}
-          myHospitalId={myHospitalId}
-          nameOf={nameOf}
-          fmt={fmt}
-          isExpired={isExpired}
-          selectedDoc={selectedDoc}
-          onDocSelect={setSelectedDoc}
+          group={group} myHospitalId={myHospitalId}
+          nameOf={nameOf} fmt={fmt} isExpired={isExpired}
+          selectedDoc={selectedDoc} onDocSelect={setSelectedDoc}
         />
-        <DetailPane
-          doc={selectedDoc}
-          nameOf={nameOf} iconOf={iconOf} fmt={fmt}
-          onArchive={onArchive} onAssign={onAssign}
-          hospitalMembers={hospitalMembers} myUserId={myUserId}
-          fetchPreviewUrl={fetchPreviewUrl} fetchDownloadUrl={fetchDownloadUrl}
-          departments={departments}
-        />
+        <DetailPane doc={selectedDoc} {...detailPaneProps} />
       </div>
     </div>
   );

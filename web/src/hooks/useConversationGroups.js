@@ -1,9 +1,8 @@
 // useConversationGroups.js
 // inboxDocs + sentDocs を「相手病院単位 or 患者単位」でグループ化する表示専用フック
 //
-// 変更点 (v3):
-// - deriveCurrentStatus() を追加（会話全体の現在地を推定）
-// - group オブジェクトに currentStatus フィールドを追加
+// 変更点 (v4):
+// - assigned_to → assigned_department に修正（DetailPane の DB フィールド名と統一）
 
 import { useMemo } from "react";
 
@@ -18,29 +17,28 @@ export function deriveCurrentStatus(docs, myHospitalId) {
   if (!docs || !docs.length) return null;
   // docs は created_at 降順（newest first）
 
-  // キャンセル: いずれかの書類がCANCELLED
   if (docs.some(d => d.status === "CANCELLED")) {
     return { label: "キャンセル", level: "cancel" };
   }
-  // 完了: 全書類がARCHIVED
   if (docs.every(d => d.status === "ARCHIVED")) {
     return { label: "完了", level: "complete" };
   }
-  // アサイン済み: 未完了の書類にassigned_toが設定されている
+  // アサイン済み: 未完了の書類に assigned_department が設定されている
   const activeAssigned = docs.find(
-    d => d.assigned_to && d.status !== "ARCHIVED" && d.status !== "CANCELLED",
+    d => d.assigned_department &&
+         d.status !== "ARCHIVED" &&
+         d.status !== "CANCELLED",
   );
   if (activeAssigned) {
-    return { label: `${activeAssigned.assigned_to}で対応中`, level: "in_progress" };
+    return { label: `${activeAssigned.assigned_department}で対応中`, level: "in_progress" };
   }
   // 返信待ち: 最新書類が自院送信かつ相手からの受信が存在する
-  const latestDoc = docs[0];
-  const isSent    = latestDoc?.from_hospital_id === myHospitalId;
+  const latestDoc   = docs[0];
+  const isSent      = latestDoc?.from_hospital_id === myHospitalId;
   const hasIncoming = docs.some(d => d.to_hospital_id === myHospitalId);
   if (isSent && hasIncoming) {
     return { label: "返信待ち", level: "waiting" };
   }
-  // 未対応（デフォルト）
   return { label: "未対応", level: "pending" };
 }
 
@@ -110,7 +108,6 @@ export function useConversationGroups(
         recvCount:      recv.length,
         totalCount:     docs.length,
         hasReply:       sent.length > 0 && recv.length > 0,
-        // 現在地（表示専用・DB変更なし）
         currentStatus:  deriveCurrentStatus(sorted, myHospitalId),
       };
     });

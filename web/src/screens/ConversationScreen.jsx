@@ -1,11 +1,8 @@
 // ConversationScreen.jsx
 // 「送受信ではなくやりとり（連携）単位で見る」画面
 //
-// 変更点 (v2):
-// - groupingMode state 追加（HOSPITAL / PATIENT の切替）
-// - グルーピングモード変更時に selectedGroup をリセット
-// - filteredGroups の検索を患者モード対応に拡張
-// - ConversationListPanel に groupingMode / onGroupingModeChange を渡す
+// 変更点 (v3):
+// - departments / addDepartment を ConversationListPanel に渡す（部署タブ用）
 
 import { useState, useMemo, useCallback } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -42,56 +39,50 @@ export default function ConversationScreen({
 }) {
   const isMobile = useMediaQuery("(max-width: 639px)");
 
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [q, setQ] = useState("");
-  const [groupingMode, setGroupingMode] = useState(GROUPING_MODES.HOSPITAL);
+  const [selectedGroup,  setSelectedGroup]  = useState(null);
+  const [q,              setQ]              = useState("");
+  const [groupingMode,   setGroupingMode]   = useState(GROUPING_MODES.HOSPITAL);
 
-  // グルーピングモード切替: 選択中グループをリセット
   const handleGroupingModeChange = useCallback(newMode => {
     setGroupingMode(newMode);
     setSelectedGroup(null);
   }, []);
 
-  const groups = useConversationGroups(
-    inboxDocs,
-    sentDocs,
-    myHospitalId,
-    groupingMode,
-  );
+  const groups = useConversationGroups(inboxDocs, sentDocs, myHospitalId, groupingMode);
 
-  // トップバー検索フィルタ（患者モード / 病院モード 両対応）
   const filteredGroups = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (!query) return groups;
     return groups.filter(g => {
       const fname = (g.latestDoc?.original_filename || "").toLowerCase();
-      if (g.patientLabel) {
-        return g.patientLabel.toLowerCase().includes(query) || fname.includes(query);
-      }
+      if (g.patientLabel) return g.patientLabel.toLowerCase().includes(query) || fname.includes(query);
       const name = nameOf(g.peerHospitalId).toLowerCase();
       return name.includes(query) || fname.includes(query);
     });
   }, [groups, q, nameOf]);
 
-  const handleGroupSelect = useCallback(group => {
-    setSelectedGroup(group);
-  }, []);
+  const handleGroupSelect = useCallback(group => setSelectedGroup(group), []);
 
   const sidebarProps = {
-    activeTab, onTabChange,
-    myHospitalIcon, myAvatarUrl, onAvatarUpload,
-    unreadCount, onLogout,
+    activeTab, onTabChange, myHospitalIcon, myAvatarUrl, onAvatarUpload, unreadCount, onLogout,
   };
 
   const detailProps = {
-    group: selectedGroup,
-    myHospitalId,
+    group: selectedGroup, myHospitalId,
     nameOf, iconOf, fmt, isExpired,
-    onArchive: archiveDocument,
-    onAssign: assignDocument,
+    onArchive: archiveDocument, onAssign: assignDocument,
     hospitalMembers, myUserId,
-    fetchPreviewUrl, fetchDownloadUrl,
-    departments,
+    fetchPreviewUrl, fetchDownloadUrl, departments,
+  };
+
+  // 部署タブ用: ListPanel に渡す共通 props
+  const listPanelProps = {
+    groups: filteredGroups,
+    nameOf, iconOf,
+    selectedGroup, onSelect: handleGroupSelect,
+    isExpired, searchQuery: q,
+    groupingMode, onGroupingModeChange: handleGroupingModeChange,
+    departments, addDepartment,
   };
 
   // ---- モバイルレイアウト ----
@@ -156,17 +147,7 @@ export default function ConversationScreen({
           {showDetail ? (
             <ConversationDetailPane key={selectedGroup?.id ?? "none"} {...detailProps} isMobile />
           ) : (
-            <ConversationListPanel
-              groups={filteredGroups}
-              nameOf={nameOf} iconOf={iconOf}
-              selectedGroup={selectedGroup}
-              onSelect={handleGroupSelect}
-              isExpired={isExpired}
-              searchQuery={q}
-              groupingMode={groupingMode}
-              onGroupingModeChange={handleGroupingModeChange}
-              fullWidth
-            />
+            <ConversationListPanel {...listPanelProps} fullWidth />
           )}
         </div>
 
@@ -181,19 +162,15 @@ export default function ConversationScreen({
   // ---- PC / タブレットレイアウト ----
   return (
     <div style={{
-      display: "flex",
-      height: "100vh", width: "100vw",
+      display: "flex", height: "100vh", width: "100vw",
       overflow: "hidden", background: DP.white,
     }}>
       <GlobalSidebar {...sidebarProps} />
-
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* トップバー */}
         <div style={{
-          height: 48, flexShrink: 0,
-          background: DP.navy,
-          display: "flex", alignItems: "center",
-          padding: "0 16px", gap: 12,
+          height: 48, flexShrink: 0, background: DP.navy,
+          display: "flex", alignItems: "center", padding: "0 16px", gap: 12,
         }}>
           <span style={{
             color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800,
@@ -214,18 +191,9 @@ export default function ConversationScreen({
         </div>
         <div className="dp-flow-line" />
 
-        {/* コンテンツ: 一覧 + 詳細 */}
+        {/* コンテンツ */}
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          <ConversationListPanel
-            groups={filteredGroups}
-            nameOf={nameOf} iconOf={iconOf}
-            selectedGroup={selectedGroup}
-            onSelect={handleGroupSelect}
-            isExpired={isExpired}
-            searchQuery={q}
-            groupingMode={groupingMode}
-            onGroupingModeChange={handleGroupingModeChange}
-          />
+          <ConversationListPanel {...listPanelProps} />
           <ConversationDetailPane key={selectedGroup?.id ?? "none"} {...detailProps} />
         </div>
       </div>
