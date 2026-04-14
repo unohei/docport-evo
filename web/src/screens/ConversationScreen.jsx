@@ -148,7 +148,6 @@ export default function ConversationScreen({
         {/* コンテンツ */}
         <div style={{ flex: 1, overflow: "hidden" }}>
           {showDetail ? (
-            {/* key でグループ切替時に selectedDoc をリセット（モバイルも同様） */}
             <ConversationDetailPane key={selectedGroup?.id ?? "none"} {...detailProps} isMobile />
           ) : (
             <ConversationListPanel
