@@ -43,6 +43,12 @@ import {
 import FaxInboundList from "./tabs/FaxInboundList";
 import ReceiveScreen from "./screens/ReceiveScreen";
 import SendScreen from "./screens/SendScreen";
+import ConversationScreen from "./screens/ConversationScreen";
+
+// ---- Feature flag: やりとり画面（連携ビュー）----
+// true  → tab="inbox" 時に ConversationScreen（やりとり単位の新UI）
+// false → 従来の ReceiveScreen（受信一覧）に即時ロールバック
+const ENABLE_CONVERSATION_VIEW = true;
 import { getPreviewKey, isPreviewable, getExtFromKey } from "./utils/preview";
 import { logEvent, setAuditHospitalId } from "./utils/audit";
 
@@ -1223,34 +1229,64 @@ export default function App() {
     );
   }
 
-  // 受信画面は4カラムの ReceiveScreen でフルスクリーン表示
+  // 受信画面: ENABLE_CONVERSATION_VIEW が true なら ConversationScreen、false なら従来の ReceiveScreen
   if (tab === "inbox") {
     return (
       <Root>
-        <ReceiveScreen
-          activeTab={tab}
-          onTabChange={setTab}
-          onLogout={logout}
-          myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
-          myAvatarUrl={myAvatarUrl}
-          onAvatarUpload={uploadAvatar}
-          myHospitalName={myHospitalName}
-          unreadCount={unreadCount}
-          docs={filteredInboxDocs}
-          nameOf={nameOf}
-          iconOf={iconOf}
-          fmt={fmt}
-          isExpired={isExpired}
-          openPreview={openInboxPreview}
-          archiveDocument={archiveDocument}
-          assignDocument={assignDocument}
-          hospitalMembers={hospitalMembers}
-          myUserId={session?.user?.id ?? null}
-          fetchPreviewUrl={fetchPreviewUrl}
-          fetchDownloadUrl={fetchDownloadUrl}
-          departments={departments}
-          addDepartment={addDepartment}
-        />
+        {ENABLE_CONVERSATION_VIEW ? (
+          // ---- やりとりビュー（新UI）----
+          // inboxDocs + sentDocs + myHospitalId を渡して表示側でグルーピング
+          <ConversationScreen
+            activeTab={tab}
+            onTabChange={setTab}
+            onLogout={logout}
+            myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+            myAvatarUrl={myAvatarUrl}
+            onAvatarUpload={uploadAvatar}
+            unreadCount={unreadCount}
+            inboxDocs={filteredInboxDocs}
+            sentDocs={filteredSentDocs}
+            myHospitalId={myHospitalId}
+            nameOf={nameOf}
+            iconOf={iconOf}
+            fmt={fmt}
+            isExpired={isExpired}
+            archiveDocument={archiveDocument}
+            assignDocument={assignDocument}
+            hospitalMembers={hospitalMembers}
+            myUserId={session?.user?.id ?? null}
+            fetchPreviewUrl={fetchPreviewUrl}
+            fetchDownloadUrl={fetchDownloadUrl}
+            departments={departments}
+            addDepartment={addDepartment}
+          />
+        ) : (
+          // ---- 従来の受信一覧（ロールバック用）----
+          <ReceiveScreen
+            activeTab={tab}
+            onTabChange={setTab}
+            onLogout={logout}
+            myHospitalIcon={myHospitalId ? iconOf(myHospitalId) : null}
+            myAvatarUrl={myAvatarUrl}
+            onAvatarUpload={uploadAvatar}
+            myHospitalName={myHospitalName}
+            unreadCount={unreadCount}
+            docs={filteredInboxDocs}
+            nameOf={nameOf}
+            iconOf={iconOf}
+            fmt={fmt}
+            isExpired={isExpired}
+            openPreview={openInboxPreview}
+            archiveDocument={archiveDocument}
+            assignDocument={assignDocument}
+            hospitalMembers={hospitalMembers}
+            myUserId={session?.user?.id ?? null}
+            fetchPreviewUrl={fetchPreviewUrl}
+            fetchDownloadUrl={fetchDownloadUrl}
+            departments={departments}
+            addDepartment={addDepartment}
+          />
+        )}
         <PreviewModal
           isOpen={!!previewDoc} onClose={closePreview}
           title={previewDoc ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}` : ""}
