@@ -1,11 +1,11 @@
 // ConversationScreen.jsx
 // 「送受信ではなくやりとり（連携）単位で見る」画面
-// ReceiveScreen と同じレイアウト構造 (GlobalSidebar + TopBar + リスト + 詳細) を維持
 //
-// 設計原則:
-// - API / DB / state は変更しない（表示ロジックのみ）
-// - useConversationGroups フックで inbox + sent を病院ペア単位にグループ化
-// - ENABLE_CONVERSATION_VIEW = false で ReceiveScreen に即時ロールバック可能
+// 変更点 (v2):
+// - groupingMode state 追加（HOSPITAL / PATIENT の切替）
+// - グルーピングモード変更時に selectedGroup をリセット
+// - filteredGroups の検索を患者モード対応に拡張
+// - ConversationListPanel に groupingMode / onGroupingModeChange を渡す
 
 import { useState, useMemo, useCallback } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -17,7 +17,6 @@ import { DP } from "../components/receive/receiveConstants";
 import LogoutIcon from "../assets/logo/logout.svg";
 
 export default function ConversationScreen({
-  // ナビゲーション
   activeTab,
   onTabChange,
   onLogout,
@@ -25,7 +24,6 @@ export default function ConversationScreen({
   myAvatarUrl,
   onAvatarUpload,
   unreadCount,
-  // データ（受信 + 送信の両方を受け取る）
   inboxDocs,
   sentDocs,
   myHospitalId,
@@ -33,7 +31,6 @@ export default function ConversationScreen({
   iconOf,
   fmt,
   isExpired,
-  // アクション（既存のまま渡す）
   archiveDocument,
   assignDocument,
   hospitalMembers,
@@ -47,22 +44,31 @@ export default function ConversationScreen({
 
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [q, setQ] = useState("");
+  const [groupingMode, setGroupingMode] = useState(GROUPING_MODES.HOSPITAL);
 
-  // グルーピング（表示専用 useMemo）
+  // グルーピングモード切替: 選択中グループをリセット
+  const handleGroupingModeChange = useCallback(newMode => {
+    setGroupingMode(newMode);
+    setSelectedGroup(null);
+  }, []);
+
   const groups = useConversationGroups(
     inboxDocs,
     sentDocs,
     myHospitalId,
-    GROUPING_MODES.HOSPITAL,
+    groupingMode,
   );
 
-  // トップバー検索でフィルタ
+  // トップバー検索フィルタ（患者モード / 病院モード 両対応）
   const filteredGroups = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (!query) return groups;
     return groups.filter(g => {
-      const name  = nameOf(g.peerHospitalId).toLowerCase();
       const fname = (g.latestDoc?.original_filename || "").toLowerCase();
+      if (g.patientLabel) {
+        return g.patientLabel.toLowerCase().includes(query) || fname.includes(query);
+      }
+      const name = nameOf(g.peerHospitalId).toLowerCase();
       return name.includes(query) || fname.includes(query);
     });
   }, [groups, q, nameOf]);
@@ -99,7 +105,7 @@ export default function ConversationScreen({
         paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
       }}>
-        {/* トップバー + フローライン */}
+        {/* トップバー */}
         <div style={{ flexShrink: 0, background: DP.navy, display: "flex", flexDirection: "column" }}>
           <div style={{ height: 48, display: "flex", alignItems: "center", padding: "0 14px", gap: 10 }}>
             {showDetail ? (
@@ -126,7 +132,7 @@ export default function ConversationScreen({
                   <input
                     value={q}
                     onChange={e => setQ(e.target.value)}
-                    placeholder="病院名で検索"
+                    placeholder={groupingMode === GROUPING_MODES.PATIENT ? "患者名で検索" : "病院名で検索"}
                     className="dp-input-dark"
                     style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
                   />
@@ -157,6 +163,8 @@ export default function ConversationScreen({
               onSelect={handleGroupSelect}
               isExpired={isExpired}
               searchQuery={q}
+              groupingMode={groupingMode}
+              onGroupingModeChange={handleGroupingModeChange}
               fullWidth
             />
           )}
@@ -179,7 +187,6 @@ export default function ConversationScreen({
     }}>
       <GlobalSidebar {...sidebarProps} />
 
-      {/* 右エリア: トップバー + コンテンツ */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* トップバー */}
         <div style={{
@@ -199,7 +206,7 @@ export default function ConversationScreen({
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="病院名・書類名で検索"
+              placeholder={groupingMode === GROUPING_MODES.PATIENT ? "患者名・書類名で検索" : "病院名・書類名で検索"}
               className="dp-input-dark"
               style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
             />
@@ -216,8 +223,9 @@ export default function ConversationScreen({
             onSelect={handleGroupSelect}
             isExpired={isExpired}
             searchQuery={q}
+            groupingMode={groupingMode}
+            onGroupingModeChange={handleGroupingModeChange}
           />
-          {/* key={selectedGroup?.id} でグループ切替時に内部 selectedDoc を確実にリセット */}
           <ConversationDetailPane key={selectedGroup?.id ?? "none"} {...detailProps} />
         </div>
       </div>

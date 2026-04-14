@@ -1,6 +1,9 @@
 // ConversationCard.jsx
 // 「1つのやりとり（連携）」を1枚で表現するカード
-// 表示情報: 相手病院 / 最新ステータス / 最終更新 / 件数 / 返信有無
+//
+// 変更点 (v2):
+// - group.patientLabel がある場合は患者単位モードで表示
+// - 患者モード: 患者名メイン + 関連病院名をサブ表示
 
 import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
@@ -13,8 +16,22 @@ export default function ConversationCard({
   onClick,
   isExpired,
 }) {
-  const { peerHospitalId, latestDoc, sentCount, recvCount, hasReply } = group;
-  const peerName = nameOf(peerHospitalId);
+  const { latestDoc, sentCount, recvCount, hasReply, patientLabel, peerHospitalId, peerHospitalIds } = group;
+
+  const isPatientMode = !!patientLabel;
+
+  // 表示ラベル: 患者モードなら患者名、病院モードなら病院名
+  const mainLabel = isPatientMode
+    ? patientLabel
+    : nameOf(peerHospitalId);
+
+  // アバターアイコン: 患者モードはイニシャル表示のみ（iconUrlなし）
+  const avatarIcon = isPatientMode ? "" : (iconOf ? iconOf(peerHospitalId) : "");
+
+  // 患者モード時の副ラベル: 関連病院名
+  const hospitalSubLabel = isPatientMode && peerHospitalIds?.length
+    ? peerHospitalIds.map(id => nameOf(id)).filter(Boolean).join("・")
+    : null;
 
   const sc = latestDoc
     ? docStatusColor(latestDoc, isExpired)
@@ -31,7 +48,6 @@ export default function ConversationCard({
         padding: "11px 13px",
         borderRadius: 10,
         border: `1px solid ${selected ? DP.borderActive : DP.border}`,
-        // 往復ありの連携は左辺にブランドアクセントライン
         ...(hasReply && !selected && { borderLeft: `3px solid ${DP.blue}` }),
         background: selected ? DP.skyLight : DP.white,
         cursor: "pointer",
@@ -43,24 +59,18 @@ export default function ConversationCard({
         transition: "all 130ms ease",
       }}
     >
-      {/* Row1: 相手病院アイコン + 名前 + 返信バッジ */}
+      {/* Row1: アバター + メインラベル + 往復バッジ */}
       <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 8,
+        display: "flex", justifyContent: "space-between",
+        alignItems: "center", gap: 8,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden", minWidth: 0 }}>
-          <HospitalAvatar
-            name={peerName}
-            iconUrl={iconOf ? iconOf(peerHospitalId) : ""}
-            size={22}
-          />
+          <HospitalAvatar name={mainLabel} iconUrl={avatarIcon} size={22} />
           <span style={{
             fontSize: 15, fontWeight: 800, color: DP.navy,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            {peerName}
+            {mainLabel}
           </span>
         </div>
         {hasReply && (
@@ -75,7 +85,18 @@ export default function ConversationCard({
         )}
       </div>
 
-      {/* Row2: 最新書類名（ファイル名 or 書類種別） */}
+      {/* 患者モード: 関連病院名サブ表示 */}
+      {hospitalSubLabel && (
+        <div style={{
+          fontSize: 11, color: DP.textSub, opacity: 0.85,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          marginTop: -3,
+        }}>
+          {hospitalSubLabel}
+        </div>
+      )}
+
+      {/* Row2: 最新書類名 */}
       <div style={{
         fontSize: 13, color: DP.text, opacity: 0.78,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -86,14 +107,12 @@ export default function ConversationCard({
       {/* Row3: ステータスバッジ + 件数バッジ + 経過時間 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-          {/* 最新書類のステータス */}
           <span style={{
             fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 999,
             color: sc.text, background: sc.bg,
           }}>
             {sl}
           </span>
-          {/* 送受信件数バッジ */}
           <span style={{
             fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
             color: DP.textSub, background: "rgba(15,23,42,0.06)",

@@ -1,33 +1,32 @@
 // useConversationGroups.js
-// inboxDocs + sentDocs を「相手病院単位」でグループ化する表示専用フック
+// inboxDocs + sentDocs を「相手病院単位 or 患者単位」でグループ化する表示専用フック
 //
-// 設計方針:
-// - API / DB / state は一切変更しない（表示ロジックのみ）
-// - GROUPING_MODES を将来 "patient" / "date" に切り替えられるよう定数化
-// - useMemo で包んでいるため依存配列が変わらない限り再計算なし
+// 変更点 (v2):
+// - GROUPING_MODES に PATIENT を追加（structured_json.patient_name / patient_id をキーに）
+// - グループに patientLabel / peerHospitalIds / mode フィールドを追加
+// - 既存の peerHospitalId / docs / latestDoc 等は変更なし（後方互換）
 
 import { useMemo } from "react";
 
-// ---- グルーピングモード定数（将来の切り替え用） ----
 export const GROUPING_MODES = {
-  HOSPITAL: "hospital",  // 相手病院単位（現在のデフォルト）
-  // PATIENT: "patient", // 将来: structured_json.patient_name が必要
+  HOSPITAL: "hospital",  // 相手病院単位（デフォルト）
+  PATIENT:  "patient",   // 患者単位（structured_json.patient_name / patient_id）
 };
 
-// ---- grouping key 生成（モードに応じて切り替え） ----
+// ---- grouping key 生成 ----
 function keyOf(doc, myHospitalId, mode) {
-  if (mode === GROUPING_MODES.HOSPITAL) {
-    // 自院から見た「相手病院」のIDをキーに
-    const peer =
-      doc.from_hospital_id === myHospitalId
-        ? doc.to_hospital_id
-        : doc.from_hospital_id;
-    return peer ?? "unknown";
+  if (mode === GROUPING_MODES.PATIENT) {
+    const sj   = doc.structured_json;
+    const name = sj?.patient_name?.trim();
+    const pid  = sj?.patient_id?.trim();
+    return name || pid || "患者不明";
   }
-  // フォールバック（将来モード追加時のデフォルト）
-  return doc.from_hospital_id === myHospitalId
-    ? (doc.to_hospital_id ?? "unknown")
-    : (doc.from_hospital_id ?? "unknown");
+  // HOSPITAL: 自院から見た「相手病院」IDをキーに
+  const peer =
+    doc.from_hospital_id === myHospitalId
+      ? doc.to_hospital_id
+      : doc.from_hospital_id;
+  return peer ?? "unknown";
 }
 
 // ---- メインフック ----
@@ -41,7 +40,7 @@ export function useConversationGroups(
     if (!myHospitalId) return [];
 
     // 受信 + 送信を合算し、ID重複を除去
-    const seen   = new Set();
+    const seen    = new Set();
     const allDocs = [];
     for (const doc of [...(inboxDocs ?? []), ...(sentDocs ?? [])]) {
       if (!seen.has(doc.id)) {
@@ -59,22 +58,36 @@ export function useConversationGroups(
     }
 
     // 各グループを整理（ドキュメントは created_at 降順）
-    const groups = Array.from(map.entries()).map(([peerHospitalId, docs]) => {
+    const groups = Array.from(map.entries()).map(([key, docs]) => {
       const sorted = [...docs].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at),
       );
       const sent = docs.filter(d => d.from_hospital_id === myHospitalId);
       const recv = docs.filter(d => d.to_hospital_id   === myHospitalId);
 
+      // 関連病院一覧（自院を除く）: 患者モードで複数病院が絡む場合の副表示用
+      const peerHospitalIds = [
+        ...new Set(
+          docs.flatMap(d =>
+            [d.from_hospital_id, d.to_hospital_id].filter(Boolean),
+          ),
+        ),
+      ].filter(id => id !== myHospitalId);
+
       return {
-        id:            peerHospitalId,   // grouping key（リストの key prop 用）
-        peerHospitalId,                  // 相手病院 ID
-        docs:          sorted,           // 全書類（created_at 降順）
+        id:             key,
+        // 病院モード: key = 相手病院ID  /  患者モード: 代表病院ID（参照用）
+        peerHospitalId: mode === GROUPING_MODES.HOSPITAL ? key : (peerHospitalIds[0] ?? null),
+        // 患者モード専用ラベル（病院モードでは null）
+        patientLabel:   mode === GROUPING_MODES.PATIENT  ? key : null,
+        peerHospitalIds,   // 関連病院ID一覧（患者モードの病院名副表示用）
+        mode,              // カード・詳細パネルの表示切替に使用
+        docs:          sorted,
         latestDoc:     sorted[0] ?? null,
         sentCount:     sent.length,
         recvCount:     recv.length,
         totalCount:    docs.length,
-        hasReply:      sent.length > 0 && recv.length > 0, // 往復あり
+        hasReply:      sent.length > 0 && recv.length > 0,
       };
     });
 
