@@ -305,7 +305,6 @@ export default function ReceiveScreen({
             background: DP.navy,
             display: "flex", alignItems: "center",
             padding: "0 16px", gap: 12,
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
           }}>
             <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
@@ -319,6 +318,7 @@ export default function ReceiveScreen({
               />
             </div>
           </div>
+          <div className="dp-flow-line" />
           {/* コンテンツ */}
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             <CardListPanel {...cardProps} searchQuery={q} />
@@ -356,7 +356,6 @@ export default function ReceiveScreen({
           background: DP.navy,
           display: "flex", alignItems: "center",
           padding: "0 16px", gap: 12,
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
         }}>
           <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
@@ -370,6 +369,7 @@ export default function ReceiveScreen({
             />
           </div>
         </div>
+        <div className="dp-flow-line" />
 
         {/* コンテンツ3カラム */}
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>

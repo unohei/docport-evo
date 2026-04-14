@@ -101,7 +101,6 @@ export default function SendScreen({
               サイドバーと同色（DP.navy）でつながったブランドフレームを形成 ---- */}
         <div style={{
           background: DP.navy,
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
           flexShrink: 0,
         }}>
           {/* タイトル行: スクリーン名 + 検索（送信済みタブ時） + ログアウト（モバイル） */}
@@ -192,6 +191,8 @@ export default function SendScreen({
               </button>
             ))}
           </div>
+          {/* フローライン: トップバーの下に流れるアニメーション */}
+          <div className="dp-flow-line" />
         </div>
 
         {/* ---- 送信するタブ: スクロール可能フォーム ---- */}
