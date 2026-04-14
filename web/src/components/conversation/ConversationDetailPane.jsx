@@ -29,15 +29,16 @@ const ACTION_COLORS = {
 
 // ---- タイムラインエントリ生成（表示専用・DB変更なし） ----
 function buildTimelineEntries(docs, myHospitalId) {
-  // 時系列順（古い順）でスキャンして返信IDを収集
-  const replyDocIds = new Set();
-  let hasSeenIncoming = false;
-  for (const doc of [...docs].reverse()) {
-    if (doc.to_hospital_id === myHospitalId) {
-      hasSeenIncoming = true;
-    } else if (doc.from_hospital_id === myHospitalId && hasSeenIncoming) {
-      replyDocIds.add(doc.id);
-    }
+  // 返信判定: 直前の1件のみを見て「直前が受信 → 現在が送信」の場合のみ返信
+  // hasSeenIncoming フラグを持ち回らず、必ず prevDoc との1対1比較で判定する
+  const chronological = [...docs].reverse(); // oldest first
+  const replyDocIds   = new Set();
+  for (let i = 0; i < chronological.length; i++) {
+    const doc     = chronological[i];
+    const prevDoc = i > 0 ? chronological[i - 1] : null;
+    const isSent       = doc.from_hospital_id === myHospitalId;
+    const prevReceived = prevDoc != null && prevDoc.to_hospital_id === myHospitalId;
+    if (isSent && prevReceived) replyDocIds.add(doc.id);
   }
 
   const entries = [];

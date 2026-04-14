@@ -38,7 +38,7 @@ export function elapsed(createdAt) {
 }
 
 export function docStatusLabel(doc, isExpired) {
-  if (isExpired(doc.expires_at)) return "期限切れ";
+  // isExpired チェック廃止: 期限切れ表示を削除（ファイルは保持されるため）
   if (doc.status === "ARCHIVED")    return "完了";
   if (doc.status === "UPLOADED")    return "未読";
   if (doc.status === "IN_PROGRESS") return "対応中";
@@ -48,7 +48,7 @@ export function docStatusLabel(doc, isExpired) {
 }
 
 export function docStatusColor(doc, isExpired) {
-  if (isExpired(doc.expires_at))    return { text: "#991B1B", bg: "rgba(239,68,68,0.10)" };
+  // isExpired チェック廃止: 期限切れ表示を削除（ファイルは保持されるため）
   if (doc.status === "ARCHIVED")    return { text: "#047857", bg: "rgba(4,120,87,0.10)" };
   if (doc.status === "UPLOADED")    return { text: DP.blue,   bg: "rgba(21,101,192,0.10)" };
   if (doc.status === "IN_PROGRESS") return { text: "#B45309", bg: "rgba(180,83,9,0.10)" };

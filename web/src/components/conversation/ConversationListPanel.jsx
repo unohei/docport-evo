@@ -142,9 +142,9 @@ export default function ConversationListPanel({
 
         {/* 部署フィルタータブ（横スクロール） */}
         <div style={{
-          display: "flex", gap: 5, overflowX: "auto",
-          paddingBottom: 4, marginBottom: isControlled ? 0 : 6,
-          // スクロールバー非表示
+          display: "flex", gap: 8, overflowX: "auto",
+          paddingBottom: 4, paddingRight: 8,
+          marginBottom: isControlled ? 0 : 6,
           scrollbarWidth: "none", msOverflowStyle: "none",
         }}>
           {tabs.map(tab => {
@@ -180,9 +180,9 @@ export default function ConversationListPanel({
                   onChange={e => setNewDeptName(e.target.value)}
                   placeholder="部署名"
                   style={{
-                    width: 90, padding: "3px 7px", borderRadius: 6, fontSize: 11,
+                    minWidth: 120, padding: "3px 7px", borderRadius: 6, fontSize: 11,
                     border: `1px solid ${DP.borderActive}`, outline: "none",
-                    color: DP.text, background: DP.white,
+                    color: DP.text, background: DP.white, flexShrink: 0,
                   }}
                 />
                 <button
