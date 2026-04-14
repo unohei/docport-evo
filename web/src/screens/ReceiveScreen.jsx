@@ -225,11 +225,10 @@ export default function ReceiveScreen({
               <>
                 {/* 受信ラベル */}
                 <span style={{
-                  color: "rgba(255,255,255,0.50)",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.07em",
-                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.90)",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  letterSpacing: 0.3,
                   flexShrink: 0,
                   userSelect: "none",
                 }}>
@@ -330,7 +329,7 @@ export default function ReceiveScreen({
             display: "flex", alignItems: "center",
             padding: "0 16px", gap: 12,
           }}>
-            <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
+            <span style={{ color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>受信</span>
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
               <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
               <input
@@ -381,7 +380,7 @@ export default function ReceiveScreen({
           display: "flex", alignItems: "center",
           padding: "0 16px", gap: 12,
         }}>
-          <span style={{ color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0, userSelect: "none" }}>受信</span>
+          <span style={{ color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>受信</span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
             <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
             <input

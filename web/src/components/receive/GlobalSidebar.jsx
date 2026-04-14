@@ -266,8 +266,6 @@ export default function GlobalSidebar({
       padding: "10px 0",
       gap: 2,
       borderRight: "1px solid rgba(255,255,255,0.06)",
-      position: "relative",   // 波装飾の absolute 配置に必要
-      overflow: "hidden",     // 波を sidebar 内に収める
     }}>
       {/* ロゴ — MVP では完全非表示 */}
       {/* <div style={{ width: 48, height: 48, borderRadius: 13, background: "rgba(255,255,255,0.10)", display: "flex", alignItems: "center", justifyContent: "center", padding: 5, marginBottom: 10, flexShrink: 0 }}>
@@ -338,30 +336,6 @@ export default function GlobalSidebar({
         <NavIcon iconSrc={LogoutIcon} label="ログアウト" active={false} onClick={onLogout} />
       </div>
 
-      {/* ---- 波装飾（サイドバー底部・背景レイヤー） ----
-          ブランドカラーの波線をごく薄く（opacity 0.09）。
-          pointer-events:none でアイコン操作に影響しない。         */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          bottom: 0, left: 0, right: 0,
-          height: 72,
-          pointerEvents: "none",
-          opacity: 0.09,
-        }}
-      >
-        <svg
-          viewBox="0 0 64 72"
-          xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="none"
-          style={{ width: "100%", height: "100%", display: "block" }}
-        >
-          <path d="M0,24 C16,14 48,34 64,24" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" fill="none" />
-          <path d="M0,42 C16,52 48,32 64,42" stroke="rgba(255,255,255,0.9)" strokeWidth="1.3" fill="none" />
-          <path d="M0,60 C16,50 48,66 64,60" stroke="#4A90E2"              strokeWidth="1"   fill="none" />
-        </svg>
-      </div>
     </div>
   );
 }

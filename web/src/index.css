@@ -101,6 +101,19 @@ button {
 }
 
 /* ===================================================
+   カード出現アニメーション（DocCard / SentCard）
+   控えめな opacity + translateY。業務画面なので速め・動き小さめ。
+   =================================================== */
+@keyframes dpCardIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dp-card-in {
+  animation: dpCardIn 200ms ease both;
+}
+
+/* ===================================================
    トップバー下 フローライン（データ/水の流れを表現）
    - .dp-flow-line を div に付与するだけで使える
    - height:2px / flex-shrink:0 でレイアウト影響なし

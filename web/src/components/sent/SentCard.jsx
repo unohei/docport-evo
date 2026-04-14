@@ -16,7 +16,7 @@ export default function SentCard({ doc, nameOf, iconOf, selected, onClick, isExp
   return (
     <button
       onClick={onClick}
-      className="dp-card-hover"
+      className="dp-card-hover dp-card-in"
       style={{
         width: "100%",
         textAlign: "left",

@@ -109,11 +109,10 @@ export default function SendScreen({
           gap: 12,
         }}>
           <span style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "rgba(255,255,255,0.50)",
-            letterSpacing: "0.07em",
-            textTransform: "uppercase",
+            fontSize: 15,
+            fontWeight: 800,
+            color: "rgba(255,255,255,0.90)",
+            letterSpacing: 0.3,
             flexShrink: 0,
             userSelect: "none",
           }}>

@@ -10,19 +10,24 @@ export default function DocCard({ doc, nameOf, iconOf, selected, onClick, isExpi
   const sc          = docStatusColor(doc, isExpired);
   const sl          = docStatusLabel(doc, isExpired);
   const isUnassigned = !doc.owner_user_id && doc.status !== "ARCHIVED";
+  // 新着: 未読・未担当の書類（左辺にブランドカラーのアクセントライン + 背景をわずかに明るく）
+  const isNew = !doc.owner_user_id && (doc.status === "UPLOADED" || doc.status === "ARRIVED");
 
   return (
     <button
       onClick={onClick}
-      className="dp-card-hover"
+      className="dp-card-hover dp-card-in"
       style={{
         width: "100%",
         textAlign: "left",
         padding: "11px 13px",
         borderRadius: 10,
         border: `1px solid ${selected ? DP.borderActive : DP.border}`,
-        ...(isUnassigned && { borderLeft: "3px solid #EF4444" }),
-        background: selected ? DP.skyLight : DP.white,
+        // 新着: ブランドブルーの左アクセントライン / 未担当（対応中など）: 赤
+        ...(isNew    && { borderLeft: `3px solid ${DP.blue}` }),
+        ...(isUnassigned && !isNew && { borderLeft: "3px solid #EF4444" }),
+        // 新着: 薄い青みがかった背景でほんの少し存在感を出す
+        background: selected ? DP.skyLight : isNew ? "#F0F6FF" : DP.white,
         cursor: "pointer",
         display: "grid",
         gap: 7,
