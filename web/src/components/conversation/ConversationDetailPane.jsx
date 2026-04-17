@@ -94,8 +94,8 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
   const icon     = isReply ? "↩" : (isSent ? "↑" : "↓");
   const iconBg   = isSent ? DP.blue : DP.navy;
   const dirLabel = isSent
-    ? `${isReply ? "返信" : "送信"} → ${nameOf(doc.to_hospital_id)}`
-    : `受信 ← ${nameOf(doc.from_hospital_id)}`;
+    ? `${isReply ? "返信" : "置"} → ${nameOf(doc.to_hospital_id)}`
+    : `受 ← ${nameOf(doc.from_hospital_id)}`;
 
   return (
     <button
@@ -157,7 +157,7 @@ function Timeline({ group, myHospitalId, nameOf, fmt, isExpired, selectedDoc, on
         textTransform: "uppercase", letterSpacing: "0.06em",
         borderBottom: `1px solid ${DP.border}`, background: DP.white, flexShrink: 0,
       }}>
-        連携履歴 · {group.totalCount}件
+        書類履歴 · {group.totalCount}件
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {entries.map((entry) =>
@@ -269,7 +269,7 @@ export default function ConversationDetailPane({
                 padding: "4px 0", display: "flex", alignItems: "center", gap: 6,
               }}
             >
-              ← 連携履歴に戻る
+              ← 書類履歴に戻る
             </button>
           </div>
           <div style={{ flex: 1, overflow: "hidden" }}>
@@ -295,8 +295,8 @@ export default function ConversationDetailPane({
             <div style={{ fontSize: 11, color: DP.textSub, marginTop: 2 }}>
               {subLabel && <span>{subLabel} · </span>}
               {group.totalCount}件
-              {group.recvCount > 0 && ` · 受信${group.recvCount}`}
-              {group.sentCount > 0 && ` · 送信${group.sentCount}`}
+              {group.recvCount > 0 && ` · 受${group.recvCount}`}
+              {group.sentCount > 0 && ` · 置${group.sentCount}`}
               {group.hasReply && " · 往復あり"}
             </div>
           </div>
@@ -334,9 +334,9 @@ export default function ConversationDetailPane({
           </div>
           <div style={{ fontSize: 12, color: DP.textSub, marginTop: 2 }}>
             {subLabel && <span>{subLabel} · </span>}
-            {group.totalCount}件のやりとり
-            {group.recvCount > 0 && ` · 受信${group.recvCount}件`}
-            {group.sentCount > 0 && ` · 送信${group.sentCount}件`}
+            {group.totalCount}件の書類
+            {group.recvCount > 0 && ` · 受${group.recvCount}件`}
+            {group.sentCount > 0 && ` · 置${group.sentCount}件`}
             {group.hasReply && " · 往復あり"}
           </div>
         </div>

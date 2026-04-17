@@ -116,10 +116,10 @@ export default function SendScreen({
             flexShrink: 0,
             userSelect: "none",
           }}>
-            送信
+            置く
           </span>
 
-          {/* 検索: 送信済みタブ時にPC・タブレット・スマホすべてで表示 */}
+          {/* 検索: 置いた書類タブ時にPC・タブレット・スマホすべてで表示 */}
           {isSent ? (
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
               <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
@@ -175,8 +175,8 @@ export default function SendScreen({
           gap: 0,
         }}>
           {[
-            { key: "send", label: "送信する" },
-            { key: "sent", label: "送信済み" },
+            { key: "send", label: "置く" },
+            { key: "sent", label: "置いた書類" },
           ].map(({ key, label }) => (
             <button
               key={key}

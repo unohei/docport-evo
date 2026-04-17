@@ -123,7 +123,7 @@ export default function ConversationScreen({
                   color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800,
                   letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
                 }}>
-                  受信
+                  新着
                 </span>
                 <div style={{ flex: 1, position: "relative" }}>
                   <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
@@ -183,7 +183,7 @@ export default function ConversationScreen({
             color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800,
             letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
           }}>
-            受信
+            新着
           </span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
             <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>

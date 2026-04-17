@@ -105,7 +105,7 @@ export default function ConversationListPanel({
           alignItems: "center", marginBottom: 8,
         }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: DP.navy }}>
-            {isPatientMode ? "患者別連携" : "連携一覧"}
+            {isPatientMode ? "患者別書類" : "書類一覧"}
           </span>
           <span style={{ fontSize: 13, color: DP.textSub, fontWeight: 600 }}>
             {filtered.length}件

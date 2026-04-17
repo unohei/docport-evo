@@ -157,8 +157,8 @@ export function BottomNav({
   onLogout,       // モバイルでログアウトを可能にする
 }) {
   const navItems = [
-    { key: "inbox",  iconSrc: ReceiveIcon, label: "受信", badge: unreadCount, activeKeys: ["inbox"] },
-    { key: "send",   iconSrc: SendIcon,    label: "送信", badge: null,         activeKeys: ["send", "sent"] },
+    { key: "inbox",  iconSrc: ReceiveIcon, label: "新着", badge: unreadCount, activeKeys: ["inbox"] },
+    { key: "send",   iconSrc: SendIcon,    label: "置く", badge: null,         activeKeys: ["send", "sent"] },
   ];
 
   const btnBase = {
@@ -280,18 +280,18 @@ export default function GlobalSidebar({
         gap: 4,
         alignItems: "center",
       }}>
-        {/* 受信 */}
+        {/* 新着 */}
         <NavIcon
           iconSrc={ReceiveIcon}
-          label="受信"
+          label="新着"
           active={activeTab === "inbox"}
           badge={unreadCount}
           onClick={() => onTabChange("inbox")}
         />
-        {/* 送信 */}
+        {/* 置く */}
         <NavIcon
           iconSrc={SendIcon}
-          label="送信"
+          label="置く"
           active={activeTab === "send"}
           onClick={() => onTabChange("send")}
         />
