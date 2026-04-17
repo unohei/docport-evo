@@ -149,8 +149,8 @@ export default function ConversationScreen({
           <div className="dp-flow-line" />
         </div>
 
-        {/* コンテンツ */}
-        <div style={{ flex: 1, overflow: "hidden" }}>
+        {/* コンテンツ: display:flex で子パネルに高さを伝え、内部スクロールを有効化 */}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
           {showDetail ? (
             <ConversationDetailPane key={selectedGroup?.id ?? "none"} {...detailProps} isMobile />
           ) : (

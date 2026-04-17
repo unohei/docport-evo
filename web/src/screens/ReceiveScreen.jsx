@@ -297,7 +297,8 @@ export default function ReceiveScreen({
                 activeLane={activeLane}
                 onLaneChange={handleLaneChange}
               />
-              <div style={{ flex: 1, overflow: "hidden" }}>
+              {/* display:flex で CardListPanel に高さを伝え、内部スクロールを有効化 */}
+              <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
                 <CardListPanel {...cardProps} searchQuery={q} fullWidth />
               </div>
             </>

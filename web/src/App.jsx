@@ -411,7 +411,8 @@ export default function App() {
     // FAX送信文書を除外（to_hospital_id=自院の暫定値で受信一覧に混入するため）
     // source="fax"（FAX受信）は除外しない
     list = list.filter((d) => d.source !== "fax_outbound");
-    if (!showExpired) list = list.filter((d) => !isExpired(d.expires_at));
+    // ARCHIVED書類は期限切れでも除外しない（完了グループの履歴表示に必要）
+    if (!showExpired) list = list.filter((d) => d.status === "ARCHIVED" || !isExpired(d.expires_at));
     // ARCHIVED フィルタはここでは行わない。InboxTab のタブ分岐で制御する。
     if (showUnreadOnly) list = list.filter((d) => d.status === "UPLOADED");
     const q = (qInbox || "").trim().toLowerCase();
