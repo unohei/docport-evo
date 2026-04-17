@@ -12,8 +12,8 @@ import { GROUPING_MODES } from "../../hooks/useConversationGroups";
 import ConversationCard from "./ConversationCard";
 
 // 部署フィルタータブの特殊キー
-const TAB_ALL      = "";
-const TAB_COMPLETE = "__complete__";
+const TAB_PENDING  = "";             // 未対応（アサインなし）
+const TAB_COMPLETE = "__complete__"; // 完了（全書類ARCHIVED）
 
 export default function ConversationListPanel({
   groups,
@@ -31,7 +31,7 @@ export default function ConversationListPanel({
   addDepartment,
 }) {
   const [internalQ,   setInternalQ]   = useState("");
-  const [deptFilter,  setDeptFilter]  = useState(TAB_ALL);
+  const [deptFilter,  setDeptFilter]  = useState(TAB_PENDING);
   // 部署追加インライン
   const [addingDept,  setAddingDept]  = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
@@ -53,7 +53,13 @@ export default function ConversationListPanel({
 
   // 部署フィルタ
   const filtered = useMemo(() => {
-    if (deptFilter === TAB_ALL) return searchFiltered;
+    if (deptFilter === TAB_PENDING) {
+      // 未対応: アサインなし（pending / waiting）のグループ
+      return searchFiltered.filter(g =>
+        g.currentStatus?.level === "pending" ||
+        g.currentStatus?.level === "waiting"
+      );
+    }
     if (deptFilter === TAB_COMPLETE) {
       return searchFiltered.filter(g => g.currentStatus?.level === "complete");
     }
@@ -79,9 +85,9 @@ export default function ConversationListPanel({
     }
   };
 
-  // タブ定義: 新着 + 各部署 + 完了
+  // タブ定義: 未対応 → 各部署 → 完了
   const tabs = [
-    { key: TAB_ALL,      label: "新着" },
+    { key: TAB_PENDING,  label: "未対応" },
     ...(departments || []).map(d => ({ key: d.name, label: d.name })),
     { key: TAB_COMPLETE, label: "完了" },
   ];
@@ -121,7 +127,7 @@ export default function ConversationListPanel({
             ].map(({ mode, label }, i) => (
               <button
                 key={mode}
-                onClick={() => { onGroupingModeChange(mode); setDeptFilter(TAB_ALL); }}
+                onClick={() => { onGroupingModeChange(mode); setDeptFilter(TAB_PENDING); }}
                 style={{
                   flex: 1, padding: "5px 0", fontSize: 11, fontWeight: 700,
                   border: `1px solid ${DP.borderActive}`,

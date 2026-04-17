@@ -138,7 +138,7 @@ export default function ConversationCard({
           }}>
             {recvCount > 0 && `受${recvCount}`}
             {recvCount > 0 && sentCount > 0 && "·"}
-            {sentCount > 0 && `送${sentCount}`}
+            {sentCount > 0 && `置${sentCount}`}
           </span>
         </div>
         <span style={{ fontSize: 12, color: DP.textSub }}>
