@@ -327,7 +327,7 @@ export default function SendTab({
   };
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div style={{ display: "grid", gap: 12, width: "100%", minWidth: 0 }}>
       <div>
         <div style={headerTitle}>置く</div>
       </div>
@@ -604,13 +604,14 @@ export default function SendTab({
                               style={{
                                 padding: "8px 12px", borderRadius: 8,
                                 background: s.bg, border: `1px solid ${s.border}`,
+                                overflow: "hidden", minWidth: 0,
                               }}
                             >
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
                                 <span style={{
                                   fontSize: 10, fontWeight: 800, padding: "2px 6px",
                                   borderRadius: 4, background: s.badge, color: s.labelColor,
-                                  letterSpacing: 0.4,
+                                  letterSpacing: 0.4, whiteSpace: "nowrap",
                                 }}>
                                   {s.badgeLabel}
                                 </span>
@@ -630,7 +631,7 @@ export default function SendTab({
                                     background: "rgba(255,255,255,0.6)",
                                     borderRadius: 4, padding: "2px 6px",
                                     marginTop: i === 0 ? 0 : 2,
-                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                    overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-all",
                                   }}
                                 >
                                   {ev.snippet}

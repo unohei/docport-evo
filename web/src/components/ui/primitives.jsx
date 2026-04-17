@@ -33,6 +33,8 @@ export function Card({ children, style }) {
         border: `1px solid ${THEME.border}`,
         borderRadius: 14,
         padding: 14,
+        minWidth: 0,
+        boxSizing: "border-box",
         ...style,
       }}
     >
