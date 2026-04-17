@@ -23,6 +23,17 @@ export function deriveCurrentStatus(docs, myHospitalId) {
   if (docs.every(d => d.status === "ARCHIVED")) {
     return { label: "完了", level: "complete" };
   }
+  // 期限切れ・キャンセル以外にアクティブな書類がない場合も「完了」とみなす
+  // （病院単位グループは過去の期限切れテストデータを含む可能性があるため）
+  const now = new Date();
+  const hasActiveDoc = docs.some(d =>
+    d.status !== "ARCHIVED" &&
+    d.status !== "CANCELLED" &&
+    (!d.expires_at || new Date(d.expires_at) > now)
+  );
+  if (!hasActiveDoc && docs.some(d => d.status === "ARCHIVED")) {
+    return { label: "完了", level: "complete" };
+  }
   // アサイン済み: 未完了の書類に assigned_department が設定されている
   const activeAssigned = docs.find(
     d => d.assigned_department &&

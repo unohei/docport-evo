@@ -256,7 +256,7 @@ export default function ConversationDetailPane({
   if (isMobile) {
     if (selectedDoc) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
           <div style={{
             padding: "8px 14px", borderBottom: `1px solid ${DP.border}`,
             background: DP.surface, flexShrink: 0,
@@ -272,7 +272,7 @@ export default function ConversationDetailPane({
               ← 書類履歴に戻る
             </button>
           </div>
-          <div style={{ flex: 1, overflow: "hidden" }}>
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             <DetailPane doc={selectedDoc} {...detailPaneProps} />
           </div>
         </div>
@@ -281,7 +281,7 @@ export default function ConversationDetailPane({
 
     const mobileEntries = buildTimelineEntries(group.docs, myHospitalId);
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         <div style={{
           padding: "12px 16px", flexShrink: 0, borderBottom: `1px solid ${DP.border}`,
           background: DP.surface, display: "flex", alignItems: "center", gap: 10,
