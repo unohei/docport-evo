@@ -146,9 +146,16 @@ export default function ReceiveScreen({
     setSelectedDoc(null);
   }, []);
 
+  // loadAll() 後に docs が更新されても selectedDoc は古い参照のまま残るため、
+  // docs から最新版を取り直して DetailPane に渡す
+  const currentDoc = useMemo(
+    () => (selectedDoc ? docs.find(d => d.id === selectedDoc.id) ?? selectedDoc : null),
+    [docs, selectedDoc],
+  );
+
   // DetailPane / CardListPanel に渡す共通 props
   const detailProps = {
-    doc: selectedDoc,
+    doc: currentDoc,
     nameOf,
     iconOf,
     fmt,

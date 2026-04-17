@@ -63,12 +63,19 @@ export default function ConversationScreen({
 
   const handleGroupSelect = useCallback(group => setSelectedGroup(group), []);
 
+  // loadAll() 後に groups が再計算されても selectedGroup は古い参照のまま残るため、
+  // groups から最新版を取り直して detailProps に渡す
+  const currentGroup = useMemo(
+    () => (selectedGroup ? groups.find(g => g.id === selectedGroup.id) ?? selectedGroup : null),
+    [groups, selectedGroup],
+  );
+
   const sidebarProps = {
     activeTab, onTabChange, myHospitalIcon, myAvatarUrl, onAvatarUpload, unreadCount, onLogout,
   };
 
   const detailProps = {
-    group: selectedGroup, myHospitalId,
+    group: currentGroup, myHospitalId,
     nameOf, iconOf, fmt, isExpired,
     onArchive: archiveDocument, onAssign: assignDocument,
     hospitalMembers, myUserId,
