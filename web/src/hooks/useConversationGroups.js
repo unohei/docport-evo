@@ -117,6 +117,15 @@ export function useConversationGroups(
       const isFaxGroup = mode === GROUPING_MODES.HOSPITAL && key.startsWith("fax:");
       const faxDisplayName = isFaxGroup ? (key.slice(4) || "外部FAX") : null;
 
+      // 送信側視点: 受信側がアサイン済みの書類を取得（未完了のもののみ）
+      const peerAssignedDoc = sorted.find(
+        (d) =>
+          isDocSent(d, myHospitalId) &&
+          d.peer_assigned_dept &&
+          d.status !== "ARCHIVED" &&
+          d.status !== "CANCELLED",
+      );
+
       return {
         id:             key,
         peerHospitalId: mode === GROUPING_MODES.HOSPITAL ? key : (peerHospitalIds[0] ?? null),
@@ -131,6 +140,7 @@ export function useConversationGroups(
         totalCount:     docs.length,
         hasReply:       sent.length > 0 && recv.length > 0,
         currentStatus:  deriveCurrentStatus(sorted, myHospitalId),
+        peerAssignedDept: peerAssignedDoc?.peer_assigned_dept ?? null,
       };
     });
 

@@ -494,7 +494,29 @@ export default function App() {
 
     const { data: sent, error: sentErr } = await fetchDocs("from_hospital_id", prof.hospital_id);
     if (sentErr) return alert(`sent取得に失敗: ${sentErr.message}`);
-    setSentDocs(sent ?? []);
+
+    // sentDocs に受信側のアサイン情報を peer_assigned_dept として付与。
+    // assigned_department（受信側フィールド）とは別名にすることで
+    // deriveCurrentStatus のタブ分類レベルに影響しない。
+    const sentDocIds = (sent ?? []).map((d) => d.id).filter(Boolean);
+    if (sentDocIds.length > 0) {
+      const { data: peerAssignments } = await supabase
+        .from("document_assignments")
+        .select("document_id, assigned_department")
+        .in("document_id", sentDocIds)
+        .eq("is_current", true);
+      const peerMap = new Map(
+        (peerAssignments ?? []).map((a) => [a.document_id, a.assigned_department])
+      );
+      setSentDocs(
+        (sent ?? []).map((doc) => {
+          const dept = peerMap.get(doc.id);
+          return dept ? { ...doc, peer_assigned_dept: dept } : doc;
+        })
+      );
+    } else {
+      setSentDocs(sent ?? []);
+    }
 
     // 同院メンバー一覧（港モデル: 担当者選択用）
     // RLS に "profiles_select_same_hospital" ポリシーが必要（SQLマイグレーション参照）

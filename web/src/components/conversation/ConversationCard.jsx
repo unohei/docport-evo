@@ -26,7 +26,7 @@ export default function ConversationCard({
 }) {
   const { latestDoc, sentCount, recvCount, hasReply,
           patientLabel, peerHospitalId, peerHospitalIds,
-          faxDisplayName, currentStatus } = group;
+          faxDisplayName, currentStatus, peerAssignedDept } = group;
 
   const isPatientMode = !!patientLabel;
 
@@ -103,7 +103,7 @@ export default function ConversationCard({
             padding: "1px 7px", borderRadius: 999,
             color: stc.text, background: stc.bg,
           }}>
-            現在：{currentStatus.label}
+            現在：{(currentStatus.level === "pending" && peerAssignedDept) ? `${peerAssignedDept}で対応中` : currentStatus.label}
           </span>
         </div>
       )}
