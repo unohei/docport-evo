@@ -6,7 +6,7 @@
 // - buildTimelineEntries: assigned_to → assigned_department（正しいDBフィールド名）
 
 import { useState } from "react";
-import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
+import { DP, elapsed, docStatusLabel, docStatusColor, isDocSent, senderDisplay } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
 import DetailPane from "../receive/DetailPane";
 
@@ -36,14 +36,14 @@ function buildTimelineEntries(docs, myHospitalId) {
   for (let i = 0; i < chronological.length; i++) {
     const doc     = chronological[i];
     const prevDoc = i > 0 ? chronological[i - 1] : null;
-    const isSent       = doc.from_hospital_id === myHospitalId;
+    const isSent       = isDocSent(doc, myHospitalId);
     const prevReceived = prevDoc != null && prevDoc.to_hospital_id === myHospitalId;
     if (isSent && prevReceived) replyDocIds.add(doc.id);
   }
 
   const entries = [];
   for (const doc of docs) {
-    const isSent  = doc.from_hospital_id === myHospitalId;
+    const isSent  = isDocSent(doc, myHospitalId);
     const isReply = isSent && replyDocIds.has(doc.id);
     entries.push({ kind: "doc", doc, isSent, isReply });
 
@@ -95,7 +95,7 @@ function TimelineDocEntry({ entry, nameOf, fmt, isExpired, selected, onClick }) 
   const iconBg   = isSent ? DP.blue : DP.navy;
   const dirLabel = isSent
     ? `${isReply ? "返信" : "置"} → ${nameOf(doc.to_hospital_id)}`
-    : `受 ← ${nameOf(doc.from_hospital_id)}`;
+    : `受 ← ${senderDisplay(doc, nameOf)}`;
 
   return (
     <button

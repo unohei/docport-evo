@@ -5,6 +5,7 @@
 // - assigned_to → assigned_department に修正（DetailPane の DB フィールド名と統一）
 
 import { useMemo } from "react";
+import { isDocSent } from "../components/receive/receiveConstants";
 
 export const GROUPING_MODES = {
   HOSPITAL: "hospital",  // 相手病院単位（デフォルト）
@@ -45,7 +46,7 @@ export function deriveCurrentStatus(docs, myHospitalId) {
   }
   // 返信待ち: 最新書類が自院送信かつ相手からの受信が存在する
   const latestDoc   = docs[0];
-  const isSent      = latestDoc?.from_hospital_id === myHospitalId;
+  const isSent      = isDocSent(latestDoc, myHospitalId);
   const hasIncoming = docs.some(d => d.to_hospital_id === myHospitalId);
   if (isSent && hasIncoming) {
     return { label: "返信待ち", level: "waiting" };
@@ -103,8 +104,8 @@ export function useConversationGroups(
       const sorted = [...docs].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at),
       );
-      const sent = docs.filter(d => d.from_hospital_id === myHospitalId);
-      const recv = docs.filter(d => d.to_hospital_id   === myHospitalId);
+      const sent = docs.filter(d => isDocSent(d, myHospitalId));
+      const recv = docs.filter(d => d.to_hospital_id === myHospitalId);
 
       const peerHospitalIds = [
         ...new Set(

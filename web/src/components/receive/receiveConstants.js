@@ -75,3 +75,13 @@ export function recipientDisplay(doc, nameOf) {
 export function isFaxOutbound(doc) {
   return doc.source === "fax_outbound";
 }
+
+// ---- 送信方向判定（自院視点）----
+// FAX受信は from_hospital_id が to_hospital_id と同値の暫定値のため、
+// source === "fax" を受信として扱い、from_hospital_id 比較を使わない。
+// この関数をアイコン・ラベル・カウントの全判定で共通使用すること。
+export function isDocSent(doc, myHospitalId) {
+  if (!doc || !myHospitalId) return false;
+  if (doc.source === "fax") return false;        // 外部FAX受信は常に「受信」
+  return doc.from_hospital_id === myHospitalId;
+}
