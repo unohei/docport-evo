@@ -76,8 +76,8 @@ export function isFaxOutbound(doc) {
   return doc.source === "fax_outbound";
 }
 
-// ---- 送信側向け「現在地」表示ラベル生成 ----
-// タブ分類ロジック（deriveCurrentStatus）は変更せず、表示ラベルのみ変える。
+// ---- 送信側向け「現在地」表示ラベル生成（グループ単位） ----
+// ConversationCard / ConversationDetailPane のグループヘッダで使用。
 // pending かつ受信側アサインあり → 「〇〇病院（△△部署）で対応中」
 // それ以外 → currentStatus.label をそのまま返す
 export function senderCurrentLabel(currentStatus, peerAssignedDept, peerHospitalName) {
@@ -89,6 +89,21 @@ export function senderCurrentLabel(currentStatus, peerAssignedDept, peerHospital
     return `${prefix}で対応中`;
   }
   return currentStatus.label;
+}
+
+// ---- 送信側向け「現在地」ステータス生成（個別書類単位） ----
+// DetailPane など書類単位の表示で使用。doc.peer_assigned_dept と doc.status から判定。
+// 戻り値: { level, label } または null（CANCELLED は既存バッジで表示済みのため除外）
+export function senderDocStatus(doc, nameOf) {
+  if (!doc) return null;
+  if (doc.status === "ARCHIVED") return { level: "complete", label: "完了" };
+  if (doc.status === "CANCELLED") return null;
+  if (doc.peer_assigned_dept) {
+    const hosp   = doc.to_hospital_id && nameOf ? nameOf(doc.to_hospital_id) : null;
+    const prefix = hosp ? `${hosp}（${doc.peer_assigned_dept}）` : doc.peer_assigned_dept;
+    return { level: "in_progress", label: `${prefix}で対応中` };
+  }
+  return { level: "pending", label: "未対応" };
 }
 
 // ---- 送信方向判定（自院視点）----

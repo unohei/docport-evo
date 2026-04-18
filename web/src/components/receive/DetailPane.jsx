@@ -7,7 +7,7 @@
 // - 完了操作をモーダル化（ArchiveModal）して「処理した感」を付与
 
 import { useState, useEffect } from "react";
-import { DP, senderDisplay, recipientDisplay } from "./receiveConstants";
+import { DP, senderDisplay, recipientDisplay, senderDocStatus } from "./receiveConstants";
 import { getPreviewKey, isPreviewable, getExtFromKey } from "../../utils/preview";
 import HospitalAvatar from "../common/HospitalAvatar";
 import { normalizeStructuredJson } from "../../utils/structuredFormat";
@@ -246,6 +246,13 @@ function ArchiveModal({ doc, onArchive, onClose }) {
   );
 }
 
+// ---- 送信側ステータスバッジ用カラー ----
+const SENDER_STATUS_COLORS = {
+  complete:    { text: "#047857", bg: "rgba(4,120,87,0.08)"  },
+  in_progress: { text: "#B45309", bg: "rgba(180,83,9,0.08)"  },
+  pending:     { text: DP.textSub, bg: "rgba(15,23,42,0.05)" },
+};
+
 // ---- DetailPane (main export) ----
 export default function DetailPane({
   doc,
@@ -308,6 +315,8 @@ export default function DetailPane({
   // 受信書類かどうか（myHospitalId 未指定時は常に true で後方互換）
   const isReceived  = !myHospitalId || doc.to_hospital_id === myHospitalId;
   const isCompleted = doc.status === "ARCHIVED";
+  // 送信側視点の現在状態（受信書類には表示しない）
+  const senderStatus = !isReceived ? senderDocStatus(doc, nameOf) : null;
   const canAssign   = isReceived && !isCompleted && !doc.owner_user_id;
   const canComplete = isReceived && !isCompleted;
 
@@ -373,6 +382,19 @@ export default function DetailPane({
                 </span>
               </>
             )}
+          </div>
+        )}
+
+        {/* 送信側向け: 受信側の現在対応状況（送信書類のみ表示） */}
+        {senderStatus && (
+          <div style={{
+            display: "inline-flex", alignItems: "center",
+            padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            alignSelf: "flex-start",
+            color: (SENDER_STATUS_COLORS[senderStatus.level] ?? SENDER_STATUS_COLORS.pending).text,
+            background: (SENDER_STATUS_COLORS[senderStatus.level] ?? SENDER_STATUS_COLORS.pending).bg,
+          }}>
+            現在：{senderStatus.label}
           </div>
         )}
 
