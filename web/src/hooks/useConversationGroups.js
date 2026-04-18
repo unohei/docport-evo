@@ -140,7 +140,8 @@ export function useConversationGroups(
         totalCount:     docs.length,
         hasReply:       sent.length > 0 && recv.length > 0,
         currentStatus:  deriveCurrentStatus(sorted, myHospitalId),
-        peerAssignedDept: peerAssignedDoc?.peer_assigned_dept ?? null,
+        peerAssignedDept:       peerAssignedDoc?.peer_assigned_dept ?? null,
+        peerAssignedHospitalId: peerAssignedDoc?.to_hospital_id     ?? null,
       };
     });
 

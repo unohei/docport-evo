@@ -76,6 +76,21 @@ export function isFaxOutbound(doc) {
   return doc.source === "fax_outbound";
 }
 
+// ---- 送信側向け「現在地」表示ラベル生成 ----
+// タブ分類ロジック（deriveCurrentStatus）は変更せず、表示ラベルのみ変える。
+// pending かつ受信側アサインあり → 「〇〇病院（△△部署）で対応中」
+// それ以外 → currentStatus.label をそのまま返す
+export function senderCurrentLabel(currentStatus, peerAssignedDept, peerHospitalName) {
+  if (!currentStatus) return null;
+  if (currentStatus.level === "pending" && peerAssignedDept) {
+    const prefix = peerHospitalName
+      ? `${peerHospitalName}（${peerAssignedDept}）`
+      : peerAssignedDept;
+    return `${prefix}で対応中`;
+  }
+  return currentStatus.label;
+}
+
 // ---- 送信方向判定（自院視点）----
 // FAX受信は from_hospital_id が to_hospital_id と同値の暫定値のため、
 // source === "fax" を受信として扱い、from_hospital_id 比較を使わない。

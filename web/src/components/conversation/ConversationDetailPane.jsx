@@ -6,7 +6,7 @@
 // - buildTimelineEntries: assigned_to → assigned_department（正しいDBフィールド名）
 
 import { useState } from "react";
-import { DP, elapsed, docStatusLabel, docStatusColor, isDocSent, senderDisplay } from "../receive/receiveConstants";
+import { DP, elapsed, docStatusLabel, docStatusColor, isDocSent, senderDisplay, senderCurrentLabel } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
 import DetailPane from "../receive/DetailPane";
 
@@ -191,7 +191,8 @@ function groupSubLabel(group, nameOf) {
 }
 
 // ---- 現在地バッジ ----
-function CurrentStatusBadge({ currentStatus }) {
+// displayLabel: senderCurrentLabel() で生成した表示用ラベル（省略時は currentStatus.label）
+function CurrentStatusBadge({ currentStatus, displayLabel }) {
   if (!currentStatus) return null;
   const c = STATUS_COLORS[currentStatus.level] ?? STATUS_COLORS.pending;
   return (
@@ -201,7 +202,7 @@ function CurrentStatusBadge({ currentStatus }) {
       color: c.text, background: c.bg,
       marginLeft: 8, verticalAlign: "middle",
     }}>
-      現在：{currentStatus.label}
+      現在：{displayLabel ?? currentStatus.label}
     </span>
   );
 }
@@ -241,6 +242,10 @@ export default function ConversationDetailPane({
   const mainLabel  = groupMainLabel(group, nameOf);
   const avatarIcon = groupAvatarIcon(group, iconOf);
   const subLabel   = groupSubLabel(group, nameOf);
+
+  // 送信側向け現在地ラベル（病院名＋部署名を組み合わせ）
+  const peerHospitalName = group.peerAssignedHospitalId ? nameOf(group.peerAssignedHospitalId) : null;
+  const currentDisplayLabel = senderCurrentLabel(group.currentStatus, group.peerAssignedDept, peerHospitalName);
 
   // DetailPane に渡す共通 props
   const detailPaneProps = {
@@ -290,7 +295,7 @@ export default function ConversationDetailPane({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: DP.navy }}>{mainLabel}</span>
-              <CurrentStatusBadge currentStatus={group.currentStatus} />
+              <CurrentStatusBadge currentStatus={group.currentStatus} displayLabel={currentDisplayLabel} />
             </div>
             <div style={{ fontSize: 11, color: DP.textSub, marginTop: 2 }}>
               {subLabel && <span>{subLabel} · </span>}

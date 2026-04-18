@@ -4,7 +4,7 @@
 // 変更点 (v3):
 // - group.currentStatus を使って「現在地」を小さなラベルで表示
 
-import { DP, elapsed, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
+import { DP, elapsed, docStatusLabel, docStatusColor, senderCurrentLabel } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
 
 // 現在地レベル別カラー（ConversationDetailPane と同一定義）
@@ -26,7 +26,8 @@ export default function ConversationCard({
 }) {
   const { latestDoc, sentCount, recvCount, hasReply,
           patientLabel, peerHospitalId, peerHospitalIds,
-          faxDisplayName, currentStatus, peerAssignedDept } = group;
+          faxDisplayName, currentStatus,
+          peerAssignedDept, peerAssignedHospitalId } = group;
 
   const isPatientMode = !!patientLabel;
 
@@ -46,6 +47,8 @@ export default function ConversationCard({
   const sl = latestDoc ? docStatusLabel(latestDoc, isExpired) : "-";
 
   const stc = currentStatus ? (STATUS_COLORS[currentStatus.level] ?? STATUS_COLORS.pending) : null;
+  const peerHospitalName = peerAssignedHospitalId ? nameOf(peerAssignedHospitalId) : null;
+  const currentLabel = senderCurrentLabel(currentStatus, peerAssignedDept, peerHospitalName);
 
   return (
     <button
@@ -103,7 +106,7 @@ export default function ConversationCard({
             padding: "1px 7px", borderRadius: 999,
             color: stc.text, background: stc.bg,
           }}>
-            現在：{(currentStatus.level === "pending" && peerAssignedDept) ? `${peerAssignedDept}で対応中` : currentStatus.label}
+            現在：{currentLabel}
           </span>
         </div>
       )}
