@@ -468,7 +468,29 @@ export default function App() {
     // fetchDocs: 新列付き SELECT → 列不存在時は旧 SELECT で再試行
     const { data: inbox, error: inboxErr } = await fetchDocs("to_hospital_id", prof.hospital_id);
     if (inboxErr) return alert(`inbox取得に失敗: ${inboxErr.message}`);
-    setInboxDocs(inbox ?? []);
+
+    // document_assignments から現在のアサイン情報を取得して inboxDocs に結合する。
+    // documents.assigned_department / owner_user_id は Phase 1 以降更新されないため、
+    // assignment テーブルの値で上書きする（旧データは移行済み、新データはここだけに存在）。
+    const { data: assignments } = await supabase
+      .from("document_assignments")
+      .select("document_id, assigned_department, owner_user_id, assigned_at")
+      .eq("hospital_id", prof.hospital_id)
+      .eq("is_current", true);
+    const assignmentMap = new Map(
+      (assignments ?? []).map((a) => [a.document_id, a])
+    );
+    const enrichedInbox = (inbox ?? []).map((doc) => {
+      const a = assignmentMap.get(doc.id);
+      if (!a) return doc;
+      return {
+        ...doc,
+        assigned_department: a.assigned_department,
+        owner_user_id: a.owner_user_id,
+        assigned_at: a.assigned_at,
+      };
+    });
+    setInboxDocs(enrichedInbox);
 
     const { data: sent, error: sentErr } = await fetchDocs("from_hospital_id", prof.hospital_id);
     if (sentErr) return alert(`sent取得に失敗: ${sentErr.message}`);

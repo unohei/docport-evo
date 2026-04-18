@@ -1,6 +1,36 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+-- document_assignments: 受信側の担当情報（Phase 1 追加）
+-- 責務: 受信病院の部署・担当者アサインを documents テーブルから分離して管理する
+--   documents テーブルは共有状態 (status/from/to) のみを持つ
+--   is_current=true: 現在有効なアサイン（1ドキュメントにつき1件）
+--   アサイン変更: 既存 is_current=true を false → 新規 INSERT の順で実行
+-- RLS: hospital_id=自院 かつ documents.to_hospital_id=自院 の二重チェック
+-- migration: db/migrations/001_document_assignments.sql
+CREATE TABLE public.document_assignments (
+  id                   uuid NOT NULL DEFAULT gen_random_uuid(),
+  document_id          uuid NOT NULL,
+  hospital_id          uuid NOT NULL,
+  assigned_department  text NOT NULL,
+  owner_user_id        uuid NOT NULL,
+  assigned_by          uuid,
+  is_current           boolean NOT NULL DEFAULT true,
+  assigned_at          timestamp with time zone NOT NULL DEFAULT now(),
+  created_at           timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT document_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT document_assignments_document_id_fkey
+    FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE,
+  CONSTRAINT document_assignments_hospital_id_fkey
+    FOREIGN KEY (hospital_id) REFERENCES public.hospitals(id),
+  CONSTRAINT document_assignments_owner_user_id_fkey
+    FOREIGN KEY (owner_user_id) REFERENCES public.profiles(id),
+  CONSTRAINT document_assignments_assigned_by_fkey
+    FOREIGN KEY (assigned_by) REFERENCES public.profiles(id)
+);
+-- UNIQUE INDEX: 1ドキュメントにつき is_current=true は1件のみ許可
+-- CREATE UNIQUE INDEX idx_doc_assignments_current_unique ON document_assignments(document_id) WHERE is_current = true;
+
 -- fax_inbounds: CloudFAX Inbound 受信本体ログ（v2.6 追加）
 -- 責務: FAX 受信（inbound）1件ごとのライフサイクル管理
 --   RECEIVED → DOC_CREATED（正常完了）

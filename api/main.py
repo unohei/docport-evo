@@ -1470,11 +1470,13 @@ def _assign_impl(
     user: dict,
 ) -> dict:
     """
-    港モデル アサイン処理の共通実装。
+    アサイン処理の共通実装 (Phase 1: document_assignments テーブルに書き込む)。
     1. JWT → hospital_id 取得
     2. documents GET → to_hospital_id で自院チェック
-    3. documents PATCH（owner_user_id / assigned_department / assigned_at / status）
-    4. document_logs INSERT（best-effort: 失敗しても 500 にしない）
+    3. document_assignments: 既存 is_current=true を false に更新
+    4. document_assignments: 新レコード INSERT
+    5. documents PATCH: status のみ更新（assigned_* は documents に書かない）
+    6. document_logs INSERT（best-effort）
     """
     jwt_token = credentials.credentials
     user_id = user.get("sub", "")
@@ -1483,7 +1485,6 @@ def _assign_impl(
     # ---- doc_id バリデーション（UUID 形式のみ許可） ----
     doc_id_stripped = doc_id.strip()
     try:
-        # UUID 形式チェック（簡易）
         uuid.UUID(doc_id_stripped)
     except ValueError:
         raise HTTPException(status_code=400, detail="無効なドキュメントIDです")
@@ -1492,7 +1493,7 @@ def _assign_impl(
 
     # ---- 対象ドキュメント取得（RLS: to_hospital_id=自院のみ返る） ----
     rows = _supabase_get(
-        f"documents?id=eq.{doc_id_enc}&select=id,status,to_hospital_id,owner_user_id",
+        f"documents?id=eq.{doc_id_enc}&select=id,status,to_hospital_id",
         jwt_token,
     )
     if not rows:
@@ -1511,27 +1512,43 @@ def _assign_impl(
     if new_status not in _ASSIGN_VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"無効なステータス: {new_status}")
 
-    # ---- assigned_at をサーバー時刻で生成 ----
     assigned_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    update_data: dict = {
-        "owner_user_id": body.owner_user_id,
-        "assigned_department": body.assigned_department,
-        "assigned_at": assigned_at,
-        "status": new_status,
-    }
-
-    # ---- PATCH: 自院ドキュメントのみ（to_hospital_id=自院 を URL に追加して二重防御） ----
     hospital_id_enc = urllib.parse.quote(hospital_id, safe="")
+
+    # ---- 既存アサインを非現在化（0件でも正常） ----
+    # UNIQUE INDEX (document_id) WHERE is_current=true の制約があるため、
+    # 先に false にしてから INSERT する順序を守ること。
+    _supabase_patch(
+        f"document_assignments?document_id=eq.{doc_id_enc}&is_current=eq.true",
+        {"is_current": False},
+        jwt_token,
+    )
+
+    # ---- 新アサインを INSERT ----
+    _supabase_post_db(
+        "document_assignments",
+        {
+            "document_id": doc_id_stripped,
+            "hospital_id": hospital_id,
+            "assigned_department": body.assigned_department,
+            "owner_user_id": body.owner_user_id,
+            "assigned_by": user_id,
+            "assigned_at": assigned_at,
+            "is_current": True,
+        },
+        jwt_token,
+    )
+
+    # ---- documents の status のみ更新（担当情報は documents に書かない） ----
     updated = _supabase_patch(
         f"documents?id=eq.{doc_id_enc}&to_hospital_id=eq.{hospital_id_enc}",
-        update_data,
+        {"status": new_status},
         jwt_token,
     )
     if not updated:
         raise HTTPException(
             status_code=403,
-            detail="アサインできませんでした（RLS により更新が拒否されました）",
+            detail="ステータス更新に失敗しました（RLS により更新が拒否されました）",
         )
 
     # ---- document_logs INSERT（best-effort） ----
@@ -1540,6 +1557,7 @@ def _assign_impl(
             "document_logs",
             {
                 "document_id": doc_id_stripped,
+                "hospital_id": hospital_id,
                 "action": "ASSIGN",
                 "from_status": old_status,
                 "to_status": new_status,
@@ -1569,11 +1587,12 @@ def assign_document_api(
 ):
     """
     POST /api/documents/{doc_id}/assign
-    港モデル: ドキュメントに担当者・部署をアサインする。
+    受信側アサイン: document_assignments に書き込み、documents.status のみ更新する。
 
     - JWT 必須（自院メンバーのみ）
     - 自院 to_hospital_id チェック（FastAPI + RLS 二重防御）
-    - documents: owner_user_id / assigned_department / assigned_at / status を更新
+    - document_assignments: 担当情報を INSERT（既存は is_current=false に更新）
+    - documents: status のみ更新（assigned_* は書かない）
     - document_logs: ASSIGN イベントを記録（best-effort）
     """
     return _assign_impl(doc_id, body, credentials, user)
