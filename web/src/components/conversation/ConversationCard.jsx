@@ -26,12 +26,15 @@ export default function ConversationCard({
 }) {
   const { latestDoc, sentCount, recvCount, hasReply,
           patientLabel, peerHospitalId, peerHospitalIds,
-          currentStatus } = group;
+          faxDisplayName, currentStatus } = group;
 
   const isPatientMode = !!patientLabel;
 
-  const mainLabel  = isPatientMode ? patientLabel : nameOf(peerHospitalId);
-  const avatarIcon = isPatientMode ? "" : (iconOf ? iconOf(peerHospitalId) : "");
+  // FAXグループは faxDisplayName（FAX番号 or "外部FAX"）、それ以外は病院名
+  const mainLabel  = isPatientMode ? patientLabel
+    : (faxDisplayName ?? nameOf(peerHospitalId));
+  const avatarIcon = isPatientMode || faxDisplayName ? ""
+    : (iconOf ? iconOf(peerHospitalId) : "");
 
   const hospitalSubLabel = isPatientMode && peerHospitalIds?.length
     ? peerHospitalIds.map(id => nameOf(id)).filter(Boolean).join("・")

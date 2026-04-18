@@ -40,17 +40,19 @@ export function elapsed(createdAt) {
 export function docStatusLabel(doc, isExpired) {
   // isExpired チェック廃止: 期限切れ表示を削除（ファイルは保持されるため）
   if (doc.status === "ARCHIVED")    return "完了";
-  if (doc.status === "UPLOADED")    return "未読";
+  if (doc.status === "UPLOADED")    return "未対応";
+  if (doc.status === "ARRIVED")     return "未対応";  // FAX受信の旧ステータス
   if (doc.status === "IN_PROGRESS") return "対応中";
   if (doc.status === "DOWNLOADED")  return "既読";
   if (doc.status === "CANCELLED")   return "取消";
-  return doc.status || "-";
+  return "-";
 }
 
 export function docStatusColor(doc, isExpired) {
   // isExpired チェック廃止: 期限切れ表示を削除（ファイルは保持されるため）
   if (doc.status === "ARCHIVED")    return { text: "#047857", bg: "rgba(4,120,87,0.10)" };
   if (doc.status === "UPLOADED")    return { text: DP.blue,   bg: "rgba(21,101,192,0.10)" };
+  if (doc.status === "ARRIVED")     return { text: DP.blue,   bg: "rgba(21,101,192,0.10)" };
   if (doc.status === "IN_PROGRESS") return { text: "#B45309", bg: "rgba(180,83,9,0.10)" };
   if (doc.status === "DOWNLOADED")  return { text: "#047857", bg: "rgba(4,120,87,0.08)" };
   return { text: DP.textSub, bg: "rgba(15,23,42,0.06)" };

@@ -56,7 +56,8 @@ export default function ConversationScreen({
     return groups.filter(g => {
       const fname = (g.latestDoc?.original_filename || "").toLowerCase();
       if (g.patientLabel) return g.patientLabel.toLowerCase().includes(query) || fname.includes(query);
-      const name = nameOf(g.peerHospitalId).toLowerCase();
+      // FAXグループは faxDisplayName で検索、それ以外は病院名
+      const name = (g.faxDisplayName ?? nameOf(g.peerHospitalId) ?? "").toLowerCase();
       return name.includes(query) || fname.includes(query);
     });
   }, [groups, q, nameOf]);

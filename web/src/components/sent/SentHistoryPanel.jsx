@@ -92,8 +92,7 @@ export default function SentHistoryPanel({
               background: DP.white,
               flexShrink: 0,
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>送信済み</span>
+              <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 13, color: DP.textSub, fontWeight: 600 }}>{filtered.length}件</span>
               </div>
               {/* 検索インプット: トップバー側で管理している場合は非表示 */}
@@ -167,11 +166,10 @@ export default function SentHistoryPanel({
         }}>
           <div style={{
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             alignItems: "center",
             marginBottom: 8,
           }}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: DP.navy }}>送信済み</span>
             <span style={{ fontSize: 13, color: DP.textSub, fontWeight: 600 }}>
               {filtered.length}件
             </span>

@@ -61,6 +61,11 @@ function keyOf(doc, myHospitalId, mode) {
     const pid  = sj?.patient_id?.trim();
     return name || pid || "患者不明";
   }
+  // FAX受信: from_hospital_id は to_hospital_id と同値の暫定値のため、
+  // fax番号をキーにする（そのまま使うと自院名がグループ名になってしまう）
+  if (doc.source === "fax") {
+    return `fax:${doc.from_fax_number ?? "不明"}`;
+  }
   const peer =
     doc.from_hospital_id === myHospitalId
       ? doc.to_hospital_id
@@ -107,9 +112,14 @@ export function useConversationGroups(
         ),
       ].filter(id => id !== myHospitalId);
 
+      // FAX受信グループ: key が "fax:" で始まる場合はFAX番号を表示名として使う
+      const isFaxGroup = mode === GROUPING_MODES.HOSPITAL && key.startsWith("fax:");
+      const faxDisplayName = isFaxGroup ? (key.slice(4) || "外部FAX") : null;
+
       return {
         id:             key,
         peerHospitalId: mode === GROUPING_MODES.HOSPITAL ? key : (peerHospitalIds[0] ?? null),
+        faxDisplayName,
         patientLabel:   mode === GROUPING_MODES.PATIENT  ? key : null,
         peerHospitalIds,
         mode,
