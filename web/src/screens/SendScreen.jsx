@@ -47,6 +47,7 @@ export default function SendScreen({
   checkMode,
   setCheckMode,
   finalizeDocument,
+  finalizeSelfDocument,
   userId,
   allowedMimeExt,
   // SentHistoryPanel props
@@ -232,6 +233,7 @@ export default function SendScreen({
                 checkMode={checkMode}
                 setCheckMode={setCheckMode}
                 finalizeDocument={finalizeDocument}
+                finalizeSelfDocument={finalizeSelfDocument}
                 userId={userId}
                 allowedMimeExt={allowedMimeExt}
               />
