@@ -206,7 +206,8 @@ export default function SendTab({
   checkMode,        // boolean
   setCheckMode,
   // checkIntensity / setCheckIntensity は廃止（常に "full" 固定）
-  finalizeDocument, // (structuredPayload: object|null) => void
+  finalizeDocument,     // (structuredPayload: object|null) => void  他院送信用
+  finalizeSelfDocument, // (structuredPayload: object|null, dept: string) => void  自院置き用
   userId,           // Supabase auth user id（差分ログ用）
   allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
 }) {
@@ -222,6 +223,11 @@ export default function SendTab({
   const isOcrFile = OCR_MIME_SET.has(pdfFile?.type);
   const [hoverMode, setHoverMode] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
+
+  // 自院置きモード
+  const [scanRouteFile, setScanRouteFile] = useState(null); // スキャン完了→ルーティング選択待ちのファイル
+  const [selfMode, setSelfMode] = useState(false);          // true = 自院に置くフロー
+  const [selfDept, setSelfDept] = useState("");             // 選択部署
 
   // 抽出テキスト表示切替（raw / normalized）
   const [showNormalized, setShowNormalized] = useState(false);
@@ -275,7 +281,17 @@ export default function SendTab({
       });
     }
 
-    finalizeDocument(structuredPayload);
+    if (selfMode) {
+      finalizeSelfDocument(structuredPayload, selfDept);
+    } else {
+      finalizeDocument(structuredPayload);
+    }
+  };
+
+  const handleCancelSelfMode = () => {
+    setSelfMode(false);
+    setSelfDept("");
+    onCancelFile();
   };
 
   const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
@@ -431,18 +447,48 @@ export default function SendTab({
               )}
             </div>
 
-            <div style={{ fontWeight: 800 }}>置く先（宛先）</div>
-            <RecipientPicker
-              hospitals={hospitals}
-              myHospitalId={myHospitalId}
-              contacts={contacts}
-              recipient={recipient}
-              setRecipient={setRecipient}
-              disabled={sending}
-            />
+            {selfMode ? (
+              /* ---- 自院に置くモード: 部署選択 ---- */
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>どの部署で対応しますか？</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {["地域連携室", "医事課", "健診センター", "薬剤科", "検査課", "総務", "病棟看護師", "外来看護師"].map((dept) => (
+                    <button
+                      key={dept}
+                      onClick={() => setSelfDept(dept)}
+                      style={{
+                        padding: "8px 16px", borderRadius: 10, fontWeight: 700, fontSize: 13,
+                        cursor: "pointer",
+                        border: selfDept === dept
+                          ? "1.5px solid rgba(31,58,109,0.55)"
+                          : "1px solid rgba(15,23,42,0.15)",
+                        background: selfDept === dept
+                          ? "rgba(31,58,109,0.10)"
+                          : "rgba(255,255,255,0.8)",
+                        color: selfDept === dept ? "#1F3A6D" : THEME.text,
+                      }}
+                    >
+                      {dept}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontWeight: 800 }}>置く先（宛先）</div>
+                <RecipientPicker
+                  hospitals={hospitals}
+                  myHospitalId={myHospitalId}
+                  contacts={contacts}
+                  recipient={recipient}
+                  setRecipient={setRecipient}
+                  disabled={sending}
+                />
+              </>
+            )}
 
-            {/* 宛先病院AI候補（OCRから紹介先病院名を読み取れた場合） */}
-            {checkMode && ocrResult?.structured?.target_hospital && hospitalCandidates.length > 0 && (
+            {/* 宛先病院AI候補（他院モードのみ表示） */}
+            {!selfMode && checkMode && ocrResult?.structured?.target_hospital && hospitalCandidates.length > 0 && (
               <div style={{
                 padding: "8px 12px", borderRadius: 10,
                 background: "rgba(14,165,233,0.06)",
@@ -899,7 +945,7 @@ export default function SendTab({
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button
-                  onClick={onCancelFile}
+                  onClick={selfMode ? handleCancelSelfMode : onCancelFile}
                   disabled={isProcessing || sending}
                   style={{
                     padding: "10px 14px", borderRadius: 12,
@@ -943,9 +989,92 @@ export default function SendTab({
               filenameBase="紹介状"
               preferRearCamera={true}
               autoStart={true}
-              onDone={(file) => { onFileDrop(file); setScanOpen(false); }}
+              onDone={(file) => { setScanRouteFile(file); setScanOpen(false); }}
               onCancel={() => setScanOpen(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ===== スキャン後ルーティングモーダル ===== */}
+      {scanRouteFile && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9998,
+          background: "rgba(0,0,0,0.72)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "24px",
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 20, padding: "28px 24px",
+            width: "100%", maxWidth: 380,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }}>
+            <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, opacity: 0.45, textTransform: "uppercase" }}>
+              スキャン完了
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4 }}>
+              どこに置きますか？
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.5, marginBottom: 20 }}>
+              {scanRouteFile.name}
+            </div>
+
+            {/* 自院に置く */}
+            <button
+              onClick={() => {
+                setSelfMode(true);
+                onFileDrop(scanRouteFile);
+                setScanRouteFile(null);
+              }}
+              style={{
+                width: "100%", padding: "16px 18px", marginBottom: 10,
+                borderRadius: 14, border: "1.5px solid rgba(31,58,109,0.25)",
+                background: "rgba(31,58,109,0.05)",
+                cursor: "pointer", textAlign: "left",
+                display: "flex", flexDirection: "column", gap: 3,
+              }}
+            >
+              <span style={{ fontWeight: 900, fontSize: 15, color: "#1F3A6D" }}>
+                自院に置く
+              </span>
+              <span style={{ fontSize: 12, opacity: 0.55 }}>
+                紙の紹介状を取り込む
+              </span>
+            </button>
+
+            {/* 他院に置く */}
+            <button
+              onClick={() => {
+                setSelfMode(false);
+                onFileDrop(scanRouteFile);
+                setScanRouteFile(null);
+              }}
+              style={{
+                width: "100%", padding: "16px 18px",
+                borderRadius: 14, border: "1.5px solid rgba(15,23,42,0.12)",
+                background: "rgba(255,255,255,0.8)",
+                cursor: "pointer", textAlign: "left",
+                display: "flex", flexDirection: "column", gap: 3,
+              }}
+            >
+              <span style={{ fontWeight: 900, fontSize: 15 }}>
+                他院に置く
+              </span>
+              <span style={{ fontSize: 12, opacity: 0.55 }}>
+                DocPort送信 / FAX送信
+              </span>
+            </button>
+
+            <button
+              onClick={() => setScanRouteFile(null)}
+              style={{
+                width: "100%", marginTop: 14,
+                background: "none", border: "none",
+                fontSize: 13, opacity: 0.45, cursor: "pointer",
+              }}
+            >
+              キャンセル
+            </button>
           </div>
         </div>
       )}

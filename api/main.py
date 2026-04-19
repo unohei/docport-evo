@@ -1454,8 +1454,8 @@ def _supabase_post_db(path: str, data: dict, jwt_token: str) -> list:
 # ----------------------------
 class AssignRequest(BaseModel):
     assigned_department: str
-    owner_user_id: str                # 担当者の user ID (UUID)
-    to_status: Optional[str] = None     # 省略時: 現状維持。"IN_PROGRESS" 推奨
+    owner_user_id: Optional[str] = None  # 担当者 UUID。自院置き（manual_upload）時は null 可
+    to_status: Optional[str] = None      # 省略時: 現状維持。"IN_PROGRESS" 推奨
 
 
 _ASSIGN_VALID_STATUSES = frozenset(

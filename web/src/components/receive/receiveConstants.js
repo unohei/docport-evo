@@ -112,6 +112,7 @@ export function senderDocStatus(doc, nameOf) {
 // この関数をアイコン・ラベル・カウントの全判定で共通使用すること。
 export function isDocSent(doc, myHospitalId) {
   if (!doc || !myHospitalId) return false;
-  if (doc.source === "fax") return false;        // 外部FAX受信は常に「受信」
+  if (doc.source === "fax") return false;           // 外部FAX受信は常に「受信」
+  if (doc.source === "manual_upload") return false; // 自院置き（紙取り込み）は常に「受信」
   return doc.from_hospital_id === myHospitalId;
 }

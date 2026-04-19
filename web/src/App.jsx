@@ -435,7 +435,7 @@ export default function App() {
     //
     // "fax" を除外することで受信文書の混入を防ぐ。
     // "fax_outbound" は除外しないため FAX送信は必ず表示される。
-    const base = sentDocs.filter(d => d.source !== "fax");
+    const base = sentDocs.filter(d => d.source !== "fax" && d.source !== "manual_upload");
 
     const q = (qSent || "").trim().toLowerCase();
     if (!q) return base;
@@ -858,6 +858,95 @@ export default function App() {
     }
   };
 
+  // ---- 自院に置く（紙持ち込み取り込み）----
+  // from_hospital_id = to_hospital_id = 自院、source = "manual_upload"
+  const finalizeSelfDocument = async (structuredPayload = null, dept) => {
+    const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
+    if (sending || isProcessing) return;
+    if (!myHospitalId) return alert("profileのhospital_idが取れてません");
+    if (!dept) return alert("部署を選んでください");
+    if (!pendingFileKey) return alert("アップロードに失敗しています。ファイルを選び直してください");
+
+    setSending(true);
+    try {
+      const extInsert = {
+        from_hospital_id: myHospitalId,
+        to_hospital_id:   myHospitalId,
+        source:           "manual_upload",
+        status:           "UPLOADED",
+        expires_at:       new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        file_key:         pendingFileKey,
+        original_filename: pdfFile?.name ?? null,
+        content_type:     pdfFile?.type ?? null,
+        file_ext:         pendingFileKey?.split(".").pop() ?? null,
+        ...(structuredPayload ?? {}),
+      };
+
+      let data;
+      const { data: d1, error: e1 } = await supabase
+        .from("documents").insert(extInsert).select().single();
+      if (e1) {
+        if (e1.code === "42703" || e1.message?.includes("column")) {
+          const { data: d2, error: e2 } = await supabase
+            .from("documents").insert({
+              from_hospital_id: myHospitalId,
+              to_hospital_id:   myHospitalId,
+              source:           "manual_upload",
+              status:           "UPLOADED",
+              expires_at:       new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+              file_key:         pendingFileKey,
+            }).select().single();
+          if (e2) throw new Error(e2.message);
+          data = d2;
+        } else {
+          throw new Error(e1.message);
+        }
+      } else {
+        data = d1;
+      }
+
+      const uid = session.user.id;
+      await logEvent(data.id, uid, "DOC_CREATED");
+      if (ocrResult !== null) await logEvent(data.id, uid, "OCR_RUN");
+      if (structuredPayload?.structured_updated_by === "human") {
+        await logEvent(data.id, uid, "STRUCTURED_EDIT");
+      }
+
+      // 部署アサイン（担当者なし = 未担当として Inbox に表示）
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const assignRes = await fetch(`${API_BASE}/documents/${data.id}/assign`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          assigned_department: dept,
+          owner_user_id: null,
+          to_status: "UPLOADED",
+        }),
+      });
+      if (!assignRes.ok) {
+        console.warn("部署アサイン失敗（書類は保存済み）", await assignRes.text());
+      }
+
+      setComment("");
+      setRecipient(null);
+      setPdfFile(null);
+      setPendingFileKey(null);
+      setOcrResult(null);
+      setOcrError(null);
+      setUploadStatus("idle");
+      await loadAll();
+      setTab("inbox");
+      alert("自院に置きました（新着書類に入りました）");
+    } catch (err) {
+      alert(`エラー: ${err.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
   // ---- Preview ----
   const closePreview = () => {
     setPreviewDoc(null);
@@ -1259,6 +1348,7 @@ export default function App() {
           checkMode={checkMode}
           setCheckMode={setCheckMode}
           finalizeDocument={finalizeDocument}
+          finalizeSelfDocument={finalizeSelfDocument}
           userId={session?.user?.id ?? null}
           allowedMimeExt={ALLOWED_MIME_EXT}
           filteredSentDocs={filteredSentDocs}
