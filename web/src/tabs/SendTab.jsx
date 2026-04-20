@@ -210,6 +210,7 @@ export default function SendTab({
   finalizeSelfDocument, // (structuredPayload: object|null, dept: string) => void  自院置き用
   userId,           // Supabase auth user id（差分ログ用）
   allowedMimeExt,   // { [mime]: ext } — FileDrop の許可リストに使用
+  departments = [],  // 自院の部署一覧 [{id, name, sort_order}]（App.jsx から渡される）
 }) {
   const allowedTypes = allowedMimeExt ? Object.keys(allowedMimeExt) : ["application/pdf"];
   // OCR対応MIMEセット（バックエンドの対応拡張子と同期する）
@@ -451,27 +452,33 @@ export default function SendTab({
               /* ---- 自院に置くモード: 部署選択 ---- */
               <div>
                 <div style={{ fontWeight: 800, marginBottom: 8 }}>どの部署で対応しますか？</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {["地域連携室", "医事課", "健診センター", "薬剤科", "検査課", "総務", "病棟看護師", "外来看護師"].map((dept) => (
-                    <button
-                      key={dept}
-                      onClick={() => setSelfDept(dept)}
-                      style={{
-                        padding: "8px 16px", borderRadius: 10, fontWeight: 700, fontSize: 13,
-                        cursor: "pointer",
-                        border: selfDept === dept
-                          ? "1.5px solid rgba(31,58,109,0.55)"
-                          : "1px solid rgba(15,23,42,0.15)",
-                        background: selfDept === dept
-                          ? "rgba(31,58,109,0.10)"
-                          : "rgba(255,255,255,0.8)",
-                        color: selfDept === dept ? "#1F3A6D" : THEME.text,
-                      }}
-                    >
-                      {dept}
-                    </button>
-                  ))}
-                </div>
+                {departments.length === 0 ? (
+                  <div style={{ fontSize: 13, color: THEME.text, opacity: 0.5, padding: "8px 0" }}>
+                    部署が登録されていません。管理者に部署の追加を依頼してください。
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {departments.map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => setSelfDept(d.name)}
+                        style={{
+                          padding: "8px 16px", borderRadius: 10, fontWeight: 700, fontSize: 13,
+                          cursor: "pointer",
+                          border: selfDept === d.name
+                            ? "1.5px solid rgba(31,58,109,0.55)"
+                            : "1px solid rgba(15,23,42,0.15)",
+                          background: selfDept === d.name
+                            ? "rgba(31,58,109,0.10)"
+                            : "rgba(255,255,255,0.8)",
+                          color: selfDept === d.name ? "#1F3A6D" : THEME.text,
+                        }}
+                      >
+                        {d.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <>

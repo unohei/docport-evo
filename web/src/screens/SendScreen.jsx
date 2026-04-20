@@ -50,6 +50,7 @@ export default function SendScreen({
   finalizeSelfDocument,
   userId,
   allowedMimeExt,
+  departments,
   // SentHistoryPanel props
   filteredSentDocs,
   nameOf,
@@ -236,6 +237,7 @@ export default function SendScreen({
                 finalizeSelfDocument={finalizeSelfDocument}
                 userId={userId}
                 allowedMimeExt={allowedMimeExt}
+                departments={departments}
               />
             </div>
           </div>

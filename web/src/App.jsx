@@ -1359,6 +1359,7 @@ export default function App() {
           cancelDocument={cancelDocument}
           fetchPreviewUrl={fetchPreviewUrl}
           fetchDownloadUrl={fetchDownloadUrl}
+          departments={departments}
         />
       </Root>
     );
