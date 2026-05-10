@@ -1,6 +1,11 @@
 // ConversationListPanel.jsx
 // やりとりグループの一覧パネル
 //
+// 変更点 (v4):
+// - 部署フィルタの「＋」ボタンを「未対応」の左側に配置
+// - 横スクロール時にレイアウトが崩れないよう flexWrap/overflowY を明示
+// - 並び: ＋ / 未対応 / 各部署 / 完了
+//
 // 変更点 (v3):
 // - 部署フィルタータブを追加（新着 / 各部署 / 完了 / ＋）
 // - 部署タブは横スクロール対応（overflow-x: auto）
@@ -148,38 +153,21 @@ export default function ConversationListPanel({
         )}
 
         {/* 部署フィルタータブ（横スクロール） */}
+        {/* 並び: ＋ / 未対応 / 各部署 / 完了 — 横スクロールで全ボタンに到達可能 */}
         <div style={{
-          display: "flex", gap: 8, overflowX: "auto",
+          display: "flex", flexWrap: "nowrap", gap: 8,
+          overflowX: "auto", overflowY: "hidden",
+          whiteSpace: "nowrap", minWidth: 0,
           paddingBottom: 4, paddingRight: 8,
           marginBottom: isControlled ? 0 : 6,
           scrollbarWidth: "none", msOverflowStyle: "none",
         }}>
-          {tabs.map(tab => {
-            const active = deptFilter === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setDeptFilter(tab.key)}
-                style={{
-                  padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-                  whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer",
-                  border: `1px solid ${active ? DP.borderActive : DP.border}`,
-                  background: active ? DP.skyLight : "transparent",
-                  color: active ? DP.blue : DP.textSub,
-                  transition: "all 120ms ease",
-                  WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-          {/* ＋ 部署追加ボタン */}
+          {/* ＋ 部署追加ボタン（先頭に配置） */}
           {addDepartment && (
             addingDept ? (
               <form
                 onSubmit={e => { e.preventDefault(); handleAddDept(); }}
-                style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}
+                style={{ display: "flex", gap: 4, flex: "0 0 auto", alignItems: "center" }}
               >
                 <input
                   autoFocus
@@ -189,7 +177,7 @@ export default function ConversationListPanel({
                   style={{
                     minWidth: 120, padding: "3px 7px", borderRadius: 6, fontSize: 11,
                     border: `1px solid ${DP.borderActive}`, outline: "none",
-                    color: DP.text, background: DP.white, flexShrink: 0,
+                    color: DP.text, background: DP.white, flex: "0 0 auto",
                   }}
                 />
                 <button
@@ -197,6 +185,7 @@ export default function ConversationListPanel({
                   style={{
                     padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
                     background: DP.blue, color: "#fff", border: "none", cursor: "pointer",
+                    flex: "0 0 auto",
                   }}
                 >
                   追加
@@ -208,6 +197,7 @@ export default function ConversationListPanel({
                     padding: "3px 6px", borderRadius: 6, fontSize: 11,
                     background: "transparent", color: DP.textSub,
                     border: `1px solid ${DP.border}`, cursor: "pointer",
+                    flex: "0 0 auto",
                   }}
                 >
                   ✕
@@ -218,7 +208,7 @@ export default function ConversationListPanel({
                 onClick={() => setAddingDept(true)}
                 style={{
                   padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-                  whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer",
+                  whiteSpace: "nowrap", flex: "0 0 auto", cursor: "pointer",
                   border: `1px dashed ${DP.border}`, background: "transparent",
                   color: DP.textSub, transition: "all 120ms ease",
                   WebkitTapHighlightColor: "transparent",
@@ -228,6 +218,26 @@ export default function ConversationListPanel({
               </button>
             )
           )}
+          {tabs.map(tab => {
+            const active = deptFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setDeptFilter(tab.key)}
+                style={{
+                  padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+                  whiteSpace: "nowrap", flex: "0 0 auto", cursor: "pointer",
+                  border: `1px solid ${active ? DP.borderActive : DP.border}`,
+                  background: active ? DP.skyLight : "transparent",
+                  color: active ? DP.blue : DP.textSub,
+                  transition: "all 120ms ease",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* 内部検索（非制御モードのみ表示） */}
