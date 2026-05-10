@@ -1,9 +1,12 @@
 // ConversationListPanel.jsx
 // やりとりグループの一覧パネル
 //
+// 変更点 (v5):
+// - 部署フィルタを「横スクロール」から「折り返し（複数行）」に変更
+// - 1行に収まらない場合は2行目以降に自動で折り返される
+//
 // 変更点 (v4):
 // - 部署フィルタの「＋」ボタンを「未対応」の左側に配置
-// - 横スクロール時にレイアウトが崩れないよう flexWrap/overflowY を明示
 // - 並び: ＋ / 未対応 / 各部署 / 完了
 //
 // 変更点 (v3):
@@ -152,15 +155,13 @@ export default function ConversationListPanel({
           </div>
         )}
 
-        {/* 部署フィルタータブ（横スクロール） */}
-        {/* 並び: ＋ / 未対応 / 各部署 / 完了 — 横スクロールで全ボタンに到達可能 */}
+        {/* 部署フィルタータブ（折り返し対応） */}
+        {/* 並び: ＋ / 未対応 / 各部署 / 完了 — 1行に収まらない場合は次行へ折返し */}
         <div style={{
-          display: "flex", flexWrap: "nowrap", gap: 8,
-          overflowX: "auto", overflowY: "hidden",
-          whiteSpace: "nowrap", minWidth: 0,
-          paddingBottom: 4, paddingRight: 8,
+          display: "flex", flexWrap: "wrap", alignItems: "center",
+          columnGap: 8, rowGap: 6, overflow: "visible",
+          paddingBottom: 4,
           marginBottom: isControlled ? 0 : 6,
-          scrollbarWidth: "none", msOverflowStyle: "none",
         }}>
           {/* ＋ 部署追加ボタン（先頭に配置） */}
           {addDepartment && (
