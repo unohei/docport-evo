@@ -19,6 +19,26 @@ import CardListPanel     from "../components/receive/CardListPanel";
 import DetailPane        from "../components/receive/DetailPane";
 import { DP }            from "../components/receive/receiveConstants";
 import LogoutIcon        from "../assets/logo/logout.svg";
+import DocPortLogoIcon   from "../assets/logo/docport_logo_icon_only.svg";
+
+// ---- TopBar ブランドマーク: ロゴ + 区分ラベルを密にペアリング ----
+// chrome ブルー上で自然に馴染ませるため opacity 0.92、size 20px。
+const TopBarBrand = ({ label }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+    <img
+      src={DocPortLogoIcon}
+      alt=""
+      aria-hidden="true"
+      style={{ width: 20, height: 21, opacity: 0.92, display: "block" }}
+    />
+    <span style={{
+      color: "#FFFFFF", fontSize: 15, fontWeight: 800,
+      letterSpacing: 0.3, userSelect: "none",
+    }}>
+      {label}
+    </span>
+  </div>
+);
 
 // ---- モバイル用レーンフィルタ（横スクロールタブ） ----
 function MobileLaneFilter({ docs, departments, activeLane, onLaneChange }) {
@@ -237,17 +257,8 @@ export default function ReceiveScreen({
               </button>
             ) : (
               <>
-                {/* 受信ラベル */}
-                <span style={{
-                  color: "#FFFFFF",
-                  fontSize: 15,
-                  fontWeight: 800,
-                  letterSpacing: 0.3,
-                  flexShrink: 0,
-                  userSelect: "none",
-                }}>
-                  新着
-                </span>
+                {/* ブランド + 受信ラベル */}
+                <TopBarBrand label="新着" />
                 {/* 検索ボックス: 水色クロム上の白ピル（ダーク文字 + ミント focus） */}
                 <div style={{ flex: 1, position: "relative" }}>
                   <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
@@ -344,7 +355,7 @@ export default function ReceiveScreen({
             display: "flex", alignItems: "center",
             padding: "0 16px", gap: 12,
           }}>
-            <span style={{ color: "#FFFFFF", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+            <TopBarBrand label="新着" />
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
               <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
               <input
@@ -363,8 +374,8 @@ export default function ReceiveScreen({
             {selectedDoc
               ? <DetailPane {...detailProps} />
               : (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: DP.white, color: DP.textSub, flexDirection: "column", gap: 12 }}>
-                  <span style={{ fontSize: 44, opacity: 0.25 }}>📄</span>
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: DP.white, color: DP.textSub, flexDirection: "column", gap: 16 }}>
+                  <img src={DocPortLogoIcon} alt="" aria-hidden="true" style={{ width: 72, height: 77, opacity: 0.15, display: "block" }} />
                   <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>書類を選択してください</p>
                 </div>
               )
@@ -395,7 +406,7 @@ export default function ReceiveScreen({
           display: "flex", alignItems: "center",
           padding: "0 16px", gap: 12,
         }}>
-          <span style={{ color: "#FFFFFF", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+          <TopBarBrand label="新着" />
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
             <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
             <input

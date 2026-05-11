@@ -23,6 +23,7 @@ import SendTab           from "../tabs/SendTab";
 import SentHistoryPanel  from "../components/sent/SentHistoryPanel";
 import { DP }            from "../components/receive/receiveConstants";
 import LogoutIcon        from "../assets/logo/logout.svg";
+import DocPortLogoIcon   from "../assets/logo/docport_logo_icon_only.svg";
 
 export default function SendScreen({
   // ナビゲーション
@@ -115,16 +116,24 @@ export default function SendScreen({
           padding: "0 20px",
           gap: 12,
         }}>
-          <span style={{
-            fontSize: 15,
-            fontWeight: 800,
-            color: "#FFFFFF",
-            letterSpacing: 0.3,
-            flexShrink: 0,
-            userSelect: "none",
-          }}>
-            置く
-          </span>
+          {/* ブランドマーク + 区分ラベルを密にペアリング */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <img
+              src={DocPortLogoIcon}
+              alt=""
+              aria-hidden="true"
+              style={{ width: 20, height: 21, opacity: 0.92, display: "block" }}
+            />
+            <span style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: "#FFFFFF",
+              letterSpacing: 0.3,
+              userSelect: "none",
+            }}>
+              置く
+            </span>
+          </div>
 
           {/* 検索: 置いた書類タブ時にPC・タブレット・スマホすべてで表示 */}
           {isSent ? (

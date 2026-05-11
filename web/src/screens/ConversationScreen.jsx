@@ -17,6 +17,25 @@ import ConversationListPanel from "../components/conversation/ConversationListPa
 import ConversationDetailPane from "../components/conversation/ConversationDetailPane";
 import { DP } from "../components/receive/receiveConstants";
 import LogoutIcon from "../assets/logo/logout.svg";
+import DocPortLogoIcon from "../assets/logo/docport_logo_icon_only.svg";
+
+// ---- TopBar ブランドマーク: ロゴ + 区分ラベル ----
+const TopBarBrand = ({ label }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+    <img
+      src={DocPortLogoIcon}
+      alt=""
+      aria-hidden="true"
+      style={{ width: 20, height: 21, opacity: 0.92, display: "block" }}
+    />
+    <span style={{
+      color: "#FFFFFF", fontSize: 15, fontWeight: 800,
+      letterSpacing: 0.3, userSelect: "none",
+    }}>
+      {label}
+    </span>
+  </div>
+);
 
 export default function ConversationScreen({
   activeTab,
@@ -125,12 +144,7 @@ export default function ConversationScreen({
               </button>
             ) : (
               <>
-                <span style={{
-                  color: "#FFFFFF", fontSize: 15, fontWeight: 800,
-                  letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
-                }}>
-                  新着
-                </span>
+                <TopBarBrand label="新着" />
                 <div style={{ flex: 1, position: "relative" }}>
                   <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
                   <input
@@ -185,12 +199,7 @@ export default function ConversationScreen({
           height: 48, flexShrink: 0, background: DP.navBg,
           display: "flex", alignItems: "center", padding: "0 16px", gap: 12,
         }}>
-          <span style={{
-            color: "#FFFFFF", fontSize: 15, fontWeight: 800,
-            letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
-          }}>
-            新着
-          </span>
+          <TopBarBrand label="新着" />
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
             <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
             <input

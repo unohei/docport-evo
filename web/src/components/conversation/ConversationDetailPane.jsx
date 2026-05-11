@@ -9,6 +9,7 @@ import { useState } from "react";
 import { DP, elapsed, docStatusLabel, docStatusColor, isDocSent, senderDisplay, senderCurrentLabel } from "../receive/receiveConstants";
 import HospitalAvatar from "../common/HospitalAvatar";
 import DetailPane from "../receive/DetailPane";
+import DocPortLogoIcon from "../../assets/logo/docport_logo_icon_only.svg";
 
 // ---- 現在地レベル別カラー ----
 const STATUS_COLORS = {
@@ -231,9 +232,9 @@ export default function ConversationDetailPane({
       <div style={{
         flex: 1, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center",
-        background: DP.white, color: DP.textSub, gap: 12, minWidth: 0,
+        background: DP.white, color: DP.textSub, gap: 16, minWidth: 0,
       }}>
-        <span style={{ fontSize: 44, opacity: 0.35 }}>📋</span>
+        <img src={DocPortLogoIcon} alt="" aria-hidden="true" style={{ width: 72, height: 77, opacity: 0.15, display: "block" }} />
         <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>連携を選択してください</p>
       </div>
     );

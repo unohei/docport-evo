@@ -12,6 +12,7 @@ import { getPreviewKey, isPreviewable, getExtFromKey } from "../../utils/preview
 import HospitalAvatar from "../common/HospitalAvatar";
 import { normalizeStructuredJson } from "../../utils/structuredFormat";
 import StructuredCopyPanel from "../common/StructuredCopyPanel";
+import DocPortLogoIcon from "../../assets/logo/docport_logo_icon_only.svg";
 
 // ---- 小コンポーネント ----
 
@@ -304,9 +305,9 @@ export default function DetailPane({
       <div style={{
         flex: 1, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center",
-        background: DP.white, color: DP.textSub, gap: 12, minWidth: 0,
+        background: DP.white, color: DP.textSub, gap: 16, minWidth: 0,
       }}>
-        <span style={{ fontSize: 44, opacity: 0.35 }}>📄</span>
+        <img src={DocPortLogoIcon} alt="" aria-hidden="true" style={{ width: 72, height: 77, opacity: 0.15, display: "block" }} />
         <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>書類を選択してください</p>
       </div>
     );
