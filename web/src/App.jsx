@@ -93,8 +93,8 @@ function isColumnError(err) {
   if (!err) return false;
   const msg = String(err.message ?? "");
   return (
-    err.code === "42703" ||           // PostgreSQL: undefined_column
-    err.code === "PGRST204" ||        // PostgREST: schema cache miss
+    err.code === "42703" || // PostgreSQL: undefined_column
+    err.code === "PGRST204" || // PostgREST: schema cache miss
     msg.includes("schema cache") ||
     msg.includes("Could not find") ||
     msg.includes("column")
@@ -110,7 +110,10 @@ async function fetchDocs(col, val) {
     .order("created_at", { ascending: false });
 
   if (error && isColumnError(error)) {
-    console.warn("[DocPort] SELECT fallback (new columns not found):", error.message);
+    console.warn(
+      "[DocPort] SELECT fallback (new columns not found):",
+      error.message,
+    );
     return supabase
       .from("documents")
       .select(SELECT_BASE)
@@ -128,40 +131,67 @@ console.log("API_BASE =", API_BASE, "FAX_API_BASE =", FAX_API_BASE);
 // アップロード許可 MIME → 拡張子マップ（サーバー側 ALLOWED_MIME_EXT と同期を保つこと）
 // フロントはUX用の早期バリデーション専用。最終判断は FastAPI が行う。
 const ALLOWED_MIME_EXT = {
-  "application/pdf":                                                             "pdf",
-  "image/png":                                                                   "png",
-  "image/jpeg":                                                                  "jpg",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":     "docx",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":           "xlsx",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation":   "pptx",
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    "pptx",
 };
 
 // ---- Preview Modal ----
 // previewable: true → iframe表示、false → ダウンロード促進UI
-function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, previewable, isImage }) {
+function PreviewModal({
+  isOpen,
+  onClose,
+  title,
+  url,
+  loading,
+  error,
+  metaLeft,
+  previewable,
+  isImage,
+}) {
   if (!isOpen) return null;
 
   return (
     <div
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       style={{
-        position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
-        zIndex: 80, display: "grid", placeItems: "center", padding: 12,
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.45)",
+        zIndex: 80,
+        display: "grid",
+        placeItems: "center",
+        padding: 12,
       }}
     >
       <div
         style={{
-          width: "min(1020px, 100%)", height: "min(88vh, 920px)",
-          background: "rgba(255,255,255,0.93)", border: "1px solid rgba(15,23,42,0.12)",
-          borderRadius: 16, boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
-          overflow: "hidden", display: "grid", gridTemplateRows: "56px 1fr",
+          width: "min(1020px, 100%)",
+          height: "min(88vh, 920px)",
+          background: "rgba(255,255,255,0.93)",
+          border: "1px solid rgba(15,23,42,0.12)",
+          borderRadius: 16,
+          boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateRows: "56px 1fr",
         }}
       >
         {/* Header */}
         <div
           style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: 10, padding: "10px 12px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            padding: "10px 12px",
             borderBottom: "1px solid rgba(15,23,42,0.10)",
             background: "rgba(248,250,252,0.9)",
           }}
@@ -169,29 +199,44 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
           <div style={{ minWidth: 0 }}>
             <div
               style={{
-                fontWeight: 900, fontSize: 14, color: THEME.text,
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                fontWeight: 900,
+                fontSize: 14,
+                color: THEME.text,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
               title={title}
             >
               {title || "プレビュー"}
             </div>
             {metaLeft && (
-              <div style={{ marginTop: 2, fontSize: 12, opacity: 0.7 }}>{metaLeft}</div>
+              <div style={{ marginTop: 2, fontSize: 12, opacity: 0.7 }}>
+                {metaLeft}
+              </div>
             )}
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <a
-              href={url || "#"} target="_blank" rel="noreferrer noopener"
-              style={{ pointerEvents: url ? "auto" : "none", opacity: url ? 1 : 0.5, textDecoration: "none" }}
+              href={url || "#"}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{
+                pointerEvents: url ? "auto" : "none",
+                opacity: url ? 1 : 0.5,
+                textDecoration: "none",
+              }}
             >
               <button
                 style={{
-                  padding: "8px 12px", borderRadius: 12,
+                  padding: "8px 12px",
+                  borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.12)",
-                  background: "rgba(14,165,233,0.10)", fontWeight: 900,
-                  color: THEME.text, cursor: url ? "pointer" : "not-allowed",
+                  background: "rgba(14,165,233,0.10)",
+                  fontWeight: 900,
+                  color: THEME.text,
+                  cursor: url ? "pointer" : "not-allowed",
                 }}
               >
                 端末で開く
@@ -200,10 +245,13 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
             <button
               onClick={onClose}
               style={{
-                padding: "8px 12px", borderRadius: 12,
+                padding: "8px 12px",
+                borderRadius: 12,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.85)", fontWeight: 900,
-                color: THEME.text, cursor: "pointer",
+                background: "rgba(255,255,255,0.85)",
+                fontWeight: 900,
+                color: THEME.text,
+                cursor: "pointer",
               }}
             >
               閉じる
@@ -214,18 +262,29 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
         {/* Body */}
         <div style={{ background: "rgba(255,255,255,0.72)" }}>
           {loading ? (
-            <div style={{ padding: 16, fontWeight: 900, opacity: 0.78 }}>読み込み中...</div>
+            <div style={{ padding: 16, fontWeight: 900, opacity: 0.78 }}>
+              読み込み中...
+            </div>
           ) : error ? (
             <div style={{ padding: 16 }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>プレビューできませんでした</div>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                プレビューできませんでした
+              </div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>{error}</div>
               <div style={{ marginTop: 12, fontSize: 13 }}>
                 {url ? (
-                  <a href={url} target="_blank" rel="noreferrer noopener" style={{ fontWeight: 900 }}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={{ fontWeight: 900 }}
+                  >
                     端末で開く（外部）
                   </a>
                 ) : (
-                  <span style={{ opacity: 0.7 }}>※URLを取得できませんでした</span>
+                  <span style={{ opacity: 0.7 }}>
+                    ※URLを取得できませんでした
+                  </span>
                 )}
               </div>
             </div>
@@ -233,35 +292,93 @@ function PreviewModal({ isOpen, onClose, title, url, loading, error, metaLeft, p
             previewable ? (
               /* 画像は <img>、PDF は <iframe> */
               isImage ? (
-                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8F9FA" }}>
-                  <img src={url} alt="プレビュー" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "#F8F9FA",
+                  }}
+                >
+                  <img
+                    src={url}
+                    alt="プレビュー"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                    }}
+                  />
                 </div>
               ) : (
-                <iframe title="pdf-preview" src={url} style={{ width: "100%", height: "100%", border: "none" }} />
+                <iframe
+                  title="pdf-preview"
+                  src={url}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
               )
             ) : (
               /* Office等プレビュー未対応: ダウンロード促進 UI */
-              <div style={{
-                display: "grid", placeItems: "center",
-                height: "100%", padding: 24, textAlign: "center",
-              }}>
+              <div
+                style={{
+                  display: "grid",
+                  placeItems: "center",
+                  height: "100%",
+                  padding: 24,
+                  textAlign: "center",
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}>📂</div>
-                  <div style={{ fontWeight: 900, fontSize: 16, color: THEME.text, marginBottom: 8 }}>
+                  <div
+                    style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}
+                  >
+                    📂
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      fontSize: 16,
+                      color: THEME.text,
+                      marginBottom: 8,
+                    }}
+                  >
                     この形式はアプリ内プレビュー未対応です
                   </div>
-                  <div style={{ fontSize: 13, opacity: 0.65, color: THEME.text, marginBottom: 24, lineHeight: 1.6 }}>
-                    Word / Excel / PowerPoint 等はブラウザ内では表示できません。<br />
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.65,
+                      color: THEME.text,
+                      marginBottom: 24,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Word / Excel / PowerPoint 等はブラウザ内では表示できません。
+                    <br />
                     「端末で開く」からダウンロードして確認してください。
                   </div>
-                  <a href={url} target="_blank" rel="noreferrer noopener" style={{ textDecoration: "none" }}>
-                    <button style={{
-                      padding: "12px 28px", borderRadius: 12,
-                      border: "1px solid rgba(14,165,233,0.6)",
-                      background: THEME.primary, color: "#fff",
-                      fontWeight: 900, fontSize: 14, cursor: "pointer",
-                      boxShadow: "0 8px 20px rgba(14,165,233,0.25)",
-                    }}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <button
+                      style={{
+                        padding: "12px 28px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(14,165,233,0.6)",
+                        background: THEME.primary,
+                        color: "#fff",
+                        fontWeight: 900,
+                        fontSize: 14,
+                        cursor: "pointer",
+                        boxShadow: "0 8px 20px rgba(14,165,233,0.25)",
+                      }}
+                    >
                       端末で開く（ダウンロード）
                     </button>
                   </a>
@@ -290,8 +407,8 @@ export default function App() {
   const [inboxDocs, setInboxDocs] = useState([]);
   const [sentDocs, setSentDocs] = useState([]);
   const [hospitalMembers, setHospitalMembers] = useState([]); // 同院メンバー一覧（港モデル用）
-  const [departments,    setDepartments]    = useState([]);   // 病院単位の部署一覧
-  const [contacts,       setContacts]       = useState([]);   // FAX宛先帳
+  const [departments, setDepartments] = useState([]); // 病院単位の部署一覧
+  const [contacts, setContacts] = useState([]); // FAX宛先帳
 
   // send form
   // recipient: { type:"hospital"|"fax", id, name, sub, faxNumber } | null
@@ -329,7 +446,7 @@ export default function App() {
 
   // チェックモード設定（v3.7: localStorage で次回訪問時復元。checkIntensity は "full" 固定）
   const [checkMode, setCheckMode] = useState(
-    () => localStorage.getItem("docport_check_mode") !== "false"
+    () => localStorage.getItem("docport_check_mode") !== "false",
   );
 
   useEffect(() => {
@@ -378,10 +495,16 @@ export default function App() {
     const warmUp = async () => {
       try {
         console.log("🔥 API warm-up start");
-        const health = await fetch(`${API_BASE}/health`, { method: "GET", cache: "no-store" });
+        const health = await fetch(`${API_BASE}/health`, {
+          method: "GET",
+          cache: "no-store",
+        });
         if (!health.ok) {
           console.log("health not found, fallback warm-up");
-          await fetch(`${API_BASE}/presign-download?key=dummy`, { method: "GET", cache: "no-store" }).catch(() => {});
+          await fetch(`${API_BASE}/presign-download?key=dummy`, {
+            method: "GET",
+            cache: "no-store",
+          }).catch(() => {});
         }
         if (!cancelled) console.log("🔥 Warm-up done");
       } catch (e) {
@@ -389,7 +512,9 @@ export default function App() {
       }
     };
     warmUp();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   const myHospitalId = profile?.hospital_id ?? null;
@@ -402,7 +527,10 @@ export default function App() {
 
   const unreadCount = useMemo(() => {
     return inboxDocs.filter(
-      (d) => d.status === "UPLOADED" && !isExpired(d.expires_at) && d.status !== "ARCHIVED",
+      (d) =>
+        d.status === "UPLOADED" &&
+        !isExpired(d.expires_at) &&
+        d.status !== "ARCHIVED",
     ).length;
   }, [inboxDocs]);
 
@@ -412,7 +540,10 @@ export default function App() {
     // source="fax"（FAX受信）は除外しない
     list = list.filter((d) => d.source !== "fax_outbound");
     // ARCHIVED書類は期限切れでも除外しない（完了グループの履歴表示に必要）
-    if (!showExpired) list = list.filter((d) => d.status === "ARCHIVED" || !isExpired(d.expires_at));
+    if (!showExpired)
+      list = list.filter(
+        (d) => d.status === "ARCHIVED" || !isExpired(d.expires_at),
+      );
     // ARCHIVED フィルタはここでは行わない。InboxTab のタブ分岐で制御する。
     if (showUnreadOnly) list = list.filter((d) => d.status === "UPLOADED");
     const q = (qInbox || "").trim().toLowerCase();
@@ -435,7 +566,9 @@ export default function App() {
     //
     // "fax" を除外することで受信文書の混入を防ぐ。
     // "fax_outbound" は除外しないため FAX送信は必ず表示される。
-    const base = sentDocs.filter(d => d.source !== "fax" && d.source !== "manual_upload");
+    const base = sentDocs.filter(
+      (d) => d.source !== "fax" && d.source !== "manual_upload",
+    );
 
     const q = (qSent || "").trim().toLowerCase();
     if (!q) return base;
@@ -451,9 +584,14 @@ export default function App() {
     if (!session) return;
 
     const { data: prof, error: profErr } = await supabase
-      .from("profiles").select("hospital_id, role, avatar_url").eq("id", session.user.id).single();
+      .from("profiles")
+      .select("hospital_id, role, avatar_url")
+      .eq("id", session.user.id)
+      .single();
     if (profErr) {
-      alert(`profiles取得に失敗: ${profErr.message}\n（profilesに紐付け済みか確認）`);
+      alert(
+        `profiles取得に失敗: ${profErr.message}\n（profilesに紐付け済みか確認）`,
+      );
       return;
     }
     setProfile(prof);
@@ -461,12 +599,17 @@ export default function App() {
     setAuditHospitalId(prof.hospital_id); // 監査ログ用キャッシュをセット
 
     const { data: hs, error: hsErr } = await supabase
-      .from("hospitals").select("id, name, code, icon_url").order("name", { ascending: true });
+      .from("hospitals")
+      .select("id, name, code, icon_url")
+      .order("name", { ascending: true });
     if (hsErr) return alert(`hospitals取得に失敗: ${hsErr.message}`);
     setHospitals(hs);
 
     // fetchDocs: 新列付き SELECT → 列不存在時は旧 SELECT で再試行
-    const { data: inbox, error: inboxErr } = await fetchDocs("to_hospital_id", prof.hospital_id);
+    const { data: inbox, error: inboxErr } = await fetchDocs(
+      "to_hospital_id",
+      prof.hospital_id,
+    );
     if (inboxErr) return alert(`inbox取得に失敗: ${inboxErr.message}`);
 
     // document_assignments から現在のアサイン情報を取得して inboxDocs に結合する。
@@ -478,7 +621,7 @@ export default function App() {
       .eq("hospital_id", prof.hospital_id)
       .eq("is_current", true);
     const assignmentMap = new Map(
-      (assignments ?? []).map((a) => [a.document_id, a])
+      (assignments ?? []).map((a) => [a.document_id, a]),
     );
     const enrichedInbox = (inbox ?? []).map((doc) => {
       const a = assignmentMap.get(doc.id);
@@ -492,7 +635,10 @@ export default function App() {
     });
     setInboxDocs(enrichedInbox);
 
-    const { data: sent, error: sentErr } = await fetchDocs("from_hospital_id", prof.hospital_id);
+    const { data: sent, error: sentErr } = await fetchDocs(
+      "from_hospital_id",
+      prof.hospital_id,
+    );
     if (sentErr) return alert(`sent取得に失敗: ${sentErr.message}`);
 
     // sentDocs に受信側のアサイン情報を peer_assigned_dept として付与。
@@ -506,13 +652,16 @@ export default function App() {
         .in("document_id", sentDocIds)
         .eq("is_current", true);
       const peerMap = new Map(
-        (peerAssignments ?? []).map((a) => [a.document_id, a.assigned_department])
+        (peerAssignments ?? []).map((a) => [
+          a.document_id,
+          a.assigned_department,
+        ]),
       );
       setSentDocs(
         (sent ?? []).map((doc) => {
           const dept = peerMap.get(doc.id);
           return dept ? { ...doc, peer_assigned_dept: dept } : doc;
-        })
+        }),
       );
     } else {
       setSentDocs(sent ?? []);
@@ -538,7 +687,9 @@ export default function App() {
     // FAX宛先帳（contacts テーブルが未作成の環境は空配列で続行）
     const { data: ctcts } = await supabase
       .from("contacts")
-      .select("id, name, fax_number, department_name, is_active, replaced_by_hospital_id, notes")
+      .select(
+        "id, name, fax_number, department_name, is_active, replaced_by_hospital_id, notes",
+      )
       .eq("hospital_id", prof.hospital_id)
       .order("name", { ascending: true });
     setContacts(ctcts ?? []);
@@ -560,8 +711,12 @@ export default function App() {
   };
 
   const signInWithPassword = async () => {
-    if (!email || !password) return alert("メールアドレスとパスワードを入力してください");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!email || !password)
+      return alert("メールアドレスとパスワードを入力してください");
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     if (error) alert(error.message);
   };
 
@@ -599,7 +754,10 @@ export default function App() {
     const token = session?.access_token;
     // content_type と filename を POST body に含める（後方互換: body なし → PDF として扱われる）
     const body = file
-      ? JSON.stringify({ content_type: file.type || "application/pdf", filename: file.name || "" })
+      ? JSON.stringify({
+          content_type: file.type || "application/pdf",
+          filename: file.name || "",
+        })
       : undefined;
     const res = await fetch(`${API_BASE}/presign-upload`, {
       method: "POST",
@@ -630,15 +788,15 @@ export default function App() {
   const uploadAvatar = async (file) => {
     const userId = session?.user?.id;
     if (!userId) throw new Error("未ログイン");
-    const ext  = file.name.split(".").pop().toLowerCase() || "jpg";
+    const ext = file.name.split(".").pop().toLowerCase() || "jpg";
     const path = `${userId}/avatar.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("avatars")
       .upload(path, file, { upsert: true, contentType: file.type });
     if (upErr) throw upErr;
-    const { data: { publicUrl } } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(path);
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
     const { error: updateErr } = await supabase
       .from("profiles")
       .update({ avatar_url: publicUrl })
@@ -650,8 +808,14 @@ export default function App() {
   const getPresignedDownload = async (fileKey, mode = "inline") => {
     const token = session?.access_token;
     const url = `${API_BASE}/presign-download?key=${encodeURIComponent(fileKey)}&mode=${mode}`;
-    console.log("[presign-download] GET", url, token ? "JWT=ok" : "JWT=MISSING");
-    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    console.log(
+      "[presign-download] GET",
+      url,
+      token ? "JWT=ok" : "JWT=MISSING",
+    );
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) {
       const body = await res.text();
       console.error("[presign-download] error", res.status, body);
@@ -665,9 +829,14 @@ export default function App() {
     if (!file) return;
 
     // フロント側の早期バリデーション（最終判断はサーバー）
-    const mimeOk = Object.prototype.hasOwnProperty.call(ALLOWED_MIME_EXT, file.type);
+    const mimeOk = Object.prototype.hasOwnProperty.call(
+      ALLOWED_MIME_EXT,
+      file.type,
+    );
     if (!mimeOk) {
-      alert(`対応していないファイル形式です: ${file.type || "不明"}\n対応形式: PDF, PNG, JPEG, DOCX, XLSX, PPTX`);
+      alert(
+        `対応していないファイル形式です: ${file.type || "不明"}\n対応形式: PDF, PNG, JPEG, DOCX, XLSX, PPTX`,
+      );
       return;
     }
 
@@ -740,7 +909,8 @@ export default function App() {
   // ---- 「置く」ボタン: DocPort送信 or FAX送信に振り分け ----
   // structuredPayload: SendTab から渡される { structured_json, structured_version, ... } または null
   const finalizeDocument = async (structuredPayload = null) => {
-    const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
+    const isProcessing =
+      uploadStatus === "uploading" || uploadStatus === "ocr_running";
     if (sending || isProcessing) return;
 
     if (!myHospitalId) return alert("profileのhospital_idが取れてません");
@@ -749,7 +919,9 @@ export default function App() {
       return alert("自院宛は選べません");
 
     if (!pendingFileKey) {
-      return alert("アップロードに失敗しています。ファイルを選び直してください");
+      return alert(
+        "アップロードに失敗しています。ファイルを選び直してください",
+      );
     }
 
     // チェックOFF: 省略確認
@@ -765,7 +937,8 @@ export default function App() {
     try {
       // ---- FAX送信 ----
       if (recipient.type === "fax") {
-        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const token = (await supabase.auth.getSession()).data.session
+          ?.access_token;
         const res = await fetch(`${FAX_API_BASE}/send-fax`, {
           method: "POST",
           headers: {
@@ -773,10 +946,10 @@ export default function App() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
-            file_key:    pendingFileKey,
-            contact_id:  recipient.id,
-            fax_number:  recipient.faxNumber,
-            comment:     comment || null,
+            file_key: pendingFileKey,
+            contact_id: recipient.id,
+            fax_number: recipient.faxNumber,
+            comment: comment || null,
             original_filename: pdfFile?.name ?? null,
           }),
         });
@@ -819,11 +992,17 @@ export default function App() {
 
       let data;
       const { data: d1, error: e1 } = await supabase
-        .from("documents").insert(extInsert).select().single();
+        .from("documents")
+        .insert(extInsert)
+        .select()
+        .single();
       if (e1) {
         if (e1.code === "42703" || e1.message?.includes("column")) {
           const { data: d2, error: e2 } = await supabase
-            .from("documents").insert(baseInsert).select().single();
+            .from("documents")
+            .insert(baseInsert)
+            .select()
+            .single();
           if (e2) throw new Error(e2.message);
           data = d2;
         } else {
@@ -861,41 +1040,53 @@ export default function App() {
   // ---- 自院に置く（紙持ち込み取り込み）----
   // from_hospital_id = to_hospital_id = 自院、source = "manual_upload"
   const finalizeSelfDocument = async (structuredPayload = null, dept) => {
-    const isProcessing = uploadStatus === "uploading" || uploadStatus === "ocr_running";
+    const isProcessing =
+      uploadStatus === "uploading" || uploadStatus === "ocr_running";
     if (sending || isProcessing) return;
     if (!myHospitalId) return alert("profileのhospital_idが取れてません");
     if (!dept) return alert("部署を選んでください");
-    if (!pendingFileKey) return alert("アップロードに失敗しています。ファイルを選び直してください");
+    if (!pendingFileKey)
+      return alert(
+        "アップロードに失敗しています。ファイルを選び直してください",
+      );
 
     setSending(true);
     try {
       const extInsert = {
         from_hospital_id: myHospitalId,
-        to_hospital_id:   myHospitalId,
-        source:           "manual_upload",
-        status:           "UPLOADED",
-        expires_at:       new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-        file_key:         pendingFileKey,
+        to_hospital_id: myHospitalId,
+        source: "manual_upload",
+        status: "UPLOADED",
+        expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        file_key: pendingFileKey,
         original_filename: pdfFile?.name ?? null,
-        content_type:     pdfFile?.type ?? null,
-        file_ext:         pendingFileKey?.split(".").pop() ?? null,
+        content_type: pdfFile?.type ?? null,
+        file_ext: pendingFileKey?.split(".").pop() ?? null,
         ...(structuredPayload ?? {}),
       };
 
       let data;
       const { data: d1, error: e1 } = await supabase
-        .from("documents").insert(extInsert).select().single();
+        .from("documents")
+        .insert(extInsert)
+        .select()
+        .single();
       if (e1) {
         if (e1.code === "42703" || e1.message?.includes("column")) {
           const { data: d2, error: e2 } = await supabase
-            .from("documents").insert({
+            .from("documents")
+            .insert({
               from_hospital_id: myHospitalId,
-              to_hospital_id:   myHospitalId,
-              source:           "manual_upload",
-              status:           "UPLOADED",
-              expires_at:       new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-              file_key:         pendingFileKey,
-            }).select().single();
+              to_hospital_id: myHospitalId,
+              source: "manual_upload",
+              status: "UPLOADED",
+              expires_at: new Date(
+                Date.now() + 7 * 24 * 3600 * 1000,
+              ).toISOString(),
+              file_key: pendingFileKey,
+            })
+            .select()
+            .single();
           if (e2) throw new Error(e2.message);
           data = d2;
         } else {
@@ -913,7 +1104,8 @@ export default function App() {
       }
 
       // 部署アサイン（担当者なし = 未担当として Inbox に表示）
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const token = (await supabase.auth.getSession()).data.session
+        ?.access_token;
       const assignRes = await fetch(`${API_BASE}/documents/${data.id}/assign`, {
         method: "POST",
         headers: {
@@ -927,7 +1119,10 @@ export default function App() {
         }),
       });
       if (!assignRes.ok) {
-        console.warn("部署アサイン失敗（書類は保存済み）", await assignRes.text());
+        console.warn(
+          "部署アサイン失敗（書類は保存済み）",
+          await assignRes.text(),
+        );
       }
 
       setComment("");
@@ -959,7 +1154,9 @@ export default function App() {
     try {
       if (!doc?.file_key) return alert("file_keyが空です（旧データの可能性）");
       if (isLegacyKey(doc.file_key))
-        return alert(`旧データの可能性があるためブロックしました。\nfile_key: ${doc.file_key}`);
+        return alert(
+          `旧データの可能性があるためブロックしました。\nfile_key: ${doc.file_key}`,
+        );
       if (isExpired(doc.expires_at)) return alert("期限切れのため開けません");
       if (doc.status === "CANCELLED") return alert("取り消し済みです");
       if (doc.status === "ARCHIVED") return alert("アーカイブ済みです");
@@ -967,7 +1164,9 @@ export default function App() {
       // preview_file_key があればそちらを優先（変換済みPDF等）。なければ file_key。
       const previewKey = getPreviewKey(doc);
       const canPreview = isPreviewable(previewKey);
-      const extIsImage = ["png", "jpg", "jpeg", "webp"].includes(getExtFromKey(previewKey));
+      const extIsImage = ["png", "jpg", "jpeg", "webp"].includes(
+        getExtFromKey(previewKey),
+      );
 
       setPreviewDoc(doc);
       setPreviewable(canPreview);
@@ -983,7 +1182,10 @@ export default function App() {
 
       if (opts?.markDownloaded && session?.user?.id) {
         if (doc.status !== "DOWNLOADED") {
-          await supabase.from("documents").update({ status: "DOWNLOADED" }).eq("id", doc.id);
+          await supabase
+            .from("documents")
+            .update({ status: "DOWNLOADED" })
+            .eq("id", doc.id);
           await logEvent(doc.id, session.user.id, "DOWNLOAD");
           await loadAll();
         }
@@ -1004,11 +1206,16 @@ export default function App() {
     if (!myHospitalId) throw new Error("hospital_id が未設定です");
     const { data, error } = await supabase
       .from("departments")
-      .insert({ hospital_id: myHospitalId, name: trimmed, sort_order: departments.length, is_active: true })
+      .insert({
+        hospital_id: myHospitalId,
+        name: trimmed,
+        sort_order: departments.length,
+        is_active: true,
+      })
       .select("id, name, sort_order")
       .single();
     if (error) throw error;
-    setDepartments(prev => [...prev, data]);
+    setDepartments((prev) => [...prev, data]);
     return data;
   };
 
@@ -1016,7 +1223,12 @@ export default function App() {
   const fetchPreviewUrl = async (doc) => {
     if (!doc?.file_key) throw new Error("file_key not found");
     const previewKey = getPreviewKey(doc);
-    console.log("[fetchPreviewUrl] doc.id=", doc?.id, "previewKey=", previewKey);
+    console.log(
+      "[fetchPreviewUrl] doc.id=",
+      doc?.id,
+      "previewKey=",
+      previewKey,
+    );
     const { download_url } = await getPresignedDownload(previewKey, "inline");
     if (!download_url) throw new Error("download_url が取得できませんでした");
     return download_url;
@@ -1034,7 +1246,10 @@ export default function App() {
   const archiveDocument = async (doc) => {
     try {
       if (!doc?.id || doc.status === "ARCHIVED") return;
-      await supabase.from("documents").update({ status: "ARCHIVED" }).eq("id", doc.id);
+      await supabase
+        .from("documents")
+        .update({ status: "ARCHIVED" })
+        .eq("id", doc.id);
       await logEvent(doc.id, session.user.id, "ARCHIVE");
       await loadAll();
     } catch (e) {
@@ -1047,10 +1262,16 @@ export default function App() {
       if (!doc?.id) return;
       const expired = isExpired(doc.expires_at);
       const canCancel = doc.status === "UPLOADED" && !expired;
-      if (!canCancel) return alert("未読（UPLOADED）かつ期限内のみ取り消しできます");
-      const ok = confirm("この「置いた」共有を取り消しますか？（相手はDLできなくなります）");
+      if (!canCancel)
+        return alert("未読（UPLOADED）かつ期限内のみ取り消しできます");
+      const ok = confirm(
+        "この「置いた」共有を取り消しますか？（相手はDLできなくなります）",
+      );
       if (!ok) return;
-      await supabase.from("documents").update({ status: "CANCELLED" }).eq("id", doc.id);
+      await supabase
+        .from("documents")
+        .update({ status: "CANCELLED" })
+        .eq("id", doc.id);
       await logEvent(doc.id, session.user.id, "CANCEL");
       await loadAll();
     } catch (e) {
@@ -1060,20 +1281,28 @@ export default function App() {
 
   // ---- 港モデル: アサイン ----
   // toStatus: 省略で現状維持、"IN_PROGRESS" 推奨（部署BOXへ移動）
-  const assignDocument = async (docId, dept, ownerId, toStatus = "IN_PROGRESS") => {
+  const assignDocument = async (
+    docId,
+    dept,
+    ownerId,
+    toStatus = "IN_PROGRESS",
+  ) => {
     const token = session?.access_token;
-    const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/assign`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    const res = await fetch(
+      `${API_BASE}/documents/${encodeURIComponent(docId)}/assign`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          assigned_department: dept,
+          owner_user_id: ownerId,
+          to_status: toStatus,
+        }),
       },
-      body: JSON.stringify({
-        assigned_department: dept,
-        owner_user_id: ownerId,
-        to_status: toStatus,
-      }),
-    });
+    );
     if (!res.ok) throw new Error(await res.text());
     await loadAll();
     return res.json();
@@ -1088,21 +1317,50 @@ export default function App() {
         <div style={{ padding: 24 }}>
           <div style={{ maxWidth: 520, margin: "0 auto" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <img src={DocPortLogoIcon} alt="DocPort" style={{ width: 36, height: 36, opacity: 0.95 }} />
+              <img
+                src={DocPortLogoIcon}
+                alt="DocPort"
+                style={{ width: 36, height: 36, opacity: 0.95 }}
+              />
               <div>
-                <div style={{ fontWeight: 800, fontSize: 18, color: THEME.text }}>ログイン完了</div>
+                <div
+                  style={{ fontWeight: 800, fontSize: 18, color: THEME.text }}
+                >
+                  ログイン完了
+                </div>
                 <div style={{ fontSize: 12, opacity: 0.7, color: THEME.text }}>
                   このタブは閉じてOKです（元のDocPortタブへ戻ってください）
                 </div>
               </div>
             </div>
-            <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <PrimaryButton onClick={() => { setAuthReturn(false); window.history.replaceState({}, document.title, "/"); }}>
+            <div
+              style={{
+                marginTop: 18,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <PrimaryButton
+                onClick={() => {
+                  setAuthReturn(false);
+                  window.history.replaceState({}, document.title, "/");
+                }}
+              >
                 DocPortを開く
               </PrimaryButton>
-              <SecondaryButton onClick={() => window.close()}>このタブを閉じる</SecondaryButton>
+              <SecondaryButton onClick={() => window.close()}>
+                このタブを閉じる
+              </SecondaryButton>
             </div>
-            <p style={{ marginTop: 12, fontSize: 12, opacity: 0.6, color: THEME.text }}>
+            <p
+              style={{
+                marginTop: 12,
+                fontSize: 12,
+                opacity: 0.6,
+                color: THEME.text,
+              }}
+            >
               ※「閉じる」が効かない場合は、手動で閉じてください
             </p>
           </div>
@@ -1124,17 +1382,23 @@ export default function App() {
       transition: "all 160ms ease",
     });
     const loginInputStyle = {
-      width: "100%", boxSizing: "border-box",
-      height: 46, fontSize: 14,
+      width: "100%",
+      boxSizing: "border-box",
+      height: 46,
+      fontSize: 14,
       border: "1px solid #d1d5db",
       borderRadius: 10,
       outline: "none",
       transition: "border-color 160ms ease, box-shadow 160ms ease",
     };
     const loginBtnStyle = {
-      width: "100%", height: 46, fontSize: 15,
-      fontWeight: 700, cursor: "pointer",
-      borderRadius: 10, border: "none",
+      width: "100%",
+      height: 46,
+      fontSize: 15,
+      fontWeight: 700,
+      cursor: "pointer",
+      borderRadius: 10,
+      border: "none",
       background: "linear-gradient(135deg, #3b82f6, #2563eb)",
       color: "#fff",
       boxShadow: "0 4px 14px rgba(59,130,246,0.35)",
@@ -1143,60 +1407,80 @@ export default function App() {
     return (
       <Root>
         {/* ---- ログイン画面 ---- */}
-        <div style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "40px 16px",
-        }}>
-          <div style={{
-            width: "100%",
-            maxWidth: 420,
-            animation: "loginFadeUp 0.4s ease both",
-          }}>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px 16px",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              animation: "loginFadeUp 0.4s ease both",
+            }}
+          >
             {/* ロゴ + サブテキスト */}
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <img
-                src={DocPortLogoFull} alt="DocPort"
+                src={DocPortLogoFull}
+                alt="DocPort"
                 style={{
-                  width: "100%", maxWidth: 240, height: "auto",
-                  display: "block", margin: "0 auto 14px",
+                  width: "100%",
+                  maxWidth: 180,
+                  height: "auto",
+                  display: "block",
+                  margin: "0 auto 14px",
                   animation: "loginFadeIn 0.5s ease both",
                 }}
               />
-              <p style={{
-                margin: 0,
-                fontSize: 17,
-                fontWeight: 600,
-                color: "#334155",
-                letterSpacing: "0.04em",
-                lineHeight: 1.6,
-              }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 17,
+                  fontWeight: 600,
+                  color: "#334155",
+                  letterSpacing: "0.04em",
+                  lineHeight: 1.6,
+                }}
+              >
                 送らない共有。置くだけ連携。
               </p>
             </div>
 
             {/* カード */}
-            <div style={{
-              background: "#fff",
-              borderRadius: 16,
-              border: "1px solid #e5e7eb",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-              overflow: "hidden",
-            }}>
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 16,
+                border: "1px solid #e5e7eb",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+                overflow: "hidden",
+              }}
+            >
               {/* タブ */}
-              <div style={{
-                display: "flex",
-                gap: 4,
-                padding: "12px 12px 0",
-                background: "#f9fafb",
-                borderBottom: "1px solid #e5e7eb",
-              }}>
-                <button style={loginTabStyle(loginMode === "password")} onClick={() => setLoginMode("password")}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  padding: "12px 12px 0",
+                  background: "#f9fafb",
+                  borderBottom: "1px solid #e5e7eb",
+                }}
+              >
+                <button
+                  style={loginTabStyle(loginMode === "password")}
+                  onClick={() => setLoginMode("password")}
+                >
                   パスワードログイン
                 </button>
-                <button style={loginTabStyle(loginMode === "magic")} onClick={() => setLoginMode("magic")}>
+                <button
+                  style={loginTabStyle(loginMode === "magic")}
+                  onClick={() => setLoginMode("magic")}
+                >
                   マジックリンク
                 </button>
               </div>
@@ -1204,14 +1488,16 @@ export default function App() {
               {/* フォーム */}
               <div style={{ padding: "28px 24px 24px" }}>
                 <TextInput
-                  value={email} onChange={(e) => setEmail(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="メールアドレス"
                   style={{ ...loginInputStyle, marginBottom: 12 }}
-                  onFocus={e => {
+                  onFocus={(e) => {
                     e.target.style.borderColor = "#3b82f6";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+                    e.target.style.boxShadow =
+                      "0 0 0 3px rgba(59,130,246,0.15)";
                   }}
-                  onBlur={e => {
+                  onBlur={(e) => {
                     e.target.style.borderColor = "#d1d5db";
                     e.target.style.boxShadow = "none";
                   }}
@@ -1221,15 +1507,19 @@ export default function App() {
                   <>
                     <TextInput
                       type="password"
-                      value={password} onChange={(e) => setPassword(e.target.value)}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="パスワード"
                       style={{ ...loginInputStyle, marginBottom: 20 }}
-                      onKeyDown={(e) => e.key === "Enter" && signInWithPassword()}
-                      onFocus={e => {
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && signInWithPassword()
+                      }
+                      onFocus={(e) => {
                         e.target.style.borderColor = "#3b82f6";
-                        e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+                        e.target.style.boxShadow =
+                          "0 0 0 3px rgba(59,130,246,0.15)";
                       }}
-                      onBlur={e => {
+                      onBlur={(e) => {
                         e.target.style.borderColor = "#d1d5db";
                         e.target.style.boxShadow = "none";
                       }}
@@ -1237,13 +1527,15 @@ export default function App() {
                     <button
                       onClick={signInWithPassword}
                       style={loginBtnStyle}
-                      onMouseEnter={e => {
+                      onMouseEnter={(e) => {
                         e.currentTarget.style.transform = "translateY(-1px)";
-                        e.currentTarget.style.boxShadow = "0 6px 18px rgba(59,130,246,0.42)";
+                        e.currentTarget.style.boxShadow =
+                          "0 6px 18px rgba(59,130,246,0.42)";
                       }}
-                      onMouseLeave={e => {
+                      onMouseLeave={(e) => {
                         e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "0 4px 14px rgba(59,130,246,0.35)";
+                        e.currentTarget.style.boxShadow =
+                          "0 4px 14px rgba(59,130,246,0.35)";
                       }}
                     >
                       ログイン
@@ -1254,18 +1546,27 @@ export default function App() {
                     <button
                       onClick={sendMagicLink}
                       style={{ ...loginBtnStyle, marginBottom: 12 }}
-                      onMouseEnter={e => {
+                      onMouseEnter={(e) => {
                         e.currentTarget.style.transform = "translateY(-1px)";
-                        e.currentTarget.style.boxShadow = "0 6px 18px rgba(59,130,246,0.42)";
+                        e.currentTarget.style.boxShadow =
+                          "0 6px 18px rgba(59,130,246,0.42)";
                       }}
-                      onMouseLeave={e => {
+                      onMouseLeave={(e) => {
                         e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "0 4px 14px rgba(59,130,246,0.35)";
+                        e.currentTarget.style.boxShadow =
+                          "0 4px 14px rgba(59,130,246,0.35)";
                       }}
                     >
                       マジックリンクを送る
                     </button>
-                    <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", textAlign: "center" }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 12,
+                        color: "#9ca3af",
+                        textAlign: "center",
+                      }}
+                    >
                       ※ メールのリンクを開くとログインできます
                     </p>
                   </>
@@ -1274,38 +1575,74 @@ export default function App() {
             </div>
 
             {/* 波装飾 */}
-            <div style={{ marginTop: 16, opacity: 0.28, pointerEvents: "none", userSelect: "none", overflow: "hidden" }}>
-              <svg viewBox="0 0 420 52" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", display: "block" }}>
+            <div
+              style={{
+                marginTop: 16,
+                opacity: 0.28,
+                pointerEvents: "none",
+                userSelect: "none",
+                overflow: "hidden",
+              }}
+            >
+              <svg
+                viewBox="0 0 420 52"
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ width: "100%", display: "block" }}
+              >
                 <defs>
-                  <linearGradient id="waveGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#3b82f6"/>
-                    <stop offset="100%" stopColor="#60a5fa"/>
+                  <linearGradient
+                    id="waveGrad1"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
+                    <stop offset="0%" stopColor="#3b82f6" />
+                    <stop offset="100%" stopColor="#60a5fa" />
                   </linearGradient>
-                  <linearGradient id="waveGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#60a5fa"/>
-                    <stop offset="100%" stopColor="#93c5fd"/>
+                  <linearGradient
+                    id="waveGrad2"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
+                    <stop offset="0%" stopColor="#60a5fa" />
+                    <stop offset="100%" stopColor="#93c5fd" />
                   </linearGradient>
-                  <linearGradient id="waveGrad3" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#93c5fd"/>
-                    <stop offset="100%" stopColor="#bfdbfe"/>
+                  <linearGradient
+                    id="waveGrad3"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
+                    <stop offset="0%" stopColor="#93c5fd" />
+                    <stop offset="100%" stopColor="#bfdbfe" />
                   </linearGradient>
                 </defs>
                 {/* 波1：最前面・濃いめ */}
                 <path
                   d="M0,18 C70,2 140,38 210,18 C280,2 350,38 420,18"
-                  stroke="url(#waveGrad1)" strokeWidth="1.8" fill="none"
+                  stroke="url(#waveGrad1)"
+                  strokeWidth="1.8"
+                  fill="none"
                   style={{ animation: "waveFlow 6s ease-in-out infinite" }}
                 />
                 {/* 波2：中間 */}
                 <path
                   d="M0,28 C70,10 140,46 210,28 C280,10 350,46 420,28"
-                  stroke="url(#waveGrad2)" strokeWidth="1.3" fill="none"
+                  stroke="url(#waveGrad2)"
+                  strokeWidth="1.3"
+                  fill="none"
                   style={{ animation: "waveFlow 8s ease-in-out infinite" }}
                 />
                 {/* 波3：最後面・薄め */}
                 <path
                   d="M0,38 C70,20 140,52 210,38 C280,20 350,52 420,38"
-                  stroke="url(#waveGrad3)" strokeWidth="1" fill="none"
+                  stroke="url(#waveGrad3)"
+                  strokeWidth="1"
+                  fill="none"
                   style={{ animation: "waveFlow 10s ease-in-out infinite" }}
                 />
               </svg>
@@ -1424,17 +1761,30 @@ export default function App() {
           />
         )}
         <PreviewModal
-          isOpen={!!previewDoc} onClose={closePreview}
-          title={previewDoc ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}` : ""}
-          metaLeft={previewDoc ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}` : ""}
-          url={previewUrl} loading={previewLoading} error={previewError}
-          previewable={previewable} isImage={previewIsImage}
+          isOpen={!!previewDoc}
+          onClose={closePreview}
+          title={
+            previewDoc
+              ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}`
+              : ""
+          }
+          metaLeft={
+            previewDoc
+              ? `${fmt(previewDoc.created_at)}${previewDoc.expires_at ? ` / 期限: ${fmt(previewDoc.expires_at)}` : ""}`
+              : ""
+          }
+          url={previewUrl}
+          loading={previewLoading}
+          error={previewError}
+          previewable={previewable}
+          isImage={previewIsImage}
         />
       </Root>
     );
   }
 
-  const isInboxPreviewing = !!previewDoc && previewDoc.to_hospital_id === myHospitalId;
+  const isInboxPreviewing =
+    !!previewDoc && previewDoc.to_hospital_id === myHospitalId;
   const previewTitle = previewDoc
     ? isInboxPreviewing
       ? `受け取る / ${nameOf(previewDoc.from_hospital_id)}`
@@ -1447,29 +1797,52 @@ export default function App() {
   return (
     <Root>
       {/* Top bar */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 5,
-        background: THEME.topbar, backdropFilter: "blur(10px)",
-        borderBottom: `1px solid ${THEME.border}`,
-      }}>
-        <div style={{
-          maxWidth: 1100, margin: "0 auto",
-          padding: isMobile ? "10px 12px" : "12px 16px",
-          display: "flex", justifyContent: "space-between",
-          alignItems: isMobile ? "flex-start" : "center",
-          gap: 12, flexWrap: "wrap",
-        }}>
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 5,
+          background: THEME.topbar,
+          backdropFilter: "blur(10px)",
+          borderBottom: `1px solid ${THEME.border}`,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            padding: isMobile ? "10px 12px" : "12px 16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: isMobile ? "flex-start" : "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <img
-              src={DocPortLogoIcon} alt="DocPort"
-              style={{ width: logoTopbarSize, height: logoTopbarSize, opacity: 0.92, flexShrink: 0 }}
+              src={DocPortLogoIcon}
+              alt="DocPort"
+              style={{
+                width: logoTopbarSize,
+                height: logoTopbarSize,
+                opacity: 0.92,
+                flexShrink: 0,
+              }}
             />
             <div>
               {/* <div style={{ fontSize: 22, fontWeight: 800, color: THEME.text }}>DocPort</div> */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 8,
-                fontSize: 12, opacity: 0.7, color: THEME.text, flexWrap: "wrap",
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  opacity: 0.7,
+                  color: THEME.text,
+                  flexWrap: "wrap",
+                }}
+              >
                 <span>
                   {myHospitalName
                     ? `所属：${myHospitalName}${unreadCount ? ` / 未読: ${unreadCount}` : ""}`
@@ -1477,49 +1850,93 @@ export default function App() {
                 </span>
                 {myHospitalId && (
                   <img
-                    src={iconOf(myHospitalId)} alt="hospital icon"
+                    src={iconOf(myHospitalId)}
+                    alt="hospital icon"
                     style={{
-                      width: hospitalIconTopbarSize, height: hospitalIconTopbarSize,
-                      borderRadius: 8, objectFit: "cover",
-                      border: `1px solid ${THEME.border}`, opacity: 0.95,
+                      width: hospitalIconTopbarSize,
+                      height: hospitalIconTopbarSize,
+                      borderRadius: 8,
+                      objectFit: "cover",
+                      border: `1px solid ${THEME.border}`,
+                      opacity: 0.95,
                     }}
                   />
                 )}
               </div>
             </div>
           </div>
-          <div style={{
-            display: "flex", gap: 10, alignItems: "center",
-            flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end",
-          }}>
-            <SecondaryButton onClick={logout} style={{ minWidth: 120 }}>ログアウト</SecondaryButton>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: isMobile ? "flex-start" : "flex-end",
+            }}
+          >
+            <SecondaryButton onClick={logout} style={{ minWidth: 120 }}>
+              ログアウト
+            </SecondaryButton>
           </div>
         </div>
       </div>
 
       {/* Shell */}
-      <div style={{
-        maxWidth: 1100, margin: "0 auto",
-        padding: isMobile ? 12 : 16,
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : isNarrow ? "220px 1fr" : "240px 1fr",
-        gap: 14,
-      }}>
+      <div
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: isMobile ? 12 : 16,
+          display: "grid",
+          gridTemplateColumns: isMobile
+            ? "1fr"
+            : isNarrow
+              ? "220px 1fr"
+              : "240px 1fr",
+          gap: 14,
+        }}
+      >
         {/* Sidebar */}
         <div>
           <Card>
-            <div style={{ fontSize: 13, opacity: 0.7, fontWeight: 800 }}>メニュー</div>
-            <div style={{
-              display: "grid", gap: 10, marginTop: 12,
-              gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "1fr",
-            }}>
-              <SidebarButton active={tab === "send"} onClick={() => setTab("send")}>置く</SidebarButton>
+            <div style={{ fontSize: 13, opacity: 0.7, fontWeight: 800 }}>
+              メニュー
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                marginTop: 12,
+                gridTemplateColumns: isMobile
+                  ? "repeat(3, minmax(0, 1fr))"
+                  : "1fr",
+              }}
+            >
               <SidebarButton
-                active={tab === "inbox"} onClick={() => setTab("inbox")}
+                active={tab === "send"}
+                onClick={() => setTab("send")}
+              >
+                置く
+              </SidebarButton>
+              <SidebarButton
+                active={tab === "inbox"}
+                onClick={() => setTab("inbox")}
                 badge={unreadCount ? `未読 ${unreadCount}` : null}
-              >受け取る</SidebarButton>
-              <SidebarButton active={tab === "sent"} onClick={() => setTab("sent")}>記録</SidebarButton>
-              <SidebarButton active={tab === "fax_inbound"} onClick={() => setTab("fax_inbound")}>FAX受信</SidebarButton>
+              >
+                受け取る
+              </SidebarButton>
+              <SidebarButton
+                active={tab === "sent"}
+                onClick={() => setTab("sent")}
+              >
+                記録
+              </SidebarButton>
+              <SidebarButton
+                active={tab === "fax_inbound"}
+                onClick={() => setTab("fax_inbound")}
+              >
+                FAX受信
+              </SidebarButton>
             </div>
           </Card>
         </div>
@@ -1528,18 +1945,21 @@ export default function App() {
         <div>
           {/* tab === "send" / "sent" は SendScreen で early return 済みのためここには到達しない */}
           {/* tab === "inbox" は ReceiveScreen で early return 済みのためここには到達しない */}
-          {tab === "fax_inbound" && (
-            <FaxInboundList session={session} />
-          )}
+          {tab === "fax_inbound" && <FaxInboundList session={session} />}
         </div>
       </div>
 
       {/* Preview Modal */}
       <PreviewModal
-        isOpen={!!previewDoc} onClose={closePreview}
-        title={previewTitle} metaLeft={previewMetaLeft}
-        url={previewUrl} loading={previewLoading} error={previewError}
-        previewable={previewable} isImage={previewIsImage}
+        isOpen={!!previewDoc}
+        onClose={closePreview}
+        title={previewTitle}
+        metaLeft={previewMetaLeft}
+        url={previewUrl}
+        loading={previewLoading}
+        error={previewError}
+        previewable={previewable}
+        isImage={previewIsImage}
       />
     </Root>
   );
