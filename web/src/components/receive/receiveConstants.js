@@ -18,17 +18,16 @@ export const DP = {
   textSub:     "rgba(15, 23, 42, 0.55)",
   white:       "#FFFFFF",
 
-  // ---- クロム（サイドバー / トップバー）専用ライトブルー ----
-  // ログイン画面・ロゴと同じ水色帯。曇った業務系を避け、医療SaaS感へ。
-  // 配色思想（"ふわっとしたUIだが操作感は消えない"）:
-  //   - base はチェックON のような柔らかい淡水色で UI を主張させない
-  //   - hover は base より一段沈ませて「触れている」感を出す
-  //   - active は base から大きく沈み込み、選択中タブの存在感を確保
-  // 注意: base #7FB2E8 上の白文字は AA Large(3:1) を下回るため、
-  //       読みづらさが出る場合はラベル文字をネイビーに切り替える前提。
-  navBg:       "#7FB2E8",                   // 基本背景（旧 #6F98C9）柔らかい淡水色
-  navBgHover:  "#6FA2DC",                   // hover: base と active の中間（旧 #84ACD9）
-  navBgActive: "#5E88BD",                   // active: 据え置き（前バージョンと同じ深さ）
+  // ---- クロム（サイドバー / トップバー）専用ブルー ----
+  // 添付参考色準拠: ペリウィンクル寄りのソフトブルー（Apple/Linear 系の透明感ある青）
+  // 配色思想:
+  //   - base は彩度を抑えた医療SaaS的なソフトブルー — 主張しないが存在感は確保
+  //   - hover: base より明るく "lift up"（触れた時の反応）
+  //   - active: base より深く "press down"（選択中の沈み込み）
+  //   - symmetric な lift/press モデルで操作感を一貫させる
+  navBg:       "#6F8FDC",                   // 基本背景（旧 #7FB2E8）参考色準拠
+  navBgHover:  "#84A1E3",                   // hover: 約 +8% lighter
+  navBgActive: "#5C7BC8",                   // active: 約 -8% deeper（旧 #5E88BD 相当）
 
   // ---- ミントアクセント ----
   // 使用箇所: active / selected / focus ring / unread badge / success / progress / notification
