@@ -90,14 +90,16 @@ button {
 /* ===================================================
    暗い背景用インプット（サイドバー連携トップバー）
    placeholder / focus スタイルのみ。ロジック影響なし。
+   配色統一: 背景が濃ネイビー→ブルーグレー(#5E6F96)へ変わったため、
+   placeholder と focus の不透明度を一段上げて視認性を確保。
    =================================================== */
 .dp-input-dark::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.55);
 }
 .dp-input-dark:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.22) !important;
 }
 
 /* ===================================================

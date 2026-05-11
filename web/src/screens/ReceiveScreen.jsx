@@ -4,6 +4,10 @@
 // - モバイル（<640px）: GlobalSidebar → BottomNav、レーンフィルタ横スクロールタブ、カード一覧↔詳細をトグル
 // - タブレット（<1024px）: GlobalSidebar + カード一覧 + 詳細（BusinessLanePanel非表示）
 // - PC: 従来の4カラム構成（GlobalSidebar + BusinessLane + CardList + DetailPane）
+//
+// 変更点 (配色統一):
+// - トップバー背景を DP.navy(濃ネイビー) → DP.navBg(柔らかいブルーグレー)
+// - 検索ボックスの背景・枠・placeholder を新背景に合わせて視認性アップ
 
 import { useState, useMemo, useCallback } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -201,7 +205,7 @@ export default function ReceiveScreen({
         boxSizing: "border-box",
       }}>
         {/* トップバー + フローライン */}
-        <div style={{ flexShrink: 0, background: DP.navy, display: "flex", flexDirection: "column" }}>
+        <div style={{ flexShrink: 0, background: DP.navBg, display: "flex", flexDirection: "column" }}>
           <div style={{
             height: 48,
             display: "flex",
@@ -232,7 +236,7 @@ export default function ReceiveScreen({
               <>
                 {/* 受信ラベル */}
                 <span style={{
-                  color: "rgba(255,255,255,0.90)",
+                  color: "rgba(255,255,255,0.95)",
                   fontSize: 15,
                   fontWeight: 800,
                   letterSpacing: 0.3,
@@ -241,15 +245,16 @@ export default function ReceiveScreen({
                 }}>
                   新着
                 </span>
-                {/* 検索ボックス（スマホでもトップバー内に表示） */}
+                {/* 検索ボックス（スマホでもトップバー内に表示）
+                    背景が明るくなったため bg / border を一段濃く、placeholder は dp-input-dark で 0.55 に */}
                 <div style={{ flex: 1, position: "relative" }}>
-                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
                   <input
                     value={q}
                     onChange={e => setQ(e.target.value)}
                     placeholder="病院名・書類名で検索"
                     className="dp-input-dark"
-                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
                   />
                 </div>
               </>
@@ -264,7 +269,7 @@ export default function ReceiveScreen({
                   width: 36, height: 36,
                   border: "none",
                   borderRadius: 8,
-                  background: "rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.14)",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -333,19 +338,19 @@ export default function ReceiveScreen({
           {/* トップバー */}
           <div style={{
             height: 48, flexShrink: 0,
-            background: DP.navy,
+            background: DP.navBg,
             display: "flex", alignItems: "center",
             padding: "0 16px", gap: 12,
           }}>
-            <span style={{ color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+            <span style={{ color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="病院名・書類名で検索"
                 className="dp-input-dark"
-                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
               />
             </div>
           </div>
@@ -384,19 +389,19 @@ export default function ReceiveScreen({
         {/* トップバー: サイドバーと同色で "L字" のブランドフレームを形成 */}
         <div style={{
           height: 48, flexShrink: 0,
-          background: DP.navy,
+          background: DP.navBg,
           display: "flex", alignItems: "center",
           padding: "0 16px", gap: 12,
         }}>
-          <span style={{ color: "rgba(255,255,255,0.90)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+          <span style={{ color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="病院名・書類名で検索"
               className="dp-input-dark"
-              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
             />
           </div>
         </div>

@@ -1,7 +1,12 @@
 // GlobalSidebar.jsx
 // アプリ全体のナビゲーション（64px 固定幅）
 // 項目: ホーム(ロゴ) / 受信 / 送信 / 下書き / 設定
-// 変更点: BottomNav をnamed exportとして追加（モバイル時に使用）
+//
+// 変更点 (配色統一):
+// - 背景を濃ネイビー(DP.navy=#1F3A6D)から柔らかいブルーグレー(DP.navBg=#5E6F96)へ
+// - NavIcon の active/hover を DP.navBgActive / DP.navBgHover に変更
+// - BottomNav も同色系へ統一
+// 既存の named export / props インタフェースは変更なし。
 
 import { useRef, useState } from "react";
 import ReceiveIcon  from "../../assets/logo/receive_box.svg";
@@ -97,16 +102,26 @@ function AvatarButton({ avatarUrl, onAvatarUpload }) {
 }
 
 function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = false }) {
+  const [hovered, setHovered] = useState(false);
+  // active: DP.navBgActive（基本色より暗い=押し込まれた選択状態）
+  // hover : DP.navBgHover  （基本色より明るい=浮き上がり）
+  const bg = active
+    ? DP.navBgActive
+    : hovered && !disabled
+      ? DP.navBgHover
+      : "transparent";
   return (
     <button
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={label}
       style={{
         width: 44,
         height: 44,
         borderRadius: 12,
         border: "none",
-        background: active ? "rgba(255,255,255,0.22)" : "transparent",
+        background: bg,
         cursor: disabled ? "default" : "pointer",
         display: "flex",
         alignItems: "center",
@@ -116,7 +131,7 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
         opacity: disabled ? 0.30 : 1,
         transition: "background 140ms ease",
         WebkitTapHighlightColor: "transparent",
-        boxShadow: active ? "inset 0 0 0 1px rgba(255,255,255,0.18)" : "none",
+        boxShadow: active ? "inset 0 0 0 1px rgba(255,255,255,0.20)" : "none",
       }}
     >
       {iconSrc
@@ -180,7 +195,7 @@ export function BottomNav({
     <div style={{
       position: "fixed",
       bottom: 0, left: 0, right: 0,
-      background: DP.navy,
+      background: DP.navBg,
       borderTop: "1px solid rgba(255,255,255,0.08)",
       zIndex: 200,
       display: "flex",
@@ -195,7 +210,7 @@ export function BottomNav({
             onClick={() => onTabChange(item.key)}
             style={{
               ...btnBase,
-              background: active ? "rgba(255,255,255,0.14)" : "transparent",
+              background: active ? DP.navBgActive : "transparent",
               borderTop: active ? "2px solid rgba(74,144,226,0.85)" : "2px solid transparent",
             }}
           >
@@ -259,7 +274,7 @@ export default function GlobalSidebar({
     <div style={{
       width: 64,
       flexShrink: 0,
-      background: DP.navy,
+      background: DP.navBg,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",

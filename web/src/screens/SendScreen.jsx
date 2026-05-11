@@ -10,6 +10,10 @@
 // 変更点（レスポンシブ対応）:
 // - モバイル時は GlobalSidebar の代わりに BottomNav を使用
 // - isMobile prop がない場合は useMediaQuery で自己判定
+//
+// 変更点 (配色統一):
+// - トップバー背景を DP.navy → DP.navBg（柔らかいブルーグレー）
+// - 検索ボックスの bg / border / placeholder を新背景に合わせて調整
 
 import { useState } from "react";
 import GlobalSidebar, { BottomNav } from "../components/receive/GlobalSidebar";
@@ -99,12 +103,12 @@ export default function SendScreen({
         overflow: "hidden",
         minWidth: 0,
       }}>
-        {/* ---- トップバー（DP.navy / 高さ48px固定）
+        {/* ---- トップバー（DP.navBg / 高さ48px固定）
               サイドバーと同色でL字のブランドフレームを形成 ---- */}
         <div style={{
           height: 48,
           flexShrink: 0,
-          background: DP.navy,
+          background: DP.navBg,
           display: "flex",
           alignItems: "center",
           padding: "0 20px",
@@ -113,7 +117,7 @@ export default function SendScreen({
           <span style={{
             fontSize: 15,
             fontWeight: 800,
-            color: "rgba(255,255,255,0.90)",
+            color: "rgba(255,255,255,0.95)",
             letterSpacing: 0.3,
             flexShrink: 0,
             userSelect: "none",
@@ -124,13 +128,13 @@ export default function SendScreen({
           {/* 検索: 置いた書類タブ時にPC・タブレット・スマホすべてで表示 */}
           {isSent ? (
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.35)", pointerEvents: "none" }}>🔍</span>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="病院名・書類名で検索"
                 className="dp-input-dark"
-                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.90)", fontSize: 12, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
               />
             </div>
           ) : (
@@ -144,9 +148,9 @@ export default function SendScreen({
               title="ログアウト"
               style={{
                 width: 34, height: 34,
-                border: "1px solid rgba(255,255,255,0.15)",
+                border: "1px solid rgba(255,255,255,0.22)",
                 borderRadius: 8,
-                background: "rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.14)",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -167,7 +171,7 @@ export default function SendScreen({
         <div className="dp-flow-line" />
 
         {/* ---- タブ領域（トップバーと明確に分離した別レイヤー）
-              background: DP.surface でトップバーのDP.navyと視覚的に分離 ---- */}
+              background: DP.surface でトップバーのDP.navBgと視覚的に分離 ---- */}
         <div style={{
           background: DP.surface,
           borderBottom: `1px solid ${DP.border}`,
