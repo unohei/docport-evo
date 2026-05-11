@@ -20,9 +20,12 @@ export const DP = {
 
   // ---- クロム（サイドバー / トップバー）専用ライトブルー ----
   // ログイン画面・ロゴと同じ水色帯。曇った業務系を避け、医療SaaS感へ。
-  navBg:       "#7EA9D6",                   // 基本背景（サイドバー / トップバー）
-  navBgHover:  "#91B8E1",                   // ナビ項目 hover
-  navBgActive: "#6B97C5",                   // ナビ項目 active（選択中タブ）
+  // 微調整: 白背景に対してクロムが負けて見える問題を解消するため、
+  //         base を約10% 締めた #6F98C9 へ。骨格・レイヤー感・操作感を回復。
+  //         色相は維持しているのでミントアクセント / ロゴとの整合性は保たれる。
+  navBg:       "#6F98C9",                   // 基本背景（旧 #7EA9D6）
+  navBgHover:  "#84ACD9",                   // ナビ項目 hover（旧 #91B8E1）
+  navBgActive: "#5E88BD",                   // ナビ項目 active（旧 #6B97C5）
 
   // ---- ミントアクセント ----
   // 使用箇所: active / selected / focus ring / unread badge / success / progress / notification
