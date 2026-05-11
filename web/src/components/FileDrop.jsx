@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useId } from "react";
 import { THEME, Card } from "./ui/primitives";
+import DocPortLogoIcon from "../assets/logo/docport_logo_icon_only.svg";
 
 // 許可 MIME の簡易ラベル（エラー文言用）
 const MIME_LABEL = {
@@ -224,115 +225,29 @@ export default function FileDrop({
             }}
           />
 
-          {/* 差し込み口 */}
+          {/* ====== 中央ブランドマーク（DocPort ロゴ） ======
+              旧スケルトン（差し込み口 + 3枚紙重ね）を撤去し、DocPort 港ロゴへ統一。
+              dragOver 時に opacity を引き上げ "受け入れ準備" を表現。 */}
           <div
             aria-hidden="true"
             style={{
               position: "absolute",
-              top: 18,
+              top: 28,
               left: "50%",
               transform: "translateX(-50%)",
-              width: 172,
-              height: 12,
-              borderRadius: 999,
-              background: "rgba(15,23,42,0.12)",
-              boxShadow: "inset 0 3px 7px rgba(15,23,42,0.22)",
-            }}
-          />
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              top: 20,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 166,
-              height: 7,
-              borderRadius: 999,
-              background: tone.slot,
-              boxShadow: dragOver
-                ? "0 0 0 4px rgba(14,165,233,0.10), 0 12px 18px rgba(14,165,233,0.18)"
-                : "0 12px 18px rgba(2,132,199,0.10)",
-              transition: "box-shadow 180ms ease, background 180ms ease",
-            }}
-          />
-
-          {/* 中に刺さってる紙（箱っぽさの決定打） */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              top: 34,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 280,
-              height: 120,
               pointerEvents: "none",
-              opacity: disabled ? 0.4 : 0.9,
+              opacity: disabled ? 0.22 : dragOver ? 0.85 : 0.55,
+              transition: "opacity 180ms ease",
             }}
           >
-            {/* 3枚くらい重ねる */}
-            {[
-              { y: 18, s: 0.92, o: 0.45 },
-              { y: 10, s: 0.96, o: 0.65 },
-              { y: 0, s: 1.0, o: 0.9 },
-            ].map((p, idx) => (
-              <div
-                key={idx}
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: p.y,
-                  transform: `translateX(-50%) scale(${p.s})`,
-                  width: 230,
-                  height: 86,
-                  borderRadius: 14,
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.70))",
-                  border: "1px solid rgba(15,23,42,0.10)",
-                  boxShadow: "0 10px 16px rgba(15,23,42,0.08)",
-                  opacity: p.o,
-                }}
-              >
-                {/* 紙の上の薄い線（文字っぽさ） */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 16,
-                    left: 18,
-                    right: 18,
-                    height: 6,
-                    borderRadius: 6,
-                    background: "rgba(15,23,42,0.10)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 30,
-                    left: 18,
-                    right: 60,
-                    height: 6,
-                    borderRadius: 6,
-                    background: "rgba(15,23,42,0.08)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 44,
-                    left: 18,
-                    right: 90,
-                    height: 6,
-                    borderRadius: 6,
-                    background: "rgba(15,23,42,0.07)",
-                  }}
-                />
-              </div>
-            ))}
+            <img
+              src={DocPortLogoIcon}
+              alt=""
+              style={{ width: 110, height: 118, display: "block" }}
+            />
           </div>
 
-          {/* 手前のフチ（トレイ前面） */}
+          {/* 手前のフチ（トレイ前面）— サブトルな白フェードのみ残置 */}
           <div
             aria-hidden="true"
             style={{
@@ -347,22 +262,6 @@ export default function FileDrop({
               boxShadow:
                 "0 -10px 18px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.85)",
               opacity: 1,
-              pointerEvents: "none",
-            }}
-          />
-          {/* 手前フチの影（“箱の奥行き”） */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              left: 34,
-              right: 34,
-              bottom: 44,
-              height: 16,
-              borderRadius: 999,
-              background: "rgba(15,23,42,0.08)",
-              filter: "blur(0.2px)",
-              opacity: 0.85,
               pointerEvents: "none",
             }}
           />
