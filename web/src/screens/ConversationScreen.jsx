@@ -4,9 +4,10 @@
 // 変更点 (v3):
 // - departments / addDepartment を ConversationListPanel に渡す（部署タブ用）
 //
-// 変更点 (配色統一):
-// - トップバー背景を DP.navy → DP.navBg（柔らかいブルーグレー）
-// - 検索ボックスの bg / border / placeholder を新背景に合わせて調整
+// 変更点 (医療SaaS配色):
+// - トップバー背景を水色 DP.navBg(#7EA9D6) へ
+// - 検索ボックスは白ピル + ダーク文字 + ミント focus リング
+// - ラベル「新着」と「← 一覧に戻る」を完全白で前面化
 
 import { useState, useMemo, useCallback } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -115,7 +116,7 @@ export default function ConversationScreen({
               <button
                 onClick={() => setSelectedGroup(null)}
                 style={{
-                  color: "rgba(255,255,255,0.95)", background: "none", border: "none",
+                  color: "#FFFFFF", background: "none", border: "none",
                   cursor: "pointer", fontSize: 14, fontWeight: 700,
                   padding: "4px 0", display: "flex", alignItems: "center", gap: 6, flex: 1,
                 }}
@@ -125,19 +126,19 @@ export default function ConversationScreen({
             ) : (
               <>
                 <span style={{
-                  color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800,
+                  color: "#FFFFFF", fontSize: 15, fontWeight: 800,
                   letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
                 }}>
                   新着
                 </span>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
                   <input
                     value={q}
                     onChange={e => setQ(e.target.value)}
                     placeholder={groupingMode === GROUPING_MODES.PATIENT ? "患者名で検索" : "病院名で検索"}
                     className="dp-input-dark"
-                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
                   />
                 </div>
               </>
@@ -145,9 +146,9 @@ export default function ConversationScreen({
             {onLogout && (
               <button
                 onClick={onLogout} title="ログアウト"
-                style={{ width: 36, height: 36, border: "none", borderRadius: 8, background: "rgba(255,255,255,0.14)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, WebkitTapHighlightColor: "transparent" }}
+                style={{ width: 36, height: 36, border: "1px solid rgba(255,255,255,0.45)", borderRadius: 8, background: "rgba(255,255,255,0.20)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, WebkitTapHighlightColor: "transparent" }}
               >
-                <img src={LogoutIcon} alt="ログアウト" style={{ width: 20, height: 20, filter: "brightness(0) invert(1)", opacity: 0.75 }} />
+                <img src={LogoutIcon} alt="ログアウト" style={{ width: 20, height: 20, filter: "brightness(0) invert(1)", opacity: 0.9 }} />
               </button>
             )}
           </div>
@@ -185,19 +186,19 @@ export default function ConversationScreen({
           display: "flex", alignItems: "center", padding: "0 16px", gap: 12,
         }}>
           <span style={{
-            color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800,
+            color: "#FFFFFF", fontSize: 15, fontWeight: 800,
             letterSpacing: 0.3, flexShrink: 0, userSelect: "none",
           }}>
             新着
           </span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder={groupingMode === GROUPING_MODES.PATIENT ? "患者名・書類名で検索" : "病院名・書類名で検索"}
               className="dp-input-dark"
-              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
             />
           </div>
         </div>

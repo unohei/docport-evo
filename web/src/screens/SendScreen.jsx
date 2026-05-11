@@ -11,9 +11,10 @@
 // - モバイル時は GlobalSidebar の代わりに BottomNav を使用
 // - isMobile prop がない場合は useMediaQuery で自己判定
 //
-// 変更点 (配色統一):
-// - トップバー背景を DP.navy → DP.navBg（柔らかいブルーグレー）
-// - 検索ボックスの bg / border / placeholder を新背景に合わせて調整
+// 変更点 (医療SaaS配色):
+// - トップバー背景を水色 DP.navBg(#7EA9D6) へ
+// - 検索ボックスは白ピル + ダーク文字 + ミント focus リング
+// - タブ「置く / 置いた書類」の選択色を青系 → ミントへ
 
 import { useState } from "react";
 import GlobalSidebar, { BottomNav } from "../components/receive/GlobalSidebar";
@@ -117,7 +118,7 @@ export default function SendScreen({
           <span style={{
             fontSize: 15,
             fontWeight: 800,
-            color: "rgba(255,255,255,0.95)",
+            color: "#FFFFFF",
             letterSpacing: 0.3,
             flexShrink: 0,
             userSelect: "none",
@@ -128,13 +129,13 @@ export default function SendScreen({
           {/* 検索: 置いた書類タブ時にPC・タブレット・スマホすべてで表示 */}
           {isSent ? (
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="病院名・書類名で検索"
                 className="dp-input-dark"
-                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
               />
             </div>
           ) : (
@@ -148,9 +149,9 @@ export default function SendScreen({
               title="ログアウト"
               style={{
                 width: 34, height: 34,
-                border: "1px solid rgba(255,255,255,0.22)",
+                border: "1px solid rgba(255,255,255,0.45)",
                 borderRadius: 8,
-                background: "rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.20)",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -191,11 +192,12 @@ export default function SendScreen({
                 padding: "10px 18px",
                 fontSize: 14,
                 fontWeight: activeTab === key ? 700 : 500,
-                color: activeTab === key ? DP.blue : DP.textSub,
+                // 選択中タブ: ミント（青系 → ミント差し替え）
+                color: activeTab === key ? DP.mintDeep : DP.textSub,
                 background: "none",
                 border: "none",
                 borderBottom: activeTab === key
-                  ? `2px solid ${DP.blue}`
+                  ? `2px solid ${DP.mint}`
                   : "2px solid transparent",
                 marginBottom: -1,
                 cursor: "pointer",

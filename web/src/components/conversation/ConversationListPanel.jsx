@@ -1,6 +1,11 @@
 // ConversationListPanel.jsx
 // やりとりグループの一覧パネル
 //
+// 変更点 (医療SaaS配色):
+// - 「病院単位 / 患者単位」トグルの選択色を青 → ミントへ
+// - 部署フィルタタブの選択色（境界・背景・文字色）を青系 → ミント系へ
+//   active: border=DP.mint / bg=DP.mintSoft / color=DP.mintDeep
+//
 // 変更点 (v5):
 // - 部署フィルタを「横スクロール」から「折り返し（複数行）」に変更
 // - 1行に収まらない場合は2行目以降に自動で折り返される
@@ -139,9 +144,10 @@ export default function ConversationListPanel({
                 onClick={() => { onGroupingModeChange(mode); setDeptFilter(TAB_PENDING); }}
                 style={{
                   flex: 1, padding: "5px 0", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${DP.borderActive}`,
-                  borderLeft: i > 0 ? "none" : `1px solid ${DP.borderActive}`,
-                  background: groupingMode === mode ? DP.blue : "transparent",
+                  // 選択中: ミント境界 + 濃ミント塗りで AAA レベルの白文字コントラスト確保
+                  border: `1px solid ${groupingMode === mode ? DP.mintDeep : DP.borderActive}`,
+                  borderLeft: i > 0 ? "none" : `1px solid ${groupingMode === mode ? DP.mintDeep : DP.borderActive}`,
+                  background: groupingMode === mode ? DP.mintDeep : "transparent",
                   color: groupingMode === mode ? "#fff" : DP.textSub,
                   cursor: "pointer",
                   borderRadius: i === 0 ? "6px 0 0 6px" : "0 6px 6px 0",
@@ -228,9 +234,10 @@ export default function ConversationListPanel({
                 style={{
                   padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
                   whiteSpace: "nowrap", flex: "0 0 auto", cursor: "pointer",
-                  border: `1px solid ${active ? DP.borderActive : DP.border}`,
-                  background: active ? DP.skyLight : "transparent",
-                  color: active ? DP.blue : DP.textSub,
+                  // 選択中: ミント境界 + soft mint 背景 + 濃ミント文字（読みやすい弱コントラスト）
+                  border: `1px solid ${active ? DP.mint : DP.border}`,
+                  background: active ? DP.mintSoft : "transparent",
+                  color: active ? DP.mintDeep : DP.textSub,
                   transition: "all 120ms ease",
                   WebkitTapHighlightColor: "transparent",
                 }}

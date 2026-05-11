@@ -1,13 +1,15 @@
 // ReceiveScreen.jsx
 // 受信画面のオーケストレーター
 // 変更点（レスポンシブ対応）:
-// - モバイル（<640px）: GlobalSidebar → BottomNav、レーンフィルタ横スクロールタブ、カード一覧↔詳細をトグル
+// - モバイル（<640px）: GlobalSidebar → BottomNav、レーンフィルタ横スクロールタブ、カード一覧↔トグル
 // - タブレット（<1024px）: GlobalSidebar + カード一覧 + 詳細（BusinessLanePanel非表示）
 // - PC: 従来の4カラム構成（GlobalSidebar + BusinessLane + CardList + DetailPane）
 //
-// 変更点 (配色統一):
-// - トップバー背景を DP.navy(濃ネイビー) → DP.navBg(柔らかいブルーグレー)
-// - 検索ボックスの背景・枠・placeholder を新背景に合わせて視認性アップ
+// 変更点 (医療SaaS配色):
+// - トップバー背景を水色 DP.navBg(#7EA9D6) に
+// - 検索ボックスは白ピル + ダーク文字 + ミント focus リング（曇り感解消・操作感UP）
+// - MobileLaneFilter の選択 pill を青系 → ミント soft 背景 + 濃ミント文字へ
+// - ラベル「新着」を完全白で前面化
 
 import { useState, useMemo, useCallback } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -63,9 +65,10 @@ function MobileLaneFilter({ docs, departments, activeLane, onLaneChange }) {
               flexShrink: 0,
               padding: "6px 14px",
               borderRadius: 999,
-              border: active ? `1.5px solid ${DP.blue}` : `1px solid ${DP.border}`,
-              background: active ? DP.skyLight : DP.white,
-              color: active ? DP.blue : DP.text,
+              // 選択中: ミント境界 + ソフトミント背景 + 濃ミント文字
+              border: active ? `1.5px solid ${DP.mint}` : `1px solid ${DP.border}`,
+              background: active ? DP.mintSoft : DP.white,
+              color: active ? DP.mintDeep : DP.text,
               fontSize: 13,
               fontWeight: active ? 800 : 600,
               cursor: "pointer",
@@ -83,8 +86,8 @@ function MobileLaneFilter({ docs, departments, activeLane, onLaneChange }) {
                 fontWeight: 800,
                 padding: "1px 6px",
                 borderRadius: 999,
-                background: active ? "rgba(21,101,192,0.15)" : "rgba(15,23,42,0.07)",
-                color: active ? DP.blue : DP.textSub,
+                background: active ? "rgba(103,200,182,0.22)" : "rgba(15,23,42,0.07)",
+                color: active ? DP.mintDeep : DP.textSub,
               }}>
                 {lane.count}
               </span>
@@ -236,7 +239,7 @@ export default function ReceiveScreen({
               <>
                 {/* 受信ラベル */}
                 <span style={{
-                  color: "rgba(255,255,255,0.95)",
+                  color: "#FFFFFF",
                   fontSize: 15,
                   fontWeight: 800,
                   letterSpacing: 0.3,
@@ -245,16 +248,15 @@ export default function ReceiveScreen({
                 }}>
                   新着
                 </span>
-                {/* 検索ボックス（スマホでもトップバー内に表示）
-                    背景が明るくなったため bg / border を一段濃く、placeholder は dp-input-dark で 0.55 に */}
+                {/* 検索ボックス: 水色クロム上の白ピル（ダーク文字 + ミント focus） */}
                 <div style={{ flex: 1, position: "relative" }}>
-                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
                   <input
                     value={q}
                     onChange={e => setQ(e.target.value)}
                     placeholder="病院名・書類名で検索"
                     className="dp-input-dark"
-                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+                    style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
                   />
                 </div>
               </>
@@ -267,9 +269,9 @@ export default function ReceiveScreen({
                 title="ログアウト"
                 style={{
                   width: 36, height: 36,
-                  border: "none",
+                  border: "1px solid rgba(255,255,255,0.45)",
                   borderRadius: 8,
-                  background: "rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.20)",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -342,15 +344,15 @@ export default function ReceiveScreen({
             display: "flex", alignItems: "center",
             padding: "0 16px", gap: 12,
           }}>
-            <span style={{ color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+            <span style={{ color: "#FFFFFF", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
             <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="病院名・書類名で検索"
                 className="dp-input-dark"
-                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
               />
             </div>
           </div>
@@ -393,15 +395,15 @@ export default function ReceiveScreen({
           display: "flex", alignItems: "center",
           padding: "0 16px", gap: 12,
         }}>
-          <span style={{ color: "rgba(255,255,255,0.95)", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
+          <span style={{ color: "#FFFFFF", fontSize: 15, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0, userSelect: "none" }}>新着</span>
           <div style={{ flex: 1, position: "relative", maxWidth: 300 }}>
-            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(255,255,255,0.55)", pointerEvents: "none" }}>🔍</span>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "rgba(15,23,42,0.45)", pointerEvents: "none" }}>🔍</span>
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="病院名・書類名で検索"
               className="dp-input-dark"
-              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.95)", fontSize: 12, boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "7px 10px 7px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.92)", color: DP.text, fontSize: 12, boxSizing: "border-box" }}
             />
           </div>
         </div>

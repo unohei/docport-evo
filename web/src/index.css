@@ -88,18 +88,20 @@ button {
 }
 
 /* ===================================================
-   暗い背景用インプット（サイドバー連携トップバー）
-   placeholder / focus スタイルのみ。ロジック影響なし。
-   配色統一: 背景が濃ネイビー→ブルーグレー(#5E6F96)へ変わったため、
-   placeholder と focus の不透明度を一段上げて視認性を確保。
+   トップバー検索ボックス（クロム上の白ピル）
+   背景が水色(#7EA9D6)になり、暗背景の白文字パターンでは
+   コントラストが落ちて曇って見えるため、白基調ピル＋濃文字へ刷新。
+   focus 時はミント(#67C8B6)の境界＋外側グロウで操作感を出す。
+   class 名は既存呼び出し互換のため dp-input-dark のまま保持。
    =================================================== */
 .dp-input-dark::placeholder {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(15, 23, 42, 0.45);
 }
 .dp-input-dark:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.45) !important;
-  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: #67C8B6 !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 3px rgba(103, 200, 182, 0.22);
 }
 
 /* ===================================================

@@ -2,10 +2,13 @@
 // アプリ全体のナビゲーション（64px 固定幅）
 // 項目: ホーム(ロゴ) / 受信 / 送信 / 下書き / 設定
 //
-// 変更点 (配色統一):
-// - 背景を濃ネイビー(DP.navy=#1F3A6D)から柔らかいブルーグレー(DP.navBg=#5E6F96)へ
-// - NavIcon の active/hover を DP.navBgActive / DP.navBgHover に変更
-// - BottomNav も同色系へ統一
+// 変更点 (医療SaaS配色 / 水色ベース + ミントアクセント):
+// - 背景を DP.navBg(#7EA9D6) ライトブルーへ（旧 #5E6F96 ブルーグレー）
+// - NavIcon active: 背景は DP.navBgActive、内側ハイライトをミント(DP.mint)で強調
+// - NavIcon hover: DP.navBgHover
+// - unread バッジ: 赤(#EF4444) → ミント(DP.mint) + ダークテキストで通知感ながら穏やかに
+// - BottomNav 選択中の上ライン: 青 → ミント
+// - 明るくなった背景に合わせ、未選択アイコンの不透明度を 0.60 → 0.75 に微増
 // 既存の named export / props インタフェースは変更なし。
 
 import { useRef, useState } from "react";
@@ -131,11 +134,12 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
         opacity: disabled ? 0.30 : 1,
         transition: "background 140ms ease",
         WebkitTapHighlightColor: "transparent",
-        boxShadow: active ? "inset 0 0 0 1px rgba(255,255,255,0.20)" : "none",
+        // active 時はミントで内側を縁取り、選択状態をブランドアクセントで明示
+        boxShadow: active ? `inset 0 0 0 1.5px ${DP.mint}` : "none",
       }}
     >
       {iconSrc
-        ? <img src={iconSrc} alt={label} style={{ width: 26, height: 26, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.60 }} />
+        ? <img src={iconSrc} alt={label} style={{ width: 26, height: 26, filter: "brightness(0) invert(1)", opacity: active ? 1 : 0.75 }} />
         : <span style={{ lineHeight: 1 }}>{emoji}</span>
       }
       {badge > 0 && (
@@ -144,8 +148,8 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
           top: 5, right: 5,
           minWidth: 16, height: 16,
           borderRadius: 999,
-          background: "#EF4444",
-          color: "#fff",
+          background: DP.mint,
+          color: DP.text,
           fontSize: 9,
           fontWeight: 800,
           display: "flex",
@@ -153,6 +157,7 @@ function NavIcon({ emoji, iconSrc, label, active, badge, onClick, disabled = fal
           justifyContent: "center",
           padding: "0 3px",
           lineHeight: 1,
+          boxShadow: "0 0 0 1.5px rgba(255,255,255,0.85)",
         }}>
           {badge > 9 ? "9+" : badge}
         </span>
@@ -211,7 +216,8 @@ export function BottomNav({
             style={{
               ...btnBase,
               background: active ? DP.navBgActive : "transparent",
-              borderTop: active ? "2px solid rgba(74,144,226,0.85)" : "2px solid transparent",
+              // 選択中の上ライン: 青系 → ミント
+              borderTop: active ? `2px solid ${DP.mint}` : "2px solid transparent",
             }}
           >
             <img
@@ -220,13 +226,13 @@ export function BottomNav({
               style={{
                 width: 26, height: 26,
                 filter: "brightness(0) invert(1)",
-                opacity: active ? 1 : 0.55,
+                opacity: active ? 1 : 0.72,
               }}
             />
             <span style={{
               fontSize: 10,
               fontWeight: active ? 800 : 600,
-              color: active ? "#fff" : "rgba(255,255,255,0.55)",
+              color: active ? "#fff" : "rgba(255,255,255,0.78)",
               letterSpacing: 0.3,
               lineHeight: 1,
             }}>
@@ -239,8 +245,8 @@ export function BottomNav({
                 left: "calc(50% + 4px)",
                 minWidth: 16, height: 16,
                 borderRadius: 999,
-                background: "#EF4444",
-                color: "#fff",
+                background: DP.mint,
+                color: DP.text,
                 fontSize: 9,
                 fontWeight: 800,
                 display: "flex",
@@ -248,6 +254,7 @@ export function BottomNav({
                 justifyContent: "center",
                 padding: "0 3px",
                 lineHeight: 1,
+                boxShadow: "0 0 0 1.5px rgba(255,255,255,0.85)",
               }}>
                 {item.badge > 9 ? "9+" : item.badge}
               </span>
