@@ -1430,7 +1430,7 @@ export default function App() {
                 alt="DocPort"
                 style={{
                   width: "100%",
-                  maxWidth: 160,
+                  maxWidth: 150,
                   height: "auto",
                   display: "block",
                   margin: "0 auto 14px",

@@ -250,7 +250,7 @@ export default function FileDrop({
             <img
               src={DocPortLogoIcon}
               alt=""
-              style={{ width: 90, height: 118, display: "block" }}
+              style={{ width: 80, height: 118, display: "block" }}
             />
           </div>
 
