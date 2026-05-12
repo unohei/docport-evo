@@ -7,34 +7,58 @@
 // - OCR情報・コメントは受信画面と同構成
 
 import { useState, useEffect } from "react";
-import { DP, senderDisplay, recipientDisplay, docStatusLabel, docStatusColor } from "../receive/receiveConstants";
-import { getPreviewKey, isPreviewable, getExtFromKey } from "../../utils/preview";
+import {
+  DP,
+  senderDisplay,
+  recipientDisplay,
+  docStatusLabel,
+  docStatusColor,
+} from "../receive/receiveConstants";
+import {
+  getPreviewKey,
+  isPreviewable,
+  getExtFromKey,
+} from "../../utils/preview";
 import HospitalAvatar from "../common/HospitalAvatar";
 import { normalizeStructuredJson } from "../../utils/structuredFormat";
 import StructuredCopyPanel from "../common/StructuredCopyPanel";
 import DocPortLogoIcon from "../../assets/logo/docport_logo_icon_only.svg";
 
-
 function SectionTitle({ children }) {
   return (
-    <div style={{
-      fontSize: 11,
-      fontWeight: 800,
-      color: DP.textSub,
-      textTransform: "uppercase",
-      letterSpacing: "0.06em",
-      marginBottom: 8,
-    }}>
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 800,
+        color: DP.textSub,
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+        marginBottom: 8,
+      }}
+    >
       {children}
     </div>
   );
 }
 
-function ActionButton({ children, variant = "ghost", disabled = false, onClick }) {
+function ActionButton({
+  children,
+  variant = "ghost",
+  disabled = false,
+  onClick,
+}) {
   const styles = {
-    primary:   { background: DP.blue,      color: DP.white, border: "none" },
-    danger:    { background: "#FEF2F2",    color: "#B91C1C", border: "1px solid rgba(185,28,28,0.3)" },
-    ghost:     { background: "transparent", color: DP.text,  border: `1px solid ${DP.border}` },
+    primary: { background: DP.blue, color: DP.white, border: "none" },
+    danger: {
+      background: "#FEF2F2",
+      color: "#B91C1C",
+      border: "1px solid rgba(185,28,28,0.3)",
+    },
+    ghost: {
+      background: "transparent",
+      color: DP.text,
+      border: `1px solid ${DP.border}`,
+    },
   };
   const s = styles[variant] || styles.ghost;
   return (
@@ -57,13 +81,22 @@ function ActionButton({ children, variant = "ghost", disabled = false, onClick }
   );
 }
 
-export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, cancelDocument, fetchPreviewUrl, fetchDownloadUrl }) {
-  const [inlineUrl,     setInlineUrl]     = useState("");
+export default function SentDetailPane({
+  doc,
+  nameOf,
+  iconOf,
+  fmt,
+  isExpired,
+  cancelDocument,
+  fetchPreviewUrl,
+  fetchDownloadUrl,
+}) {
+  const [inlineUrl, setInlineUrl] = useState("");
   const [inlineLoading, setInlineLoading] = useState(false);
-  const [inlineError,   setInlineError]   = useState("");
-  const [copied,        setCopied]        = useState(false);
-  const [dlLoading,     setDlLoading]     = useState(false);
-  const [dlError,       setDlError]       = useState("");
+  const [inlineError, setInlineError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [dlLoading, setDlLoading] = useState(false);
+  const [dlError, setDlError] = useState("");
 
   useEffect(() => {
     if (!doc || !fetchPreviewUrl || doc.status === "CANCELLED") {
@@ -76,13 +109,28 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
     setInlineError("");
     setInlineLoading(true);
     fetchPreviewUrl(doc)
-      .then(url  => { if (!cancelled) { setInlineUrl(url); setInlineError(""); } })
-      .catch(e   => { console.error("[SentDetailPane] fetchPreviewUrl failed:", e?.message); if (!cancelled) { setInlineUrl(""); setInlineError(e?.message ?? "URLの取得に失敗しました"); } })
-      .finally(() => { if (!cancelled) setInlineLoading(false); });
-    return () => { cancelled = true; };
+      .then((url) => {
+        if (!cancelled) {
+          setInlineUrl(url);
+          setInlineError("");
+        }
+      })
+      .catch((e) => {
+        console.error("[SentDetailPane] fetchPreviewUrl failed:", e?.message);
+        if (!cancelled) {
+          setInlineUrl("");
+          setInlineError(e?.message ?? "URLの取得に失敗しました");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setInlineLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [doc?.id, fetchPreviewUrl]);
 
-  const handleCopy = text => {
+  const handleCopy = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
@@ -92,54 +140,78 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
 
   if (!doc) {
     return (
-      <div style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: DP.white,
-        color: DP.textSub,
-        gap: 16,
-        minWidth: 0,
-      }}>
-        <img src={DocPortLogoIcon} alt="" aria-hidden="true" style={{ width: 72, height: 77, opacity: 0.15, display: "block" }} />
-        <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>書類を選択してください</p>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background: DP.white,
+          color: DP.textSub,
+          gap: 16,
+          minWidth: 0,
+        }}
+      >
+        <img
+          src={DocPortLogoIcon}
+          alt=""
+          aria-hidden="true"
+          style={{ width: 90, height: 77, opacity: 0.4, display: "block" }}
+        />
+        <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+          書類を選択してください
+        </p>
       </div>
     );
   }
 
-  const expired    = isExpired(doc.expires_at);
-  const canCancel  = doc.status === "UPLOADED" && !expired;
-  const sc         = docStatusColor(doc, isExpired);
-  const sl         = docStatusLabel(doc, isExpired);
+  const expired = isExpired(doc.expires_at);
+  const canCancel = doc.status === "UPLOADED" && !expired;
+  const sc = docStatusColor(doc, isExpired);
+  const sl = docStatusLabel(doc, isExpired);
 
   // OCR情報を取得（v1/v2両対応）
-  const sj             = normalizeStructuredJson(doc.structured_json) ?? {};
-  const ocrText        = doc.ocr_text || sj.raw_text || sj.full_text || "";
+  const sj = normalizeStructuredJson(doc.structured_json) ?? {};
+  const ocrText = doc.ocr_text || sj.raw_text || sj.full_text || "";
   const sensitiveFlags = sj.warnings || [];
 
   return (
-    <div style={{
-      flex: 1,
-      background: DP.white,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      minWidth: 0,
-    }}>
-      {/* ---- ヘッダー ---- */}
-      <div style={{
-        padding: "14px 20px",
-        borderBottom: `1px solid ${DP.border}`,
-        background: DP.surface,
-        flexShrink: 0,
+    <div
+      style={{
+        flex: 1,
+        background: DP.white,
         display: "flex",
         flexDirection: "column",
-        gap: 8,
-      }}>
+        overflow: "hidden",
+        minWidth: 0,
+      }}
+    >
+      {/* ---- ヘッダー ---- */}
+      <div
+        style={{
+          padding: "14px 20px",
+          borderBottom: `1px solid ${DP.border}`,
+          background: DP.surface,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: DP.navy, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: DP.navy,
+              marginBottom: 3,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+            }}
+          >
             <HospitalAvatar
               name={senderDisplay(doc, nameOf)}
               iconUrl={iconOf ? iconOf(doc.from_hospital_id) : ""}
@@ -155,18 +227,29 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
             {recipientDisplay(doc, nameOf)}
           </div>
           <div style={{ fontSize: 13, color: DP.textSub }}>
-            {doc.original_filename || doc.file_key?.split("/").pop() || "（ファイル名不明）"}
+            {doc.original_filename ||
+              doc.file_key?.split("/").pop() ||
+              "（ファイル名不明）"}
             {doc.page_count ? ` · ${doc.page_count}ページ` : ""}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-            <span style={{
-              fontSize: 12,
-              fontWeight: 800,
-              padding: "2px 8px",
-              borderRadius: 999,
-              color: sc.text,
-              background: sc.bg,
-            }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 4,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "2px 8px",
+                borderRadius: 999,
+                color: sc.text,
+                background: sc.bg,
+              }}
+            >
               {sl}
             </span>
             <span style={{ fontSize: 12, color: DP.textSub }}>
@@ -188,28 +271,34 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
       </div>
 
       {/* ---- 本体 ---- */}
-      <div style={{
-        flex: 1,
-        overflow: "auto",
-        padding: "16px 20px",
-        display: "grid",
-        gap: 18,
-        alignContent: "start",
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: "auto",
+          padding: "16px 20px",
+          display: "grid",
+          gap: 18,
+          alignContent: "start",
+        }}
+      >
         {/* 要配慮情報警告 */}
         {sensitiveFlags.length > 0 && (
-          <div style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "rgba(239,68,68,0.06)",
-            border: "1px solid rgba(239,68,68,0.22)",
-            fontSize: 12,
-            color: "#991B1B",
-            fontWeight: 600,
-            lineHeight: 1.55,
-          }}>
+          <div
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(239,68,68,0.06)",
+              border: "1px solid rgba(239,68,68,0.22)",
+              fontSize: 12,
+              color: "#991B1B",
+              fontWeight: 600,
+              lineHeight: 1.55,
+            }}
+          >
             ⚠️ 要配慮情報の可能性：
-            {Array.isArray(sensitiveFlags) ? sensitiveFlags.join("、") : sensitiveFlags}
+            {Array.isArray(sensitiveFlags)
+              ? sensitiveFlags.join("、")
+              : sensitiveFlags}
           </div>
         )}
 
@@ -225,15 +314,17 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
         {doc.comment && (
           <section>
             <SectionTitle>コメント</SectionTitle>
-            <div style={{
-              background: "#FFFBEB",
-              borderRadius: 10,
-              padding: "12px 14px",
-              border: "1px solid rgba(217,119,6,0.20)",
-              fontSize: 13,
-              color: DP.text,
-              lineHeight: 1.65,
-            }}>
+            <div
+              style={{
+                background: "#FFFBEB",
+                borderRadius: 10,
+                padding: "12px 14px",
+                border: "1px solid rgba(217,119,6,0.20)",
+                fontSize: 13,
+                color: DP.text,
+                lineHeight: 1.65,
+              }}
+            >
               {doc.comment}
             </div>
           </section>
@@ -242,7 +333,14 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
         {/* OCR抽出テキスト */}
         {ocrText && (
           <section>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
               <SectionTitle>OCR 抽出テキスト</SectionTitle>
               <button
                 onClick={() => handleCopy(ocrText)}
@@ -261,19 +359,21 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
                 {copied ? "コピー完了 ✓" : "コピー"}
               </button>
             </div>
-            <div style={{
-              background: "#F8FAFC",
-              borderRadius: 10,
-              padding: "12px 14px",
-              border: `1px solid ${DP.border}`,
-              fontSize: 11,
-              color: DP.text,
-              lineHeight: 1.75,
-              maxHeight: 200,
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-              fontFamily: "ui-monospace, 'Courier New', monospace",
-            }}>
+            <div
+              style={{
+                background: "#F8FAFC",
+                borderRadius: 10,
+                padding: "12px 14px",
+                border: `1px solid ${DP.border}`,
+                fontSize: 11,
+                color: DP.text,
+                lineHeight: 1.75,
+                maxHeight: 200,
+                overflow: "auto",
+                whiteSpace: "pre-wrap",
+                fontFamily: "ui-monospace, 'Courier New', monospace",
+              }}
+            >
               {ocrText}
             </div>
           </section>
@@ -281,8 +381,17 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
 
         {/* ファイルプレビュー（インライン） */}
         <section>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <SectionTitle style={{ margin: 0 }}>ファイルプレビュー</SectionTitle>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <SectionTitle style={{ margin: 0 }}>
+              ファイルプレビュー
+            </SectionTitle>
             {inlineUrl && fetchDownloadUrl && (
               <button
                 onClick={async () => {
@@ -316,46 +425,63 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
             )}
           </div>
           {dlError && (
-            <div style={{ fontSize: 11, color: "#B91C1C", marginBottom: 6 }}>{dlError}</div>
+            <div style={{ fontSize: 11, color: "#B91C1C", marginBottom: 6 }}>
+              {dlError}
+            </div>
           )}
           {inlineLoading ? (
-            <div style={{
-              background: "#F1F5F9",
-              borderRadius: 10,
-              border: `1px solid ${DP.border}`,
-              minHeight: 80,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}>
-              <span style={{ fontSize: 12, color: DP.textSub }}>読み込み中...</span>
-            </div>
-          ) : inlineUrl && isPreviewable(getPreviewKey(doc)) ? (
-            /* 画像（png/jpg/jpeg/webp）は <img>、PDF は <iframe> で描画 */
-            ["png", "jpg", "jpeg", "webp"].includes(getExtFromKey(getPreviewKey(doc))) ? (
-              <div style={{
+            <div
+              style={{
+                background: "#F1F5F9",
                 borderRadius: 10,
                 border: `1px solid ${DP.border}`,
-                overflow: "hidden",
-                height: "clamp(300px, 60vh, 800px)",
-                background: "#F8F9FA",
+                minHeight: 80,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-              }}>
+              }}
+            >
+              <span style={{ fontSize: 12, color: DP.textSub }}>
+                読み込み中...
+              </span>
+            </div>
+          ) : inlineUrl && isPreviewable(getPreviewKey(doc)) ? (
+            /* 画像（png/jpg/jpeg/webp）は <img>、PDF は <iframe> で描画 */
+            ["png", "jpg", "jpeg", "webp"].includes(
+              getExtFromKey(getPreviewKey(doc)),
+            ) ? (
+              <div
+                style={{
+                  borderRadius: 10,
+                  border: `1px solid ${DP.border}`,
+                  overflow: "hidden",
+                  height: "clamp(300px, 60vh, 800px)",
+                  background: "#F8F9FA",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <img
                   src={inlineUrl}
                   alt="ファイルプレビュー"
-                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "contain",
+                    display: "block",
+                  }}
                 />
               </div>
             ) : (
-              <div style={{
-                borderRadius: 10,
-                border: `1px solid ${DP.border}`,
-                overflow: "hidden",
-                height: "clamp(300px, 60vh, 800px)",
-              }}>
+              <div
+                style={{
+                  borderRadius: 10,
+                  border: `1px solid ${DP.border}`,
+                  overflow: "hidden",
+                  height: "clamp(300px, 60vh, 800px)",
+                }}
+              >
                 <iframe
                   src={inlineUrl}
                   style={{ width: "100%", height: "100%", border: "none" }}
@@ -364,18 +490,22 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
               </div>
             )
           ) : inlineUrl ? (
-            <div style={{
-              background: "#F1F5F9",
-              borderRadius: 10,
-              border: `1px solid ${DP.border}`,
-              padding: "20px 16px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 10,
-            }}>
+            <div
+              style={{
+                background: "#F1F5F9",
+                borderRadius: 10,
+                border: `1px solid ${DP.border}`,
+                padding: "20px 16px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
               <span style={{ fontSize: 34, opacity: 0.5 }}>📄</span>
-              <div style={{ fontSize: 11, color: DP.textSub }}>ブラウザではプレビューできません</div>
+              <div style={{ fontSize: 11, color: DP.textSub }}>
+                ブラウザではプレビューできません
+              </div>
               <a
                 href={inlineUrl}
                 target="_blank"
@@ -395,27 +525,35 @@ export default function SentDetailPane({ doc, nameOf, iconOf, fmt, isExpired, ca
               </a>
             </div>
           ) : inlineError ? (
-            <div style={{
-              background: "#FEF2F2",
-              borderRadius: 10,
-              border: "1px solid #FECACA",
-              padding: "14px 16px",
-              fontSize: 11,
-              color: "#B91C1C",
-            }}>
+            <div
+              style={{
+                background: "#FEF2F2",
+                borderRadius: 10,
+                border: "1px solid #FECACA",
+                padding: "14px 16px",
+                fontSize: 11,
+                color: "#B91C1C",
+              }}
+            >
               プレビューの読み込みに失敗しました。ネットワークまたは権限をご確認ください。
-              <div style={{ marginTop: 4, opacity: 0.7, wordBreak: "break-all" }}>{inlineError}</div>
+              <div
+                style={{ marginTop: 4, opacity: 0.7, wordBreak: "break-all" }}
+              >
+                {inlineError}
+              </div>
             </div>
           ) : doc.status === "CANCELLED" ? (
-            <div style={{
-              background: "#FEF2F2",
-              borderRadius: 10,
-              border: "1px solid rgba(185,28,28,0.15)",
-              padding: "20px 16px",
-              textAlign: "center",
-              fontSize: 12,
-              color: "#991B1B",
-            }}>
+            <div
+              style={{
+                background: "#FEF2F2",
+                borderRadius: 10,
+                border: "1px solid rgba(185,28,28,0.15)",
+                padding: "20px 16px",
+                textAlign: "center",
+                fontSize: 12,
+                color: "#991B1B",
+              }}
+            >
               取り消し済みのため表示できません
             </div>
           ) : null}
