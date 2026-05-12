@@ -4,12 +4,14 @@ import DocPortLogoIcon from "../assets/logo/docport_logo_icon_only.svg";
 
 // 許可 MIME の簡易ラベル（エラー文言用）
 const MIME_LABEL = {
-  "application/pdf":                                                            "PDF",
-  "image/png":                                                                  "PNG",
-  "image/jpeg":                                                                 "JPEG",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":    "DOCX",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":          "XLSX",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation":  "PPTX",
+  "application/pdf": "PDF",
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "DOCX",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    "PPTX",
 };
 
 export default function FileDrop({
@@ -24,7 +26,7 @@ export default function FileDrop({
   const accept = allowedTypes.join(",");
 
   const [dragOver, setDragOver] = useState(false);
-  const [hovered, setHovered]  = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [err, setErr] = useState("");
   const inputId = useId();
 
@@ -40,7 +42,9 @@ export default function FileDrop({
     const ext = (file.name || "").split(".").pop()?.toLowerCase();
     const extOk = allowedTypes.some((mt) => {
       const label = MIME_LABEL[mt]?.toLowerCase();
-      return label && (ext === label || (mt === "image/jpeg" && ext === "jpeg"));
+      return (
+        label && (ext === label || (mt === "image/jpeg" && ext === "jpeg"))
+      );
     });
     if (extOk) return null;
     const labels = allowedTypes.map((mt) => MIME_LABEL[mt] || mt).join(" / ");
@@ -118,7 +122,9 @@ export default function FileDrop({
           if (e.key === "Enter" || e.key === " ") openPicker();
         }}
         onClick={openPicker}
-        onMouseEnter={() => { if (!disabled) setHovered(true); }}
+        onMouseEnter={() => {
+          if (!disabled) setHovered(true);
+        }}
         onMouseLeave={() => setHovered(false)}
         onDragEnter={(e) => {
           e.preventDefault();
@@ -148,15 +154,16 @@ export default function FileDrop({
               : hovered
                 ? "translateY(-3px)"
                 : "none",
-          boxShadow: hovered && !dragOver && !disabled
-            ? "0 18px 36px rgba(15,23,42,0.12)"
-            : tone.glow,
+          boxShadow:
+            hovered && !dragOver && !disabled
+              ? "0 18px 36px rgba(15,23,42,0.12)"
+              : tone.glow,
           background: tone.rimBg,
           // 上辺にDocPortブランドカラーのアクセントライン（hover/dragOver時に強調）
-          borderTop:    `2px solid rgba(74,144,226,${hovered || dragOver ? "0.55" : "0.28"})`,
-          borderRight:  `1px solid ${tone.rimBorder}`,
+          borderTop: `2px solid rgba(74,144,226,${hovered || dragOver ? "0.55" : "0.28"})`,
+          borderRight: `1px solid ${tone.rimBorder}`,
           borderBottom: `1px solid ${tone.rimBorder}`,
-          borderLeft:   `1px solid ${tone.rimBorder}`,
+          borderLeft: `1px solid ${tone.rimBorder}`,
           // ほんの少し“上から”感（やりすぎない）
           perspective: "900px",
         }}
@@ -243,7 +250,7 @@ export default function FileDrop({
             <img
               src={DocPortLogoIcon}
               alt=""
-              style={{ width: 110, height: 118, display: "block" }}
+              style={{ width: 90, height: 118, display: "block" }}
             />
           </div>
 
